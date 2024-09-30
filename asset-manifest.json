@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/moving-assistant/static/css/main.ca9f7c6e.css",
+    "main.js": "/moving-assistant/static/js/main.f35d247a.js",
+    "static/js/453.b0d6e142.chunk.js": "/moving-assistant/static/js/453.b0d6e142.chunk.js",
+    "index.html": "/moving-assistant/index.html",
+    "main.ca9f7c6e.css.map": "/moving-assistant/static/css/main.ca9f7c6e.css.map",
+    "main.f35d247a.js.map": "/moving-assistant/static/js/main.f35d247a.js.map",
+    "453.b0d6e142.chunk.js.map": "/moving-assistant/static/js/453.b0d6e142.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.ca9f7c6e.css",
+    "static/js/main.f35d247a.js"
+  ]
+}

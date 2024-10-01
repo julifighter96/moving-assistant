@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
+import { getDeal, addNoteToDeal } from '../services/pipedriveService';
 import { updateDeal } from '../utils/dealUpdateFunctions';
-
 const PRICE_MAP = {
   'furniture': 50,
   'Umzugskartons (Standard)': 2,
@@ -8,17 +8,23 @@ const PRICE_MAP = {
   'Kleiderkisten': 3,
 };
 
-
 const OfferComponent = ({ inspectionData, dealId, onSubmit }) => {
   const combinedData = useMemo(() => {
     const items = {};
     const packMaterials = {};
     let totalVolume = 0;
     let estimatedWeight = 0;
+    let demontageCount = 0;
+    let duebelarbeitenCount = 0;
 
     Object.values(inspectionData.rooms).forEach(room => {
       room.items.forEach(item => {
-        items[item.name] = (items[item.name] || 0) + item.quantity;
+        if (!items[item.name]) {
+          items[item.name] = { ...item, quantity: 0 };
+        }
+        items[item.name].quantity += item.quantity;
+        if (item.demontiert) demontageCount += item.quantity;
+        if (item.duebelarbeiten) duebelarbeitenCount += item.quantity;
       });
 
       room.packMaterials.forEach(material => {
@@ -29,7 +35,7 @@ const OfferComponent = ({ inspectionData, dealId, onSubmit }) => {
       estimatedWeight += room.estimatedWeight;
     });
 
-    return { items, packMaterials, totalVolume, estimatedWeight };
+    return { items, packMaterials, totalVolume, estimatedWeight, demontageCount, duebelarbeitenCount };
   }, [inspectionData]);
 
   const { furnitureCost, materialCost, totalCost } = useMemo(() => {
@@ -44,39 +50,70 @@ const OfferComponent = ({ inspectionData, dealId, onSubmit }) => {
     };
   }, [combinedData]);
 
-  const renderAdditionalInfo = () => {
-    if (!inspectionData.additionalInfo) return null;
-
-    return (
-      <div className="mb-6">
-        <h3 className="text-xl font-semibold mb-2">Zusätzliche Informationen</h3>
-        <ul>
-          {inspectionData.additionalInfo.map((info, index) => (
-            <li key={index} className="flex justify-between">
-              <span>{info.name}</span>
-              <span>{Array.isArray(info.value) ? info.value.join(', ') : info.value.toString()}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
-
   const handleAcceptOffer = async () => {
     try {
+      // Aktualisieren Sie den Deal in Pipedrive (ohne Dübel- und Demontagearbeiten)
       await updateDeal(dealId, {
-        ...combinedData,
         additionalInfo: inspectionData.additionalInfo,
-        furnitureCost,
-        materialCost,
-        totalCost
+        rooms: inspectionData.rooms,
+        combinedData: {
+          totalVolume: combinedData.totalVolume,
+          estimatedWeight: combinedData.estimatedWeight,
+        },
       });
-      alert('Angebot wurde erfolgreich akzeptiert und der Deal aktualisiert.');
+
+      // Erstellen Sie den Notizinhalt (mit Dübel- und Demontagearbeiten)
+      const noteContent = `Angebot Details:
+Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³
+Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg
+Möbelkosten: ${furnitureCost.toFixed(2)} €
+Materialkosten: ${materialCost.toFixed(2)} €
+Gesamtkosten: ${totalCost.toFixed(2)} €
+Demontagen: ${combinedData.demontageCount}
+Dübelarbeiten: ${combinedData.duebelarbeitenCount}
+
+Möbel:
+${Object.entries(combinedData.items).map(([name, item]) => 
+  `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`
+).join('\n')}
+
+Packmaterialien:
+${Object.entries(combinedData.packMaterials).map(([name, quantity]) => `${name}: ${quantity}`).join('\n')}
+
+Zusätzliche Informationen:
+${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info => 
+  `${info.name}: ${Array.isArray(info.value) ? info.value.join(', ') : info.value}`
+).join('\n') : 'Keine'}`;
+
+      // Fügen Sie die Notiz zum Deal hinzu
+      await addNoteToDeal(dealId, noteContent);
+
+      alert('Angebot wurde erfolgreich akzeptiert, der Deal aktualisiert und eine Notiz hinzugefügt.');
+      if (onSubmit) onSubmit();
     } catch (error) {
-      console.error('Fehler beim Aktualisieren des Deals:', error);
-      alert('Es gab einen Fehler beim Aktualisieren des Deals. Bitte versuchen Sie es erneut.');
+      console.error('Fehler beim Verarbeiten des Angebots:', error);
+      alert(`Es gab einen Fehler: ${error.message}`);
     }
   };
+
+  // Render-Funktionen für die Anzeige der Daten
+  const renderItems = () => (
+    <ul>
+      {Object.entries(combinedData.items).map(([name, item]) => (
+        <li key={name}>
+          {name}: {item.quantity} (Volumen: {item.volume} m³)
+        </li>
+      ))}
+    </ul>
+  );
+
+  const renderPackMaterials = () => (
+    <ul>
+      {Object.entries(combinedData.packMaterials).map(([name, quantity]) => (
+        <li key={name}>{name}: {quantity}</li>
+      ))}
+    </ul>
+  );
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto">
@@ -90,29 +127,13 @@ const OfferComponent = ({ inspectionData, dealId, onSubmit }) => {
 
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Möbel</h3>
-        <ul>
-          {Object.entries(combinedData.items).map(([name, quantity]) => (
-            <li key={name} className="flex justify-between">
-              <span>{name}</span>
-              <span>{quantity} Stück</span>
-            </li>
-          ))}
-        </ul>
+        {renderItems()}
       </div>
 
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Packmaterialien</h3>
-        <ul>
-          {Object.entries(combinedData.packMaterials).map(([name, quantity]) => (
-            <li key={name} className="flex justify-between">
-              <span>{name}</span>
-              <span>{quantity} Stück</span>
-            </li>
-          ))}
-        </ul>
+        {renderPackMaterials()}
       </div>
-
-      {renderAdditionalInfo()}
 
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Kostenaufstellung</h3>

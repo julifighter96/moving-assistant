@@ -1,105 +1,128 @@
 import React, { useState, useEffect, useMemo } from 'react';
 
-const ITEM_VOLUME_MAP = {
-  'TV-Bank': 0.5,
-  'Stuhl': 0.3,
-  'Fernseher': 0.2,
-  'Sessel': 0.8,
-  'Schrank': 2.0,
-};
-
-const DEFAULT_ITEMS = [
-  { name: 'TV-Bank', quantity: 0 },
-  { name: 'Stuhl', quantity: 0 },
-  { name: 'Fernseher', quantity: 0 },
-  { name: 'Sessel', quantity: 0 },
-  { name: 'Schrank', quantity: 0 },
-];
-
-const DEFAULT_PACK_MATERIALS = [
-  { name: 'Umzugskartons (Standard)', quantity: 0 },
-  { name: 'Bücherkartons (Bücher&Geschirr)', quantity: 0 },
-  { name: 'Kleiderkisten', quantity: 0 },
-];
-
-const combineItems = (items) => {
-  return items.reduce((acc, item) => {
-    const existingItem = acc.find(i => i.name === item.name);
-    if (existingItem) {
-      existingItem.quantity += item.quantity;
-    } else {
-      acc.push({ ...item });
-    }
-    return acc;
-  }, []);
-};
-
-const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData }) => {
-  const [items, setItems] = useState(DEFAULT_ITEMS);
-  const [packMaterials, setPackMaterials] = useState(DEFAULT_PACK_MATERIALS);
+const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) => {
+  const [items, setItems] = useState(initialData.items || []);
+  const [packMaterials, setPackMaterials] = useState(initialData.packMaterials || []);
+  const [newItem, setNewItem] = useState({ name: '', volume: 0, demontiert: false, duebelarbeiten: false });
+  const [newPackMaterial, setNewPackMaterial] = useState({ name: '', quantity: 0 });
 
   useEffect(() => {
     if (initialData) {
-      const combinedItems = combineItems([...DEFAULT_ITEMS, ...(initialData.items || [])]);
-      const combinedPackMaterials = combineItems([...DEFAULT_PACK_MATERIALS, ...(initialData.packMaterials || [])]);
-      setItems(combinedItems);
-      setPackMaterials(combinedPackMaterials);
+      setItems(initialData.items || []);
+      setPackMaterials(initialData.packMaterials || []);
     }
   }, [initialData]);
 
-  const handleQuantityChange = (index, change, stateUpdater, stateType) => {
+  const handleQuantityChange = (index, change, stateUpdater) => {
     stateUpdater(prevItems => {
       const newItems = prevItems.map((item, i) => 
         i === index ? { ...item, quantity: Math.max(0, item.quantity + change) } : item
       );
-      updateRoomData(newItems, stateType);
+      return newItems;
+    });
+  };
+
+  const handleVolumeChange = (index, newVolume) => {
+    setItems(prevItems => {
+      const newItems = prevItems.map((item, i) => 
+        i === index ? { ...item, volume: parseFloat(newVolume) } : item
+      );
+      return newItems;
+    });
+  };
+
+  const handleCheckboxChange = (index, field) => {
+    setItems(prevItems => {
+      const newItems = prevItems.map((item, i) => 
+        i === index ? { ...item, [field]: !item[field] } : item
+      );
       return newItems;
     });
   };
 
   const totalVolume = useMemo(() => {
-    return items.reduce((total, item) => {
-      return total + (ITEM_VOLUME_MAP[item.name] || 0) * item.quantity;
-    }, 0);
+    return items.reduce((total, item) => total + item.volume * item.quantity, 0);
   }, [items]);
 
   const estimatedWeight = useMemo(() => {
     return totalVolume * 200;
   }, [totalVolume]);
 
-  const updateRoomData = (newData, dataType) => {
-    const updatedData = {
-      items: dataType === 'items' ? newData : items,
-      packMaterials: dataType === 'packMaterials' ? newData : packMaterials,
+  useEffect(() => {
+    onUpdateRoom(roomName, {
+      items,
+      packMaterials,
       totalVolume,
       estimatedWeight
-    };
-    onUpdateRoom(roomName, updatedData);
+    });
+  }, [roomName, items, packMaterials, totalVolume, estimatedWeight, onUpdateRoom]);
+
+  const handleAddItem = () => {
+    if (newItem.name && !items.some(item => item.name === newItem.name)) {
+      const updatedItems = [...items, { ...newItem, quantity: 0 }];
+      setItems(updatedItems);
+      onAddItem(newItem);
+      setNewItem({ name: '', volume: 0, demontiert: false, duebelarbeiten: false });
+    }
   };
 
-  useEffect(() => {
-    updateRoomData(items, 'items');
-  }, [totalVolume, estimatedWeight]);
+  const handleAddPackMaterial = () => {
+    if (newPackMaterial.name && !packMaterials.some(material => material.name === newPackMaterial.name)) {
+      const updatedPackMaterials = [...packMaterials, { ...newPackMaterial, quantity: 0 }];
+      setPackMaterials(updatedPackMaterials);
+      onAddItem(newPackMaterial);
+      setNewPackMaterial({ name: '', quantity: 0 });
+    }
+  };
 
-  const renderItemList = (itemList, stateUpdater, stateType) => (
+  const renderItemList = (itemList, stateUpdater, showVolume = false) => (
     <ul className="divide-y divide-gray-200">
       {itemList.map((item, index) => (
         <li key={item.name} className="flex items-center justify-between p-4">
           <span className="text-lg">{item.name}</span>
-          <div className="flex items-center">
+          <div className="flex items-center space-x-4">
             <button
               className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"
-              onClick={() => handleQuantityChange(index, -1, stateUpdater, stateType)}
+              onClick={() => handleQuantityChange(index, -1, stateUpdater)}
             >
               -
             </button>
-            <span className="mx-2 w-8 text-center">{item.quantity}</span>
+            <span className="w-8 text-center">{item.quantity}</span>
             <button
               className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"
-              onClick={() => handleQuantityChange(index, 1, stateUpdater, stateType)}
+              onClick={() => handleQuantityChange(index, 1, stateUpdater)}
             >
               +
             </button>
+            {showVolume && (
+              <>
+                <input
+                  type="number"
+                  value={item.volume}
+                  onChange={(e) => handleVolumeChange(index, e.target.value)}
+                  className="w-20 p-1 border border-gray-300 rounded-md"
+                  placeholder="Volumen (m³)"
+                />
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={item.demontiert}
+                    onChange={() => handleCheckboxChange(index, 'demontiert')}
+                    className="mr-2"
+                  />
+                  Demontiert
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={item.duebelarbeiten}
+                    onChange={() => handleCheckboxChange(index, 'duebelarbeiten')}
+                    className="mr-2"
+                  />
+                  Dübelarbeiten
+                </label>
+              </>
+            )}
           </div>
         </li>
       ))}
@@ -114,10 +137,49 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData }) => {
       
       <div className="p-4">
         <h3 className="text-lg font-semibold mb-2">Möbel</h3>
-        {renderItemList(items, setItems, 'items')}
+        {renderItemList(items, setItems, true)}
+        
+        <div className="flex mt-2">
+          <input
+            type="text"
+            value={newItem.name}
+            onChange={(e) => setNewItem({...newItem, name: e.target.value})}
+            placeholder="Neuer Gegenstand"
+            className="flex-grow p-2 border border-gray-300 rounded-l-md"
+          />
+          <input
+            type="number"
+            value={newItem.volume}
+            onChange={(e) => setNewItem({...newItem, volume: parseFloat(e.target.value)})}
+            placeholder="Volumen (m³)"
+            className="w-32 p-2 border-t border-b border-gray-300"
+          />
+          <button
+            onClick={handleAddItem}
+            className="bg-green-500 text-white p-2 rounded-r-md hover:bg-green-600 transition duration-200"
+          >
+            Hinzufügen
+          </button>
+        </div>
         
         <h3 className="text-lg font-semibold mt-6 mb-2">Packmaterialien</h3>
-        {renderItemList(packMaterials, setPackMaterials, 'packMaterials')}
+        {renderItemList(packMaterials, setPackMaterials)}
+        
+        <div className="flex mt-2">
+          <input
+            type="text"
+            value={newPackMaterial.name}
+            onChange={(e) => setNewPackMaterial({...newPackMaterial, name: e.target.value})}
+            placeholder="Neues Packmaterial"
+            className="flex-grow p-2 border border-gray-300 rounded-l-md"
+          />
+          <button
+            onClick={handleAddPackMaterial}
+            className="bg-green-500 text-white p-2 rounded-r-md hover:bg-green-600 transition duration-200"
+          >
+            Hinzufügen
+          </button>
+        </div>
         
         <div className="mt-6">
           <h3 className="text-lg font-semibold mb-2">Volumen</h3>

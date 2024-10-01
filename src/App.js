@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import DealViewer from './components/DealViewer';
+import MoveInformationComponent from './components/MoveInformationComponent';
 import RoomSelector from './components/RoomSelector';
 import RoomItemsSelector from './components/RoomItemsSelector';
 import AdditionalInfoComponent from './components/AdditionalInfoComponent';
@@ -9,11 +10,11 @@ const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer'];
 
 const DEFAULT_ROOM_DATA = {
   items: [
-    { name: 'TV-Bank', quantity: 0 },
-    { name: 'Stuhl', quantity: 0 },
-    { name: 'Fernseher', quantity: 0 },
-    { name: 'Sessel', quantity: 0 },
-    { name: 'Schrank', quantity: 0 },
+    { name: 'TV-Bank', quantity: 0, volume: 0.5 },
+    { name: 'Stuhl', quantity: 0, volume: 0.3 },
+    { name: 'Fernseher', quantity: 0, volume: 0.2 },
+    { name: 'Sessel', quantity: 0, volume: 0.8 },
+    { name: 'Schrank', quantity: 0, volume: 2.0 },
   ],
   packMaterials: [
     { name: 'Umzugskartons (Standard)', quantity: 0 },
@@ -25,6 +26,7 @@ const DEFAULT_ROOM_DATA = {
 };
 
 function App() {
+  const [moveInfo, setMoveInfo] = useState(null);
   const [currentView, setCurrentView] = useState('dealViewer');
   const [selectedDealId, setSelectedDealId] = useState(null);
   const [dealData, setDealData] = useState(null);
@@ -42,6 +44,11 @@ function App() {
   const handleStartInspection = (deal) => {
     setSelectedDealId(deal.id);
     setDealData(deal);
+    setCurrentView('moveInformation');
+  };
+
+  const handleMoveInfoComplete = (info) => {
+    setMoveInfo(info);
     setCurrentView('roomSelector');
   };
 
@@ -50,12 +57,46 @@ function App() {
   }, []);
 
   const handleUpdateRoomData = useCallback((roomName, data) => {
+    setRoomsData(prevData => ({
+      ...prevData,
+      [roomName]: data
+    }));
+  }, []);
+
+  const handleAddRoom = useCallback((newRoom) => {
+    setRooms(prevRooms => [...prevRooms, newRoom]);
+    setRoomsData(prevData => ({
+      ...prevData,
+      [newRoom]: { ...DEFAULT_ROOM_DATA }
+    }));
+    setCurrentRoom(newRoom);
+  }, []);
+
+  const handleAddItem = useCallback((newItem) => {
     setRoomsData(prevData => {
-      const newData = { ...prevData };
-      newData[roomName] = data;
-      return newData;
+      const updatedData = { ...prevData };
+      Object.keys(updatedData).forEach(room => {
+        if (newItem.volume !== undefined) {
+          // Es handelt sich um ein Möbelstück
+          if (!updatedData[room].items.some(item => item.name === newItem.name)) {
+            updatedData[room].items = [...updatedData[room].items, { 
+              ...newItem, 
+              quantity: 0, 
+              demontiert: false, 
+              duebelarbeiten: false 
+            }];
+          }
+        } else {
+          // Es handelt sich um Packmaterial
+          if (!updatedData[room].packMaterials.some(material => material.name === newItem.name)) {
+            updatedData[room].packMaterials = [...updatedData[room].packMaterials, { ...newItem, quantity: 0 }];
+          }
+        }
+      });
+      return updatedData;
     });
   }, []);
+
 
   const handleCompleteInspection = () => {
     setCurrentView('additionalInfo');
@@ -71,6 +112,12 @@ function App() {
       <div className="max-w-2xl mx-auto">
         {currentView === 'dealViewer' && (
           <DealViewer onStartInspection={handleStartInspection} />
+        )}
+        {currentView === 'moveInformation' && (
+          <MoveInformationComponent
+            dealId={selectedDealId}
+            onComplete={handleMoveInfoComplete}
+          />
         )}
         {currentView === 'roomSelector' && (
           <>
@@ -98,9 +145,8 @@ function App() {
         )}
         {currentView === 'offer' && (
           <OfferComponent 
-            inspectionData={{ rooms: roomsData, additionalInfo }}
+            inspectionData={{ rooms: roomsData, additionalInfo, moveInfo }}
             dealId={selectedDealId}
-            
           />
         )}
       </div>

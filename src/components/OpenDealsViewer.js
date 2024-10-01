@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
 
 const OpenDealsViewer = ({ onDealSelect }) => {
@@ -19,7 +19,8 @@ const OpenDealsViewer = ({ onDealSelect }) => {
         url = `https://api.pipedrive.com/v1/deals?status=open&api_token=${apiToken}`;
       }
       const response = await axios.get(url);
-      setDeals(term ? response.data.data.items : response.data.data || []);
+      const dealsData = term ? response.data.data.items : response.data.data;
+      setDeals(dealsData || []);
     } catch (err) {
       setError('Failed to fetch deals');
       console.error('Error fetching deals:', err);
@@ -31,6 +32,17 @@ const OpenDealsViewer = ({ onDealSelect }) => {
   const handleSearch = (e) => {
     e.preventDefault();
     fetchDeals(searchTerm);
+  };
+
+  const renderDealValue = (deal) => {
+    const value = deal.value || deal.item?.value;
+    const currency = deal.currency || deal.item?.currency;
+    if (value === undefined || value === null) return 'N/A';
+    return `${value} ${currency || ''}`.trim();
+  };
+
+  const getDealTitle = (deal) => {
+    return deal.title || deal.item?.title || 'Unbenannter Deal';
   };
 
   return (
@@ -49,7 +61,7 @@ const OpenDealsViewer = ({ onDealSelect }) => {
             type="submit"
             className="bg-blue-500 text-white p-2 rounded-r-md hover:bg-blue-600 transition duration-200"
           >
-            Search
+            Suchen
           </button>
         </div>
       </form>
@@ -57,33 +69,33 @@ const OpenDealsViewer = ({ onDealSelect }) => {
         onClick={() => fetchDeals()}
         className="mb-4 bg-green-500 text-white p-2 rounded-md hover:bg-green-600 transition duration-200"
       >
-        Fetch All Open Deals
+        Lade alle offenen Deals
       </button>
       {loading && <p>Loading deals...</p>}
       {error && <p className="text-red-500">{error}</p>}
       {deals.length > 0 && (
         <ul className="divide-y divide-gray-200">
-          {deals.map(deal => (
-            <li key={deal.id || deal.item.id} className="py-4">
+          {deals.map((deal, index) => (
+            <li key={deal.id || deal.item?.id || index} className="py-4">
               <div className="flex justify-between items-center">
                 <div>
-                  <h3 className="text-lg font-semibold">{deal.title || deal.item.title}</h3>
+                  <h3 className="text-lg font-semibold">{getDealTitle(deal)}</h3>
                   <p className="text-sm text-gray-600">
-                    Value: {deal.value || deal.item.value} {deal.currency || deal.item.currency}
+                    Wert: {renderDealValue(deal)}
                   </p>
                 </div>
                 <button
                   onClick={() => onDealSelect(deal.item || deal)}
                   className="bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition duration-200"
                 >
-                  Select Deal
+                  Deal auswählen
                 </button>
               </div>
             </li>
           ))}
         </ul>
       )}
-      {deals.length === 0 && !loading && <p>No deals found.</p>}
+      {deals.length === 0 && !loading && <p>Keine Deals gefunden.</p>}
     </div>
   );
 };

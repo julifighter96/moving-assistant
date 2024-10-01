@@ -39,8 +39,26 @@ const OPTION_IDS = {
     '2 x 200 * 200': 142,
     '3 x 200 * 200': 143,
     '4 x 200 * 200': 144
+  },
+  'HVZ': {
+    'B': 64,
+    'E': 65,
+    'Z': 66
+  }, 'Gegebenheiten Entladestelle': {
+    'Aufzug': 37,
+    'Maisonette': 38,
+    'Garage': 39,
+    'Keller': 40
+  },
+  'Gegebenheiten Beladestelle': {
+    'Aufzug': 33,
+    'Maisonette': 34,
+    'Garage': 35,
+    'Keller': 36
   }
 };
+
+
 
 const formatDealData = (inspectionData) => {
   console.log('Formatting deal data. Inspection data:', inspectionData);
@@ -51,11 +69,11 @@ const formatDealData = (inspectionData) => {
   if (inspectionData.additionalInfo) {
     inspectionData.additionalInfo.forEach(info => {
       if (API_MAPPING[info.name]) {
-        if (info.name === 'Möbellift' || info.name === 'Matratzenhüllen') {
-          const optionIds = Array.isArray(info.value) 
-            ? info.value.map(label => OPTION_IDS[info.name][label]).filter(Boolean)
-            : [OPTION_IDS[info.name][info.value]].filter(Boolean);
-          formattedData[API_MAPPING[info.name]] = optionIds;
+        if (['Möbellift', 'Matratzenhüllen', 'HVZ', 'Gegebenheiten Entladestelle', 'Gegebenheiten Beladestelle'].includes(info.name)) {
+          if (Array.isArray(info.value) && info.value.length > 0) {
+            const optionIds = info.value.map(label => OPTION_IDS[info.name]?.[label]).filter(Boolean);
+            formattedData[API_MAPPING[info.name]] = optionIds;
+          }
         } else if (Array.isArray(info.value)) {
           formattedData[API_MAPPING[info.name]] = info.value.join(';');
         } else if (typeof info.value === 'boolean') {
@@ -68,49 +86,54 @@ const formatDealData = (inspectionData) => {
   }
 
   // Process pack materials
-  Object.values(inspectionData.packMaterials).forEach(material => {
-    if (API_MAPPING[material.name]) {
-      formattedData[API_MAPPING[material.name]] = material.quantity.toString();
-    }
-  });
+  if (inspectionData.rooms) {
+    Object.values(inspectionData.rooms).forEach(room => {
+      room.packMaterials.forEach(material => {
+        if (API_MAPPING[material.name]) {
+          formattedData[API_MAPPING[material.name]] = (parseInt(formattedData[API_MAPPING[material.name]] || 0) + material.quantity).toString();
+        }
+      });
+    });
+  }
 
   // Add cbm
-  if (typeof inspectionData.totalVolume === 'number') {
-    formattedData[API_MAPPING['cbm']] = inspectionData.totalVolume.toFixed(2);
+  if (inspectionData.combinedData) {
+    formattedData[API_MAPPING['cbm']] = inspectionData.combinedData.totalVolume.toFixed(2);
   }
 
   console.log('Formatted data:', formattedData);
   return formattedData;
 };
 
-const updateDeal = async (dealId, inspectionData) => {
-  console.log(`Updating deal with ID: ${dealId}`);
-  console.log('Inspection data:', inspectionData);
-
+const updateDeal = async (dealId, dealData) => {
   const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
   const apiUrl = `https://api.pipedrive.com/v1/deals/${dealId}?api_token=${apiToken}`;
 
-  console.log('API URL:', apiUrl);
-
-  const formattedData = formatDealData(inspectionData);
-
-  console.log('Data to be sent to Pipedrive:', formattedData);
+  console.log('Data to be sent to Pipedrive:', dealData);
 
   try {
-    console.log('Sending PUT request to Pipedrive...');
-    const response = await axios.put(apiUrl, formattedData);
+    const response = await axios({
+      method: 'PUT',
+      url: apiUrl,
+      data: dealData,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
     console.log('Response from Pipedrive:', response.data);
-    return response.data;
+
+    if (response.data.success) {
+      return response.data.data;
+    } else {
+      throw new Error(response.data.error || 'Failed to update deal');
+    }
   } catch (error) {
     console.error('Error updating deal:', error);
     if (error.response) {
       console.error('Response data:', error.response.data);
       console.error('Response status:', error.response.status);
       console.error('Response headers:', error.response.headers);
-    } else if (error.request) {
-      console.error('No response received. Request:', error.request);
-    } else {
-      console.error('Error message:', error.message);
     }
     throw error;
   }

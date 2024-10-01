@@ -54,7 +54,7 @@ const DealDetails = ({ dealId }) => {
           value={deal.value}
           onChange={(e) => setDeal({...deal, value: e.target.value})}
         />
-        <button type="submit">Update Deal</button>
+        <button type="submit">Deal aktualisieren</button>
       </form>
     </div>
   );

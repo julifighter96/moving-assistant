@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { getDeal, addNoteToDeal } from '../services/pipedriveService';
-import { updateDeal } from '../utils/dealUpdateFunctions';
+import { updateDealForOffer } from '../utils/dealUpdateFunctions';
 const PRICE_MAP = {
   'furniture': 50,
   'Umzugskartons (Standard)': 2,
@@ -52,47 +52,44 @@ const OfferComponent = ({ inspectionData, dealId, onSubmit }) => {
 
   const handleAcceptOffer = async () => {
     try {
-      // Aktualisieren Sie den Deal in Pipedrive (ohne Dübel- und Demontagearbeiten)
-      await updateDeal(dealId, {
+      const offerDetails = {
         additionalInfo: inspectionData.additionalInfo,
-        rooms: inspectionData.rooms,
-        combinedData: {
-          totalVolume: combinedData.totalVolume,
-          estimatedWeight: combinedData.estimatedWeight,
-        },
-      });
+        packMaterials: combinedData.packMaterials,
+        totalVolume: combinedData.totalVolume,
+        estimatedWeight: combinedData.estimatedWeight,
+        // Include other necessary fields here
+      };
 
-      // Erstellen Sie den Notizinhalt (mit Dübel- und Demontagearbeiten)
+      console.log('Offer details before sending:', offerDetails);
+      await updateDealForOffer(dealId, offerDetails);
+  
+      // Prepare note content
       const noteContent = `Angebot Details:
-Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³
-Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg
-Möbelkosten: ${furnitureCost.toFixed(2)} €
-Materialkosten: ${materialCost.toFixed(2)} €
-Gesamtkosten: ${totalCost.toFixed(2)} €
-Demontagen: ${combinedData.demontageCount}
-Dübelarbeiten: ${combinedData.duebelarbeitenCount}
-
-Möbel:
-${Object.entries(combinedData.items).map(([name, item]) => 
-  `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`
-).join('\n')}
-
-Packmaterialien:
-${Object.entries(combinedData.packMaterials).map(([name, quantity]) => `${name}: ${quantity}`).join('\n')}
-
-Zusätzliche Informationen:
-${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info => 
-  `${info.name}: ${Array.isArray(info.value) ? info.value.join(', ') : info.value}`
-).join('\n') : 'Keine'}`;
-
-      // Fügen Sie die Notiz zum Deal hinzu
+  Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³
+  Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg
+  Möbelkosten: ${furnitureCost.toFixed(2)} €
+  Materialkosten: ${materialCost.toFixed(2)} €
+  Gesamtkosten: ${totalCost.toFixed(2)} €
+  
+  Möbel:
+  ${Object.entries(combinedData.items).map(([name, item]) => 
+    `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`
+  ).join('\n')}
+  
+  Packmaterialien:
+  ${Object.entries(combinedData.packMaterials).map(([name, quantity]) => `${name}: ${quantity}`).join('\n')}
+  
+  Zusätzliche Informationen:
+  ${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info => `${info.name}: ${Array.isArray(info.value) ? info.value.join(', ') : info.value}`).join('\n') : 'Keine'}`;
+  
+      // Add the note to the deal
       await addNoteToDeal(dealId, noteContent);
-
+  
       alert('Angebot wurde erfolgreich akzeptiert, der Deal aktualisiert und eine Notiz hinzugefügt.');
       if (onSubmit) onSubmit();
     } catch (error) {
       console.error('Fehler beim Verarbeiten des Angebots:', error);
-      alert(`Es gab einen Fehler: ${error.message}`);
+      alert(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
     }
   };
 

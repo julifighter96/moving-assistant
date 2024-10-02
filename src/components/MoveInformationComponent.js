@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { updateDeal } from '../utils/dealUpdateFunctions';
+import { updateDealDirectly } from '../utils/dealUpdateFunctions';
 import { getDeal } from '../services/pipedriveService';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -67,8 +67,7 @@ const MOVE_INFO_FIELDS = [
         });
         
         console.log('Sending data to update:', dataToUpdate);
-        const updatedDeal = await updateDeal(dealId, dataToUpdate);
-        console.log('Updated deal:', updatedDeal);
+        await updateDealDirectly(dealId, dataToUpdate);
         alert('Umzugsinformationen erfolgreich aktualisiert');
         onComplete(dataToUpdate);
       } catch (error) {

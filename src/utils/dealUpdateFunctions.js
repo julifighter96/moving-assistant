@@ -105,24 +105,43 @@ const formatDealData = (inspectionData) => {
   return formattedData;
 };
 
-const updateDeal = async (dealId, dealData) => {
+const updateDealForOffer = async (dealId, dealData) => {
   const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
   const apiUrl = `https://api.pipedrive.com/v1/deals/${dealId}?api_token=${apiToken}`;
 
-  console.log('Data to be sent to Pipedrive:', dealData);
+  console.log('Raw deal data for offer:', dealData);
+
+  const formattedData = formatDealData(dealData);
+  console.log('Formatted data to be sent to Pipedrive:', formattedData);
 
   try {
-    const response = await axios({
-      method: 'PUT',
-      url: apiUrl,
-      data: dealData,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-
+    const response = await axios.put(apiUrl, formattedData);
     console.log('Response from Pipedrive:', response.data);
+    if (response.data.success) {
+      return response.data.data;
+    } else {
+      throw new Error(response.data.error || 'Failed to update deal');
+    }
+  } catch (error) {
+    console.error('Error updating deal for offer:', error);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+    }
+    throw error;
+  }
+};
 
+const updateDealDirectly = async (dealId, dealData) => {
+  const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
+  const apiUrl = `https://api.pipedrive.com/v1/deals/${dealId}?api_token=${apiToken}`;
+
+  console.log('Updating deal directly with data:', dealData);
+
+  try {
+    const response = await axios.put(apiUrl, dealData);
+    console.log('Response from Pipedrive:', response.data);
     if (response.data.success) {
       return response.data.data;
     } else {
@@ -139,4 +158,5 @@ const updateDeal = async (dealId, dealData) => {
   }
 };
 
-export { formatDealData, updateDeal };
+
+export { formatDealData, updateDealDirectly, updateDealForOffer };

@@ -25,9 +25,31 @@ const DEFAULT_ROOM_DATA = {
   estimatedWeight: 0,
 };
 
+const StepNavigation = ({ currentStep, totalSteps, onStepChange }) => {
+  return (
+    <div className="flex justify-between mb-4">
+      <button 
+        onClick={() => onStepChange(currentStep - 1)} 
+        disabled={currentStep === 0}
+        className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-gray-300"
+      >
+        Zurück
+      </button>
+      <span>{`Schritt ${currentStep + 1} von ${totalSteps}`}</span>
+      <button 
+        onClick={() => onStepChange(currentStep + 1)} 
+        disabled={currentStep === totalSteps - 1}
+        className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-gray-300"
+      >
+        Weiter
+      </button>
+    </div>
+  );
+};
+
 function App() {
+  const [currentStep, setCurrentStep] = useState(0);
   const [moveInfo, setMoveInfo] = useState(null);
-  const [currentView, setCurrentView] = useState('dealViewer');
   const [selectedDealId, setSelectedDealId] = useState(null);
   const [dealData, setDealData] = useState(null);
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
@@ -44,12 +66,12 @@ function App() {
   const handleStartInspection = (deal) => {
     setSelectedDealId(deal.id);
     setDealData(deal);
-    setCurrentView('moveInformation');
+    setCurrentStep(1);
   };
 
   const handleMoveInfoComplete = (info) => {
     setMoveInfo(info);
-    setCurrentView('roomSelector');
+    setCurrentStep(2);
   };
 
   const handleRoomChange = useCallback((room) => {
@@ -77,7 +99,6 @@ function App() {
       const updatedData = { ...prevData };
       Object.keys(updatedData).forEach(room => {
         if (newItem.volume !== undefined) {
-          // Es handelt sich um ein Möbelstück
           if (!updatedData[room].items.some(item => item.name === newItem.name)) {
             updatedData[room].items = [...updatedData[room].items, { 
               ...newItem, 
@@ -87,7 +108,6 @@ function App() {
             }];
           }
         } else {
-          // Es handelt sich um Packmaterial
           if (!updatedData[room].packMaterials.some(material => material.name === newItem.name)) {
             updatedData[room].packMaterials = [...updatedData[room].packMaterials, { ...newItem, quantity: 0 }];
           }
@@ -97,58 +117,53 @@ function App() {
     });
   }, []);
 
-
-  const handleCompleteInspection = () => {
-    setCurrentView('additionalInfo');
-  };
-
   const handleAdditionalInfoComplete = (info) => {
     setAdditionalInfo(info);
-    setCurrentView('offer');
+    setCurrentStep(4);
   };
+
+  const handleStepChange = (newStep) => {
+    setCurrentStep(newStep);
+  };
+
+  const steps = [
+    { component: <DealViewer onStartInspection={handleStartInspection} /> },
+    { component: <MoveInformationComponent dealId={selectedDealId} onComplete={handleMoveInfoComplete} /> },
+    { component: (
+      <>
+        <RoomSelector
+          rooms={rooms}
+          currentRoom={currentRoom}
+          onRoomChange={handleRoomChange}
+          onAddRoom={handleAddRoom}
+        />
+        <RoomItemsSelector
+          key={currentRoom}
+          roomName={currentRoom}
+          onUpdateRoom={handleUpdateRoomData}
+          initialData={roomsData[currentRoom]}
+          onAddItem={handleAddItem}
+        />
+      </>
+    ) },
+    { component: <AdditionalInfoComponent onComplete={handleAdditionalInfoComplete} /> },
+    { component: (
+      <OfferComponent 
+        inspectionData={{ rooms: roomsData, additionalInfo, moveInfo }}
+        dealId={selectedDealId}
+      />
+    ) },
+  ];
 
   return (
     <div className="App bg-gray-100 min-h-screen py-8">
       <div className="max-w-2xl mx-auto">
-        {currentView === 'dealViewer' && (
-          <DealViewer onStartInspection={handleStartInspection} />
-        )}
-        {currentView === 'moveInformation' && (
-          <MoveInformationComponent
-            dealId={selectedDealId}
-            onComplete={handleMoveInfoComplete}
-          />
-        )}
-        {currentView === 'roomSelector' && (
-          <>
-            <RoomSelector
-              rooms={rooms}
-              currentRoom={currentRoom}
-              onRoomChange={handleRoomChange}
-            />
-            <RoomItemsSelector
-              key={currentRoom}
-              roomName={currentRoom}
-              onUpdateRoom={handleUpdateRoomData}
-              initialData={roomsData[currentRoom]}
-            />
-            <button
-              className="w-full bg-green-500 text-white p-2 rounded-md mt-6 hover:bg-green-600 transition duration-200"
-              onClick={handleCompleteInspection}
-            >
-              Besichtigung abschließen
-            </button>
-          </>
-        )}
-        {currentView === 'additionalInfo' && (
-          <AdditionalInfoComponent onComplete={handleAdditionalInfoComplete} />
-        )}
-        {currentView === 'offer' && (
-          <OfferComponent 
-            inspectionData={{ rooms: roomsData, additionalInfo, moveInfo }}
-            dealId={selectedDealId}
-          />
-        )}
+        <StepNavigation 
+          currentStep={currentStep} 
+          totalSteps={steps.length} 
+          onStepChange={handleStepChange} 
+        />
+        {steps[currentStep].component}
       </div>
     </div>
   );

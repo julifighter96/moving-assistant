@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { getDeal, addNoteToDeal } from '../services/pipedriveService';
 import { updateDealForOffer } from '../utils/dealUpdateFunctions';
+
 const PRICE_MAP = {
   'furniture': 50,
   'Umzugskartons (Standard)': 2,
@@ -8,7 +9,7 @@ const PRICE_MAP = {
   'Kleiderkisten': 3,
 };
 
-const OfferComponent = ({ inspectionData, dealId, onSubmit }) => {
+const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
   const combinedData = useMemo(() => {
     const items = {};
     const packMaterials = {};
@@ -85,15 +86,13 @@ const OfferComponent = ({ inspectionData, dealId, onSubmit }) => {
       // Add the note to the deal
       await addNoteToDeal(dealId, noteContent);
   
-      alert('Angebot wurde erfolgreich akzeptiert, der Deal aktualisiert und eine Notiz hinzugefügt.');
-      if (onSubmit) onSubmit();
+      onComplete();
     } catch (error) {
       console.error('Fehler beim Verarbeiten des Angebots:', error);
       alert(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
     }
   };
 
-  // Render-Funktionen für die Anzeige der Daten
   const renderItems = () => (
     <ul>
       {Object.entries(combinedData.items).map(([name, item]) => (

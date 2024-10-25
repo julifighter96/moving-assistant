@@ -1,44 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import RoomPhotoCapture from './RoomPhotoCapture';
 
 const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) => {
   const [items, setItems] = useState(initialData.items || []);
   const [packMaterials, setPackMaterials] = useState(initialData.packMaterials || []);
   const [newItem, setNewItem] = useState({ name: '', volume: 0, demontiert: false, duebelarbeiten: false });
   const [newPackMaterial, setNewPackMaterial] = useState({ name: '', quantity: 0 });
-
-  useEffect(() => {
-    if (initialData) {
-      setItems(initialData.items || []);
-      setPackMaterials(initialData.packMaterials || []);
-    }
-  }, [initialData]);
-
-  const handleQuantityChange = (index, change, stateUpdater) => {
-    stateUpdater(prevItems => {
-      const newItems = prevItems.map((item, i) => 
-        i === index ? { ...item, quantity: Math.max(0, item.quantity + change) } : item
-      );
-      return newItems;
-    });
-  };
-
-  const handleVolumeChange = (index, newVolume) => {
-    setItems(prevItems => {
-      const newItems = prevItems.map((item, i) => 
-        i === index ? { ...item, volume: parseFloat(newVolume) } : item
-      );
-      return newItems;
-    });
-  };
-
-  const handleCheckboxChange = (index, field) => {
-    setItems(prevItems => {
-      const newItems = prevItems.map((item, i) => 
-        i === index ? { ...item, [field]: !item[field] } : item
-      );
-      return newItems;
-    });
-  };
 
   const totalVolume = useMemo(() => {
     return items.reduce((total, item) => total + item.volume * item.quantity, 0);
@@ -48,6 +15,13 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
     return totalVolume * 200;
   }, [totalVolume]);
 
+  // Update local state when initialData changes
+  useEffect(() => {
+    setItems(initialData.items || []);
+    setPackMaterials(initialData.packMaterials || []);
+  }, [initialData]);
+
+  // Update parent component whenever data changes
   useEffect(() => {
     onUpdateRoom(roomName, {
       items,
@@ -57,25 +31,50 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
     });
   }, [roomName, items, packMaterials, totalVolume, estimatedWeight, onUpdateRoom]);
 
-  const handleAddItem = () => {
+  const handleQuantityChange = useCallback((index, change, stateUpdater) => {
+    stateUpdater(prevItems => {
+      const newItems = prevItems.map((item, i) => 
+        i === index ? { ...item, quantity: Math.max(0, item.quantity + change) } : item
+      );
+      return newItems;
+    });
+  }, []);
+
+  const handleVolumeChange = useCallback((index, newVolume) => {
+    setItems(prevItems => {
+      const newItems = prevItems.map((item, i) => 
+        i === index ? { ...item, volume: parseFloat(newVolume) } : item
+      );
+      return newItems;
+    });
+  }, []);
+
+  const handleCheckboxChange = useCallback((index, field) => {
+    setItems(prevItems => {
+      const newItems = prevItems.map((item, i) => 
+        i === index ? { ...item, [field]: !item[field] } : item
+      );
+      return newItems;
+    });
+  }, []);
+
+  const handleAddItem = useCallback(() => {
     if (newItem.name && !items.some(item => item.name === newItem.name)) {
-      const updatedItems = [...items, { ...newItem, quantity: 0 }];
-      setItems(updatedItems);
+      setItems(prevItems => [...prevItems, { ...newItem, quantity: 0 }]);
       onAddItem(newItem);
       setNewItem({ name: '', volume: 0, demontiert: false, duebelarbeiten: false });
     }
-  };
+  }, [items, newItem, onAddItem]);
 
-  const handleAddPackMaterial = () => {
+  const handleAddPackMaterial = useCallback(() => {
     if (newPackMaterial.name && !packMaterials.some(material => material.name === newPackMaterial.name)) {
-      const updatedPackMaterials = [...packMaterials, { ...newPackMaterial, quantity: 0 }];
-      setPackMaterials(updatedPackMaterials);
+      setPackMaterials(prevMaterials => [...prevMaterials, { ...newPackMaterial, quantity: 0 }]);
       onAddItem(newPackMaterial);
       setNewPackMaterial({ name: '', quantity: 0 });
     }
-  };
+  }, [packMaterials, newPackMaterial, onAddItem]);
 
-  const renderItemList = (itemList, stateUpdater, showVolume = false) => (
+  const renderItemList = useCallback((itemList, stateUpdater, showVolume = false) => (
     <ul className="divide-y divide-gray-200">
       {itemList.map((item, index) => (
         <li key={item.name} className="flex items-center justify-between p-4">
@@ -127,7 +126,7 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
         </li>
       ))}
     </ul>
-  );
+  ), [handleQuantityChange, handleVolumeChange, handleCheckboxChange]);
 
   return (
     <div className="bg-white rounded-lg overflow-hidden shadow-lg">
@@ -156,7 +155,7 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
           />
           <button
             onClick={handleAddItem}
-            className="bg-green-500 text-white p-2 rounded-r-md hover:bg-green-600 transition duration-200"
+            className="bg-green-500 text-white p-2 rounded-r-md hover:bg-green-600 transition-colors"
           >
             Hinzufügen
           </button>
@@ -175,7 +174,7 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
           />
           <button
             onClick={handleAddPackMaterial}
-            className="bg-green-500 text-white p-2 rounded-r-md hover:bg-green-600 transition duration-200"
+            className="bg-green-500 text-white p-2 rounded-r-md hover:bg-green-600 transition-colors"
           >
             Hinzufügen
           </button>
@@ -192,6 +191,10 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
             <span>{Math.round(estimatedWeight)}</span>
           </div>
         </div>
+
+        <RoomPhotoCapture 
+          roomName={roomName}
+        />
       </div>
     </div>
   );

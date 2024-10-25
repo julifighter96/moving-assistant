@@ -1,4 +1,6 @@
 import axios from 'axios';
+import photoStorage from '../utils/photoStorage';  // Add this import
+
 
 const API_MAPPING = {
   'HVZ': '78050c086c106b0e9f655eb0b92ceb1ae1825378',
@@ -58,10 +60,132 @@ const OPTION_IDS = {
   }
 };
 
+const uploadPhotos = async (dealId, photos) => {
+  const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
+  
+  for (const photo of photos) {
+    const formData = new FormData();
+    formData.append('file', photo.blob, 'room_photo.jpg');
+    formData.append('deal_id', dealId);
+    
+    try {
+      await axios.post(`https://api.pipedrive.com/v1/files`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        params: { api_token: apiToken }
+      });
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+    }
+  }
+};
 
+const uploadPhotosToFile = async (dealId, photos) => {
+  const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
+  const uploadedFiles = [];
+
+
+  for (const photo of photos) {
+    try {
+      if (!photo || !photo.data) {
+        console.warn('Invalid photo object:', photo);
+        continue;
+      }
+
+      // Convert base64 to blob
+      const base64Response = await fetch(photo.data);
+      const blob = await base64Response.blob();
+
+      // Create FormData
+      const formData = new FormData();
+      formData.append('file', blob, `room_photo_${photo.id || Date.now()}.jpg`);
+      formData.append('deal_id', dealId);
+
+      const response = await axios.post(
+        'https://api.pipedrive.com/v1/files', 
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          },
+          params: {
+            api_token: apiToken
+          }
+        }
+      );
+
+      if (response.data.success) {
+        uploadedFiles.push(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+    }
+  }
+
+  return uploadedFiles;
+};
+
+const updateDealForOffer = async (dealId, dealData) => {
+  const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
+  const apiUrl = `https://api.pipedrive.com/v1/deals/${dealId}?api_token=${apiToken}`;
+
+  console.log('Raw deal data for offer:', dealData);
+
+  try {
+    // First, get all photos from IndexedDB for all rooms
+    const allPhotos = [];
+    if (dealData.rooms) {
+      for (const roomName of Object.keys(dealData.rooms)) {
+        try {
+          const roomPhotos = await photoStorage.getPhotos(roomName);
+          if (roomPhotos && roomPhotos.length > 0) {
+            allPhotos.push(...roomPhotos);
+          }
+        } catch (error) {
+          console.error(`Error getting photos for room ${roomName}:`, error);
+        }
+      }
+    
+    }
+    else {
+      console.log('⚠️ No rooms data found in dealData');
+    }
+
+    // Upload photos to Pipedrive if we have any
+    if (allPhotos.length > 0) {
+      await uploadPhotosToFile(dealId, allPhotos);
+      try {
+        await photoStorage.deleteAllPhotos();
+        console.log('✨ Successfully cleaned up all local photos');
+      } catch (cleanupError) {
+        console.error('⚠️ Error cleaning up local photos:', cleanupError);
+        // Continue with the deal update even if cleanup fails
+      }
+    }
+
+    // Then update the deal with other data
+    const formattedData = formatDealData(dealData);
+
+    const response = await axios.put(apiUrl, formattedData);
+    
+    if (response.data.success) {
+      return response.data.data;
+    } else {
+      throw new Error(response.data.error || 'Failed to update deal');
+    }
+  } catch (error) {
+    console.error('Error updating deal for offer:', error);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+    }
+    throw error;
+  }
+};
 
 const formatDealData = (inspectionData) => {
-  console.log('Formatting deal data. Inspection data:', inspectionData);
 
   const formattedData = {};
 
@@ -101,43 +225,14 @@ const formatDealData = (inspectionData) => {
     formattedData[API_MAPPING['cbm']] = inspectionData.combinedData.totalVolume.toFixed(2);
   }
 
-  console.log('Formatted data:', formattedData);
   return formattedData;
 };
 
-const updateDealForOffer = async (dealId, dealData) => {
-  const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
-  const apiUrl = `https://api.pipedrive.com/v1/deals/${dealId}?api_token=${apiToken}`;
-
-  console.log('Raw deal data for offer:', dealData);
-
-  const formattedData = formatDealData(dealData);
-  console.log('Formatted data to be sent to Pipedrive:', formattedData);
-
-  try {
-    const response = await axios.put(apiUrl, formattedData);
-    console.log('Response from Pipedrive:', response.data);
-    if (response.data.success) {
-      return response.data.data;
-    } else {
-      throw new Error(response.data.error || 'Failed to update deal');
-    }
-  } catch (error) {
-    console.error('Error updating deal for offer:', error);
-    if (error.response) {
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
-      console.error('Response headers:', error.response.headers);
-    }
-    throw error;
-  }
-};
 
 const updateDealDirectly = async (dealId, dealData) => {
   const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
   const apiUrl = `https://api.pipedrive.com/v1/deals/${dealId}?api_token=${apiToken}`;
 
-  console.log('Updating deal directly with data:', dealData);
 
   try {
     const response = await axios.put(apiUrl, dealData);

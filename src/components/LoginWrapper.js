@@ -7,7 +7,7 @@ const LoginWrapper = ({ children }) => {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (credentials.username === 'admin' && credentials.password === 'moving2024') {
+    if (credentials.username === 'admin' && credentials.password === 'riedlin2024') {
       setIsAuthenticated(true);
       setError('');
     } else {

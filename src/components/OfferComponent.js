@@ -54,6 +54,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
   const handleAcceptOffer = async () => {
     try {
       const offerDetails = {
+        rooms: inspectionData.rooms, 
         additionalInfo: inspectionData.additionalInfo,
         packMaterials: combinedData.packMaterials,
         totalVolume: combinedData.totalVolume,

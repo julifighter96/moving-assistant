@@ -93,6 +93,7 @@ function App() {
       initialRoomsData[room] = {
         items: DEFAULT_ROOM_INVENTORY[room] || [],
         packMaterials: DEFAULT_PACK_MATERIALS,
+        photos: [],
         totalVolume: 0,
         estimatedWeight: 0,
       };
@@ -139,14 +140,23 @@ function App() {
   };
 
   const handleRoomChange = useCallback((room) => {
+    console.log('Switching to room:', room);
+    console.log('Current room data:', roomsData[room]);
     setCurrentRoom(room);
-  }, []);
+  }, [roomsData]);
 
-  const handleUpdateRoomData = useCallback((roomName, data) => {
-    setRoomsData(prevData => ({
-      ...prevData,
-      [roomName]: data
-    }));
+  const handleUpdateRoomData = useCallback((roomName, updatedRoomData) => {
+    setRoomsData(prevData => {
+      const newData = {
+        ...prevData,
+        [roomName]: {
+          ...prevData[roomName],
+          ...updatedRoomData
+        }
+      };
+      console.log('Updated room data:', newData);
+      return newData;
+    });
   }, []);
 
   const handleAddRoom = useCallback((newRoom) => {
@@ -156,6 +166,7 @@ function App() {
       [newRoom]: {
         items: [],
         packMaterials: DEFAULT_PACK_MATERIALS,
+        photos: [],
         totalVolume: 0,
         estimatedWeight: 0,
       }

@@ -12,6 +12,7 @@ const API_MAPPING = {
   'cbm': '7389c69a33066781652d699f17cab018b7bdec21',
   'Auspackservice': '0085f40bb50ba7748922f9723a9ac4e91e1149cf',
   'Einpackservice': '05ab4ce4f91858459aad9bf20644e99b5d0619b1',
+  'Anmerkungen für Personal': 'e587fe207006060c97d76f97a01351b08e850a95',
 };
 
 const OPTION_IDS = {
@@ -186,10 +187,30 @@ const updateDealForOffer = async (dealId, dealData) => {
 };
 
 const formatDealData = (inspectionData) => {
-
   const formattedData = {};
 
-  // Process additional info
+  // Create detailed text for personnel remarks
+  if (inspectionData.combinedData) {
+    const detailsText = `Gesamtvolumen: ${inspectionData.combinedData.totalVolume.toFixed(2)} m³
+Geschätztes Gewicht: ${Math.round(inspectionData.combinedData.estimatedWeight)} kg
+
+Möbel:
+${Object.entries(inspectionData.combinedData.items).map(([name, item]) => 
+  `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`
+).join('\n')}
+
+Packmaterialien:
+${Object.entries(inspectionData.combinedData.packMaterials).map(([name, quantity]) => `${name}: ${quantity}`).join('\n')}
+
+Zusätzliche Informationen:
+${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info => 
+  `${info.name}: ${Array.isArray(info.value) ? info.value.join(', ') : info.value}`
+).join('\n') : 'Keine'}`;
+
+    formattedData[API_MAPPING['Anmerkungen für Personal']] = detailsText;
+  }
+
+  // Process additional info (existing code)
   if (inspectionData.additionalInfo) {
     inspectionData.additionalInfo.forEach(info => {
       if (API_MAPPING[info.name]) {
@@ -209,7 +230,7 @@ const formatDealData = (inspectionData) => {
     });
   }
 
-  // Process pack materials
+  // Process pack materials (existing code)
   if (inspectionData.rooms) {
     Object.values(inspectionData.rooms).forEach(room => {
       room.packMaterials.forEach(material => {
@@ -220,7 +241,7 @@ const formatDealData = (inspectionData) => {
     });
   }
 
-  // Add cbm
+  // Add cbm (existing code)
   if (inspectionData.combinedData) {
     formattedData[API_MAPPING['cbm']] = inspectionData.combinedData.totalVolume.toFixed(2);
   }

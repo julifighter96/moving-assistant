@@ -53,21 +53,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
 
   const handleAcceptOffer = async () => {
     try {
-      const offerDetails = {
-        rooms: inspectionData.rooms, 
-        additionalInfo: inspectionData.additionalInfo,
-        packMaterials: combinedData.packMaterials,
-        totalVolume: combinedData.totalVolume,
-        estimatedWeight: combinedData.estimatedWeight,
-        // Include other necessary fields here
-      };
-
-      console.log('Offer details before sending:', offerDetails);
-      await updateDealForOffer(dealId, offerDetails);
-  
-      // Prepare note content
-      const noteContent = `Angebot Details:
-  Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³
+      const detailsText = `Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³
   Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg
   Möbelkosten: ${furnitureCost.toFixed(2)} €
   Materialkosten: ${materialCost.toFixed(2)} €
@@ -84,8 +70,17 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
   Zusätzliche Informationen:
   ${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info => `${info.name}: ${Array.isArray(info.value) ? info.value.join(', ') : info.value}`).join('\n') : 'Keine'}`;
   
-      // Add the note to the deal
-      await addNoteToDeal(dealId, noteContent);
+      const offerDetails = {
+        additionalInfo: inspectionData.additionalInfo,
+        packMaterials: combinedData.packMaterials,
+        totalVolume: combinedData.totalVolume,
+        estimatedWeight: combinedData.estimatedWeight,
+        combinedData: combinedData, 
+      };
+  
+      console.log('Offer details before sending:', offerDetails);
+      await updateDealForOffer(dealId, offerDetails);
+      await addNoteToDeal(dealId, detailsText);
   
       onComplete();
     } catch (error) {

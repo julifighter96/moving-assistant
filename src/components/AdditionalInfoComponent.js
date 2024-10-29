@@ -31,8 +31,20 @@ const INITIAL_ADDITIONAL_INFO = [
   {
     category: 'Zusätzliche Dienstleistungen',
     fields: [
-      { name: 'Auspackservice', apiKey: '0085f40bb50ba7748922f9723a9ac4cf1e1149cf', options: ['Ja'], value: false },
-      { name: 'Einpackservice', apiKey: '05ab4ce4f91858459aad9bf20644e99b5d0619b1', options: ['Ja'], value: false },
+      { 
+        name: 'Auspackservice', 
+        apiKey: '0085f40bb50ba7748922f9723a9ac4cf1e1149cf', 
+        type: 'select',
+        options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
+        value: 'Nein'
+      },
+      { 
+        name: 'Einpackservice', 
+        apiKey: '05ab4ce4f91858459aad9bf20644e99b5d0619b1', 
+        type: 'select',
+        options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
+        value: 'Nein'
+      },
     ]
   }
 ];
@@ -79,41 +91,66 @@ const AdditionalInfoComponent = ({ onComplete }) => {
     onComplete(flattenedInfo);
   }, [additionalInfo, onComplete]);
 
-  const renderMultipleChoice = useCallback((field, categoryIndex, fieldIndex) => (
-    <div className="mb-4">
-      <label className="block mb-2 text-sm font-medium text-gray-900">
-        {field.name}
-      </label>
-      <div className="space-y-2">
-        {field.options.map(option => (
-          <label key={option} className="flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={Array.isArray(field.value) && field.value.includes(option)}
-              onChange={() => handleMultipleChoiceChange(categoryIndex, fieldIndex, option)}
-              className="mr-2 cursor-pointer"
-            />
-            <span className="text-sm">{option}</span>
+  const renderField = useCallback((field, categoryIndex, fieldIndex) => {
+    if (field.type === 'select') {
+      return (
+        <div className="mb-4">
+          <label className="block mb-2 text-sm font-medium text-gray-900">
+            {field.name}
           </label>
-        ))}
-      </div>
-    </div>
-  ), [handleMultipleChoiceChange]);
+          <select
+            value={field.value}
+            onChange={(e) => handleInfoChange(categoryIndex, fieldIndex, e.target.value)}
+            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+          >
+            {field.options.map(option => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
 
-  const renderCheckbox = useCallback((field, categoryIndex, fieldIndex) => (
-    <div className="flex items-center mb-4">
-      <input
-        id={field.name}
-        type="checkbox"
-        checked={field.value}
-        onChange={(e) => handleInfoChange(categoryIndex, fieldIndex, e.target.checked)}
-        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 cursor-pointer"
-      />
-      <label htmlFor={field.name} className="ml-2 text-sm font-medium text-gray-900 cursor-pointer">
-        {field.name}
-      </label>
-    </div>
-  ), [handleInfoChange]);
+    if (field.multiple) {
+      return (
+        <div className="mb-4">
+          <label className="block mb-2 text-sm font-medium text-gray-900">
+            {field.name}
+          </label>
+          <div className="space-y-2">
+            {field.options.map(option => (
+              <label key={option} className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Array.isArray(field.value) && field.value.includes(option)}
+                  onChange={() => handleMultipleChoiceChange(categoryIndex, fieldIndex, option)}
+                  className="mr-2 cursor-pointer"
+                />
+                <span className="text-sm">{option}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center mb-4">
+        <input
+          id={field.name}
+          type="checkbox"
+          checked={field.value}
+          onChange={(e) => handleInfoChange(categoryIndex, fieldIndex, e.target.checked)}
+          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 cursor-pointer"
+        />
+        <label htmlFor={field.name} className="ml-2 text-sm font-medium text-gray-900 cursor-pointer">
+          {field.name}
+        </label>
+      </div>
+    );
+  }, [handleInfoChange, handleMultipleChoiceChange]);
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 max-w-4xl mx-auto">
@@ -124,10 +161,7 @@ const AdditionalInfoComponent = ({ onComplete }) => {
             <h3 className="text-xl font-semibold mb-4">{category.category}</h3>
             {category.fields.map((field, fieldIndex) => (
               <div key={field.name}>
-                {field.multiple ? 
-                  renderMultipleChoice(field, categoryIndex, fieldIndex) :
-                  renderCheckbox(field, categoryIndex, fieldIndex)
-                }
+                {renderField(field, categoryIndex, fieldIndex)}
               </div>
             ))}
           </div>

@@ -8,7 +8,7 @@ import OfferComponent from './components/OfferComponent';
 import SuccessPopup from './components/SuccessPopup';
 import LoginWrapper from './components/LoginWrapper';
 
-
+const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
 
 const DEFAULT_ROOM_INVENTORY = {
@@ -259,6 +259,9 @@ function App() {
             onComplete={handleOfferComplete}
           />
         )}
+        <div className="fixed bottom-2 right-2 text-xs text-gray-500">
+          {APP_VERSION}
+        </div>
       </div>
     </div>
     </LoginWrapper>

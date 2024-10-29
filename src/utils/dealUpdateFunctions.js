@@ -189,28 +189,83 @@ const updateDealForOffer = async (dealId, dealData) => {
 const formatDealData = (inspectionData) => {
   const formattedData = {};
 
-  // Create detailed text for personnel remarks
   if (inspectionData.combinedData) {
-    const detailsText = `Gesamtvolumen: ${inspectionData.combinedData.totalVolume.toFixed(2)} m³
-Geschätztes Gewicht: ${Math.round(inspectionData.combinedData.estimatedWeight)} kg
+    let detailsText = '';
 
-Möbel:
-${Object.entries(inspectionData.combinedData.items).map(([name, item]) => 
-  `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`
-).join('\n')}
+    // Add items that need work
+    const filteredItems = Object.entries(inspectionData.combinedData.items)
+      .filter(([_, item]) => item.duebelarbeiten || item.demontiert)
+      .map(([name, item]) => 
+        `${name}: ${item.quantity} (${[
+          item.demontiert ? 'Demontiert' : '',
+          item.duebelarbeiten ? 'Dübelarbeiten' : ''
+        ].filter(Boolean).join(', ')})`
+      );
 
-Packmaterialien:
-${Object.entries(inspectionData.combinedData.packMaterials).map(([name, quantity]) => `${name}: ${quantity}`).join('\n')}
+    if (filteredItems.length > 0) {
+      detailsText += `Möbel die bearbeitet werden müssen:\n${filteredItems.join('\n')}\n\n`;
+    }
 
-Zusätzliche Informationen:
-${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info => 
-  `${info.name}: ${Array.isArray(info.value) ? info.value.join(', ') : info.value}`
-).join('\n') : 'Keine'}`;
+    // Add pack materials if any exist
+    const packMaterials = Object.entries(inspectionData.combinedData.packMaterials)
+      .filter(([_, quantity]) => quantity > 0)
+      .map(([name, quantity]) => `${name}: ${quantity}`);
 
-    formattedData[API_MAPPING['Anmerkungen für Personal']] = detailsText;
+    if (packMaterials.length > 0) {
+      detailsText += `Packmaterialien:\n${packMaterials.join('\n')}\n\n`;
+    }
+
+    // Add additional information
+    if (inspectionData.additionalInfo) {
+      const additionalDetails = [];
+
+      // Add HVZ info
+      const hvzInfo = inspectionData.additionalInfo.find(info => info.name === 'HVZ');
+      if (hvzInfo && Array.isArray(hvzInfo.value) && hvzInfo.value.length > 0) {
+        additionalDetails.push(`HVZ: ${hvzInfo.value.join(', ')}`);
+      }
+
+      // Add Möbellift info
+      const moebelLiftInfo = inspectionData.additionalInfo.find(info => info.name === 'Möbellift');
+      if (moebelLiftInfo && Array.isArray(moebelLiftInfo.value) && moebelLiftInfo.value.length > 0) {
+        additionalDetails.push(`Möbellift: ${moebelLiftInfo.value.join(', ')}`);
+      }
+
+      // Add Matratzenhüllen info
+      const matratzenInfo = inspectionData.additionalInfo.find(info => info.name === 'Matratzenhüllen');
+      if (matratzenInfo && Array.isArray(matratzenInfo.value) && matratzenInfo.value.length > 0) {
+        additionalDetails.push(`Matratzenhüllen: ${matratzenInfo.value.join(', ')}`);
+      }
+
+      // Add Packseide info
+      const packseideInfo = inspectionData.additionalInfo.find(info => info.name === 'Packseide');
+      if (packseideInfo && packseideInfo.value === true) {
+        additionalDetails.push('Packseide: Ja');
+      }
+
+      // Add Ein/Auspackservice info
+      const einpackInfo = inspectionData.additionalInfo.find(info => info.name === 'Einpackservice');
+      if (einpackInfo && einpackInfo.value) {
+        additionalDetails.push(`Einpackservice: ${einpackInfo.value}`);
+      }
+
+      const auspackInfo = inspectionData.additionalInfo.find(info => info.name === 'Auspackservice');
+      if (auspackInfo && auspackInfo.value) {
+        additionalDetails.push(`Auspackservice: ${auspackInfo.value}`);
+      }
+
+      if (additionalDetails.length > 0) {
+        detailsText += `Zusätzliche Details:\n${additionalDetails.join('\n')}`;
+      }
+    }
+
+    // Only set the field if we have content
+    if (detailsText.trim()) {
+      formattedData[API_MAPPING['Anmerkungen für Personal']] = detailsText;
+    }
   }
 
-  // Process additional info (existing code)
+  // Process additional info with updated handling for Ein/Auspackservice
   if (inspectionData.additionalInfo) {
     inspectionData.additionalInfo.forEach(info => {
       if (API_MAPPING[info.name]) {
@@ -219,6 +274,9 @@ ${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info =>
             const optionIds = info.value.map(label => OPTION_IDS[info.name]?.[label]).filter(Boolean);
             formattedData[API_MAPPING[info.name]] = optionIds;
           }
+        } else if (['Einpackservice', 'Auspackservice'].includes(info.name)) {
+          // Handle the new format for pack services
+          formattedData[API_MAPPING[info.name]] = info.value || 'Nein';
         } else if (Array.isArray(info.value)) {
           formattedData[API_MAPPING[info.name]] = info.value.join(';');
         } else if (typeof info.value === 'boolean') {
@@ -230,7 +288,7 @@ ${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info =>
     });
   }
 
-  // Process pack materials (existing code)
+  // Rest of the code remains the same...
   if (inspectionData.rooms) {
     Object.values(inspectionData.rooms).forEach(room => {
       room.packMaterials.forEach(material => {
@@ -241,7 +299,6 @@ ${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info =>
     });
   }
 
-  // Add cbm (existing code)
   if (inspectionData.combinedData) {
     formattedData[API_MAPPING['cbm']] = inspectionData.combinedData.totalVolume.toFixed(2);
   }

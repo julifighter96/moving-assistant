@@ -18,7 +18,6 @@ const INITIAL_ADDITIONAL_INFO = [
         '1 x 180 * 200', '2 x 180 * 200', '3 x 180 * 200', '4 x 180 * 200',
         '1 x 200 * 200', '2 x 200 * 200', '3 x 200 * 200', '4 x 200 * 200'
       ], value: [], multiple: true },
-      { name: 'Packseide', apiKey: '1df9741aa7e79a4aba3673706875c4f9ba458e86', options: ['Ja'], value: false },
     ]
   },
   {
@@ -32,19 +31,20 @@ const INITIAL_ADDITIONAL_INFO = [
     category: 'Zusätzliche Dienstleistungen',
     fields: [
       { 
-        name: 'Auspackservice', 
-        apiKey: '0085f40bb50ba7748922f9723a9ac4cf1e1149cf', 
-        type: 'select',
-        options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
-        value: 'Nein'
-      },
-      { 
         name: 'Einpackservice', 
         apiKey: '05ab4ce4f91858459aad9bf20644e99b5d0619b1', 
         type: 'select',
         options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
         value: 'Nein'
       },
+      { 
+        name: 'Auspackservice', 
+        apiKey: '0085f40bb50ba7748922f9723a9ac4cf1e1149cf', 
+        type: 'select',
+        options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
+        value: 'Nein'
+      },
+      
     ]
   }
 ];

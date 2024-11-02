@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { getDeal } from '../services/pipedriveService';
 import axios from 'axios';
 
 const DealViewer = ({ onStartInspection }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deals, setDeals] = useState([]);
-  const [selectedDeal, setSelectedDeal] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -18,7 +16,7 @@ const DealViewer = ({ onStartInspection }) => {
       const response = await axios.get(url);
       setDeals(response.data.data.items || []);
     } catch (err) {
-      setError('Failed to fetch deals');
+      setError('Fehler beim Laden der Deals');
       console.error('Error fetching deals:', err);
     } finally {
       setLoading(false);
@@ -27,121 +25,130 @@ const DealViewer = ({ onStartInspection }) => {
 
   useEffect(() => {
     if (searchTerm) {
-      fetchDeals(searchTerm);
+      const timeoutId = setTimeout(() => {
+        fetchDeals(searchTerm);
+      }, 300);
+
+      return () => clearTimeout(timeoutId);
     } else {
       setDeals([]);
     }
   }, [searchTerm]);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    fetchDeals(searchTerm);
-  };
-
-  const handleDealSelect = async (deal) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const fullDealData = await getDeal(deal.item.id);
-      setSelectedDeal(fullDealData);
-      onStartInspection(fullDealData);  // Call onStartInspection with the full deal data
-    } catch (err) {
-      setError('Failed to fetch deal details');
-      console.error('Error fetching deal details:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const formatCurrency = (value, currency) => {
-    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: currency || 'EUR' }).format(value);
+    if (!value) return '0,00 €';
+    return new Intl.NumberFormat('de-DE', { 
+      style: 'currency', 
+      currency: currency || 'EUR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+  };
+
+  const renderStatus = (status) => {
+    const statusStyles = {
+      open: 'bg-green-100 text-green-800',
+      lost: 'bg-red-100 text-red-800',
+      won: 'bg-blue-100 text-blue-800',
+      default: 'bg-gray-100 text-gray-800'
+    };
+
+    const statusLabels = {
+      open: 'Offen',
+      lost: 'Verloren',
+      won: 'Gewonnen',
+      default: 'Unbekannt'
+    };
+
+    const style = statusStyles[status] || statusStyles.default;
+    const label = statusLabels[status] || statusLabels.default;
+
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${style}`}>
+        {label}
+      </span>
+    );
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      <h2 className="text-2xl font-bold mb-4">Deal Suche und Auswahl</h2>
-      
-      <form onSubmit={handleSearch} className="mb-4">
+    <div className="bg-white rounded-lg p-6">      
+      <div className="mb-6">
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Deal suchen (Name, ID, etc.)"
-          className="w-full p-2 border border-gray-300 rounded-md mb-2"
+          className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-lg"
         />
-        <button 
-          type="submit"
-          className="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 transition duration-200"
-        >
-          Suchen
-        </button>
-      </form>
+      </div>
 
-      {loading && <p className="text-center">Lade Deals...</p>}
-      {error && <p className="text-center text-red-500">Fehler: {error}</p>}
-      {deals.length > 0 && (
-        <div className="mb-4">
-          <h3 className="text-xl font-semibold mb-2">Suchergebnisse</h3>
-          <ul className="divide-y divide-gray-200">
-            {deals.map((deal) => (
-              <li 
-                key={deal.item.id} 
-                className="py-3 px-4 cursor-pointer hover:bg-blue-50 transition duration-150 ease-in-out rounded-md border border-transparent hover:border-blue-200 flex justify-between items-center"
-                onClick={() => handleDealSelect(deal)}
-              >
-                <div>
-                  <p className="font-medium text-blue-600">{deal.item.title}</p>
-                  <p className="text-sm text-gray-600">
-                    ID: {deal.item.id} | Wert: {formatCurrency(deal.item.value, deal.item.currency)}
-                  </p>
-                </div>
-                <svg className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </li>
-            ))}
-          </ul>
+      {loading && (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-pulse flex flex-col items-center">
+            <div className="h-8 w-8 mb-4 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-gray-500">Lade Deals...</span>
+          </div>
         </div>
       )}
 
-      {selectedDeal && (
-        <div className="bg-white shadow-md rounded-lg p-6 mt-4 border-2 border-blue-300">
-          <h3 className="text-xl font-semibold mb-4 text-blue-600">{selectedDeal.title}</h3>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <p className="text-sm text-gray-600">Wert</p>
-              <p className="font-medium">{formatCurrency(selectedDeal.value, selectedDeal.currency)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Status</p>
-              <p className="font-medium">{selectedDeal.status}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Phase</p>
-              <p className="font-medium">{selectedDeal.stage_id}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Erwartetes Abschlussdatum</p>
-              <p className="font-medium">{selectedDeal.expected_close_date || 'Nicht gesetzt'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Besitzer</p>
-              <p className="font-medium">{selectedDeal.owner_name}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Organisation</p>
-              <p className="font-medium">{selectedDeal.org_name || 'Nicht angegeben'}</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => onStartInspection(selectedDeal)}
-            className="w-full bg-green-500 text-white p-2 rounded-md hover:bg-green-600 transition duration-200 flex items-center justify-center"
-          >
-            <span>Besichtigung starten</span>
-            <svg className="h-5 w-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-            </svg>
-          </button>
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg mb-4 flex items-center">
+          <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/>
+          </svg>
+          {error}
+        </div>
+      )}
+
+      {deals.length > 0 && (
+        <div className="space-y-3">
+          {deals.map((deal) => (
+            <button 
+              key={deal.item.id}
+              onClick={() => onStartInspection(deal.item)}
+              className="w-full text-left bg-gray-50 hover:bg-blue-50 p-4 rounded-lg border border-gray-200 hover:border-primary transition-all duration-200"
+            >
+              <div className="flex justify-between items-start gap-4">
+                <div className="flex-grow">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {deal.item.title}
+                    </h3>
+                    {renderStatus(deal.item.status)}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
+                    <span className="bg-gray-100 px-2 py-1 rounded">
+                      ID: {deal.item.id}
+                    </span>
+                    <span className="font-medium text-primary">
+                      {formatCurrency(deal.item.value, deal.item.currency)}
+                    </span>
+                    {deal.item.org_name && (
+                      <span className="text-gray-500">
+                        {deal.item.org_name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-primary hover:text-primary-dark flex items-center">
+                  Auswählen
+                  <svg className="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/>
+                  </svg>
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!loading && deals.length === 0 && searchTerm && (
+        <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
+          <svg className="mx-auto h-12 w-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
+          </svg>
+          <p className="text-gray-500 text-lg">Keine Deals gefunden</p>
+          <p className="text-gray-400 text-sm mt-1">Versuchen Sie es mit einem anderen Suchbegriff</p>
         </div>
       )}
     </div>

@@ -58,8 +58,15 @@ const OPTION_IDS = {
     'Maisonette': 34,
     'Garage': 35,
     'Keller': 36
-  }
+  },
+  'Packseide': {
+    '10': 866,
+    '20': 867,
+    '30': 868
+  },
 };
+
+
 
 const uploadPhotos = async (dealId, photos) => {
   const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
@@ -131,7 +138,6 @@ const updateDealForOffer = async (dealId, dealData) => {
   const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
   const apiUrl = `https://api.pipedrive.com/v1/deals/${dealId}?api_token=${apiToken}`;
 
-  console.log('Raw deal data for offer:', dealData);
 
   try {
     // First, get all photos from IndexedDB for all rooms
@@ -206,9 +212,23 @@ const formatDealData = (inspectionData) => {
       detailsText += `Möbel die bearbeitet werden müssen:\n${filteredItems.join('\n')}\n\n`;
     }
 
+    // Handle Packseide from combinedData
+    const packseideAmount = inspectionData.combinedData.packMaterials['Packseide'] || 0;
+    if (API_MAPPING['Packseide']) {
+      if (packseideAmount === 0) {
+        formattedData[API_MAPPING['Packseide']] = [];
+      } else if (packseideAmount <= 10) {
+        formattedData[API_MAPPING['Packseide']] = [866];
+      } else if (packseideAmount <= 20) {
+        formattedData[API_MAPPING['Packseide']] = [867];
+      } else {
+        formattedData[API_MAPPING['Packseide']] = [868];
+      }
+    }
+
     // Add pack materials if any exist
     const packMaterials = Object.entries(inspectionData.combinedData.packMaterials)
-      .filter(([_, quantity]) => quantity > 0)
+      .filter(([name, quantity]) => quantity > 0 && name !== 'Packseide')
       .map(([name, quantity]) => `${name}: ${quantity}`);
 
     if (packMaterials.length > 0) {
@@ -237,12 +257,6 @@ const formatDealData = (inspectionData) => {
         additionalDetails.push(`Matratzenhüllen: ${matratzenInfo.value.join(', ')}`);
       }
 
-      // Add Packseide info
-      const packseideInfo = inspectionData.additionalInfo.find(info => info.name === 'Packseide');
-      if (packseideInfo && packseideInfo.value === true) {
-        additionalDetails.push('Packseide: Ja');
-      }
-
       // Add Ein/Auspackservice info
       const einpackInfo = inspectionData.additionalInfo.find(info => info.name === 'Einpackservice');
       if (einpackInfo && einpackInfo.value) {
@@ -265,7 +279,7 @@ const formatDealData = (inspectionData) => {
     }
   }
 
-  // Process additional info with updated handling for Ein/Auspackservice
+  // Process additional info
   if (inspectionData.additionalInfo) {
     inspectionData.additionalInfo.forEach(info => {
       if (API_MAPPING[info.name]) {
@@ -275,7 +289,6 @@ const formatDealData = (inspectionData) => {
             formattedData[API_MAPPING[info.name]] = optionIds;
           }
         } else if (['Einpackservice', 'Auspackservice'].includes(info.name)) {
-          // Handle the new format for pack services
           formattedData[API_MAPPING[info.name]] = info.value || 'Nein';
         } else if (Array.isArray(info.value)) {
           formattedData[API_MAPPING[info.name]] = info.value.join(';');
@@ -288,17 +301,16 @@ const formatDealData = (inspectionData) => {
     });
   }
 
-  // Rest of the code remains the same...
-  if (inspectionData.rooms) {
-    Object.values(inspectionData.rooms).forEach(room => {
-      room.packMaterials.forEach(material => {
-        if (API_MAPPING[material.name]) {
-          formattedData[API_MAPPING[material.name]] = (parseInt(formattedData[API_MAPPING[material.name]] || 0) + material.quantity).toString();
-        }
-      });
+  // Process pack materials from combinedData
+  if (inspectionData.combinedData && inspectionData.combinedData.packMaterials) {
+    Object.entries(inspectionData.combinedData.packMaterials).forEach(([name, quantity]) => {
+      if (API_MAPPING[name] && name !== 'Packseide' && quantity > 0) {
+        formattedData[API_MAPPING[name]] = quantity.toString();
+      }
     });
   }
 
+  // Set total volume
   if (inspectionData.combinedData) {
     formattedData[API_MAPPING['cbm']] = inspectionData.combinedData.totalVolume.toFixed(2);
   }
@@ -314,7 +326,6 @@ const updateDealDirectly = async (dealId, dealData) => {
 
   try {
     const response = await axios.put(apiUrl, dealData);
-    console.log('Response from Pipedrive:', response.data);
     if (response.data.success) {
       return response.data.data;
     } else {

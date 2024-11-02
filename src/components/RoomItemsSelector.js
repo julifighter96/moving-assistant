@@ -33,9 +33,16 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
 
   const handleQuantityChange = useCallback((index, change, stateUpdater) => {
     stateUpdater(prevItems => {
-      const newItems = prevItems.map((item, i) => 
-        i === index ? { ...item, quantity: Math.max(0, item.quantity + change) } : item
-      );
+      const newItems = prevItems.map((item, i) => {
+        if (i === index) {
+          const increment = item.name === 'Packseide' ? 10 : 1;
+          return { 
+            ...item, 
+            quantity: Math.max(0, item.quantity + (change * increment))
+          };
+        }
+        return item;
+      });
       return newItems;
     });
   }, []);

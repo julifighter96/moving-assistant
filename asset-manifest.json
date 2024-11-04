@@ -1,16 +1,16 @@
 {
   "files": {
-    "main.css": "/moving-assistant/static/css/main.49f5051f.css",
-    "main.js": "/moving-assistant/static/js/main.64a27a0d.js",
+    "main.css": "/moving-assistant/static/css/main.9d4f0935.css",
+    "main.js": "/moving-assistant/static/js/main.0817bd1b.js",
     "static/js/453.6240161b.chunk.js": "/moving-assistant/static/js/453.6240161b.chunk.js",
     "static/media/Riedlin-Logo-512px_Neu.webp": "/moving-assistant/static/media/Riedlin-Logo-512px_Neu.a7fba456e2f03b127b1f.webp",
     "index.html": "/moving-assistant/index.html",
-    "main.49f5051f.css.map": "/moving-assistant/static/css/main.49f5051f.css.map",
-    "main.64a27a0d.js.map": "/moving-assistant/static/js/main.64a27a0d.js.map",
+    "main.9d4f0935.css.map": "/moving-assistant/static/css/main.9d4f0935.css.map",
+    "main.0817bd1b.js.map": "/moving-assistant/static/js/main.0817bd1b.js.map",
     "453.6240161b.chunk.js.map": "/moving-assistant/static/js/453.6240161b.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.49f5051f.css",
-    "static/js/main.64a27a0d.js"
+    "static/css/main.9d4f0935.css",
+    "static/js/main.0817bd1b.js"
   ]
 }

@@ -1,16 +1,16 @@
 {
   "files": {
     "main.css": "/moving-assistant/static/css/main.49f5051f.css",
-    "main.js": "/moving-assistant/static/js/main.e33b0263.js",
+    "main.js": "/moving-assistant/static/js/main.64a27a0d.js",
     "static/js/453.6240161b.chunk.js": "/moving-assistant/static/js/453.6240161b.chunk.js",
     "static/media/Riedlin-Logo-512px_Neu.webp": "/moving-assistant/static/media/Riedlin-Logo-512px_Neu.a7fba456e2f03b127b1f.webp",
     "index.html": "/moving-assistant/index.html",
     "main.49f5051f.css.map": "/moving-assistant/static/css/main.49f5051f.css.map",
-    "main.e33b0263.js.map": "/moving-assistant/static/js/main.e33b0263.js.map",
+    "main.64a27a0d.js.map": "/moving-assistant/static/js/main.64a27a0d.js.map",
     "453.6240161b.chunk.js.map": "/moving-assistant/static/js/453.6240161b.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.49f5051f.css",
-    "static/js/main.e33b0263.js"
+    "static/js/main.64a27a0d.js"
   ]
 }

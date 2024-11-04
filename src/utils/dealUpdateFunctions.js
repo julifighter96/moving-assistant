@@ -171,23 +171,26 @@ const updateDealForOffer = async (dealId, dealData) => {
       }
     }
 
-    // Then update the deal with other data
     const formattedData = formatDealData(dealData);
+    console.log('Sending formatted data to Pipedrive:', formattedData);
 
-    const response = await axios.put(apiUrl, formattedData);
-    
-    if (response.data.success) {
-      return response.data.data;
-    } else {
+    const response = await axios({
+      method: 'put',
+      url: `https://api.pipedrive.com/v1/deals/${dealId}`,
+      params: { api_token: apiToken },
+      data: formattedData,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to update deal');
     }
+
+    return response.data.data;
   } catch (error) {
-    console.error('Error updating deal for offer:', error);
-    if (error.response) {
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
-      console.error('Response headers:', error.response.headers);
-    }
+    console.error('Error in updateDealForOffer:', error);
     throw error;
   }
 };
@@ -310,9 +313,10 @@ const formatDealData = (inspectionData) => {
     });
   }
 
-  // Set total volume
+  // Add cbm
   if (inspectionData.combinedData) {
-    formattedData[API_MAPPING['cbm']] = inspectionData.combinedData.totalVolume.toFixed(2);
+    const volume = inspectionData.combinedData.totalVolume;
+    formattedData[API_MAPPING['cbm']] = parseFloat(volume) || 0; // Convert to number and handle null/undefined
   }
 
   return formattedData;

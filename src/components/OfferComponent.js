@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { getDeal, addNoteToDeal } from '../services/pipedriveService';
 import { updateDealForOffer } from '../utils/dealUpdateFunctions';
+import { addNoteToDeal } from '../services/pipedriveService';
 
 const PRICE_MAP = {
   'furniture': 50,
@@ -53,59 +53,41 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
 
   const handleAcceptOffer = async () => {
     try {
-      const detailsText = `Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³
-  Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg
-  Möbelkosten: ${furnitureCost.toFixed(2)} €
-  Materialkosten: ${materialCost.toFixed(2)} €
-  Gesamtkosten: ${totalCost.toFixed(2)} €
-  
-  Möbel:
-  ${Object.entries(combinedData.items).map(([name, item]) => 
-    `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`
-  ).join('\n')}
-  
-  Packmaterialien:
-  ${Object.entries(combinedData.packMaterials).map(([name, quantity]) => `${name}: ${quantity}`).join('\n')}
-  
-  Zusätzliche Informationen:
-  ${inspectionData.additionalInfo ? inspectionData.additionalInfo.map(info => `${info.name}: ${Array.isArray(info.value) ? info.value.join(', ') : info.value}`).join('\n') : 'Keine'}`;
-  
+      console.log('Starting offer acceptance with inspection data:', inspectionData);
+      
+      // Create offer details with the complete room data
       const offerDetails = {
+        rooms: inspectionData.rooms,
         additionalInfo: inspectionData.additionalInfo,
-        packMaterials: combinedData.packMaterials,
-        totalVolume: combinedData.totalVolume,
-        estimatedWeight: combinedData.estimatedWeight,
-        combinedData: combinedData, 
+        combinedData: combinedData, // This includes all the calculated totals
+        moveInfo: inspectionData.moveInfo
       };
-  
-      console.log('Offer details before sending:', offerDetails);
+
+      console.log('Sending offer details to updateDealForOffer:', offerDetails);
       await updateDealForOffer(dealId, offerDetails);
-      await addNoteToDeal(dealId, detailsText);
-  
+
+      // Create the note content
+      const noteContent = `Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³\n` +
+        `Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg\n` +
+        `Möbelkosten: ${furnitureCost.toFixed(2)} €\n` +
+        `Materialkosten: ${materialCost.toFixed(2)} €\n` +
+        `Gesamtkosten: ${totalCost.toFixed(2)} €\n\n` +
+        
+        `Möbel:\n${Object.entries(combinedData.items)
+          .map(([name, item]) => `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`)
+          .join('\n')}\n\n` +
+        
+        `Packmaterialien:\n${Object.entries(combinedData.packMaterials)
+          .map(([name, quantity]) => `${name}: ${quantity}`)
+          .join('\n')}`;
+
+      await addNoteToDeal(dealId, noteContent);
       onComplete();
     } catch (error) {
       console.error('Fehler beim Verarbeiten des Angebots:', error);
       alert(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
     }
   };
-
-  const renderItems = () => (
-    <ul>
-      {Object.entries(combinedData.items).map(([name, item]) => (
-        <li key={name}>
-          {name}: {item.quantity} (Volumen: {item.volume} m³)
-        </li>
-      ))}
-    </ul>
-  );
-
-  const renderPackMaterials = () => (
-    <ul>
-      {Object.entries(combinedData.packMaterials).map(([name, quantity]) => (
-        <li key={name}>{name}: {quantity}</li>
-      ))}
-    </ul>
-  );
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto">
@@ -119,12 +101,22 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
 
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Möbel</h3>
-        {renderItems()}
+        <ul>
+          {Object.entries(combinedData.items).map(([name, item]) => (
+            <li key={name}>
+              {name}: {item.quantity} (Volumen: {item.volume} m³)
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="mb-6">
         <h3 className="text-xl font-semibold mb-2">Packmaterialien</h3>
-        {renderPackMaterials()}
+        <ul>
+          {Object.entries(combinedData.packMaterials).map(([name, quantity]) => (
+            <li key={name}>{name}: {quantity}</li>
+          ))}
+        </ul>
       </div>
 
       <div className="mb-6">

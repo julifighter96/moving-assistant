@@ -10,6 +10,7 @@ import SuccessPopup from './components/SuccessPopup';
 import LoginWrapper from './components/LoginWrapper';
 import { theme } from './theme';
 import logo from './assets/images/Riedlin-Logo-512px_Neu.webp';
+import AIAnalysisTab from './components/AIAnalysisTab';
 
 
 const APP_VERSION = 'v1.0.1';
@@ -150,6 +151,8 @@ function App() {
   const [dealData, setDealData] = useState(null);
   const [rooms, setRooms] = useState(INITIAL_ROOMS);
   const [currentRoom, setCurrentRoom] = useState(INITIAL_ROOMS[0]);
+  // Neuer State für Tab-Verwaltung
+  const [activeTab, setActiveTab] = useState('standard');
   const [roomsData, setRoomsData] = useState(() => {
     const initialRoomsData = {};
     INITIAL_ROOMS.forEach(room => {
@@ -159,6 +162,7 @@ function App() {
         photos: [],
         totalVolume: 0,
         estimatedWeight: 0,
+        notes: ''
       };
     });
     return initialRoomsData;
@@ -226,6 +230,7 @@ function App() {
         photos: [],
         totalVolume: 0,
         estimatedWeight: 0,
+        notes: ''
       }
     }));
     setCurrentRoom(newRoom);
@@ -384,58 +389,118 @@ function App() {
               )}
               
               {currentStep === 2 && (
-                <div className="grid grid-cols-12 gap-6">
-                  <div className="col-span-4">
-                    <div className="bg-white rounded-lg shadow-sm p-6 sticky top-24">
-                      <div className="mb-4">
-                        <h2 className="text-xl font-semibold">Räume</h2>
-                        <p className="text-gray-500 mt-1">Wählen Sie einen Raum aus oder fügen Sie einen neuen hinzu</p>
-                      </div>
-                      <RoomSelector
-                        rooms={rooms}
-                        currentRoom={currentRoom}
-                        onRoomChange={handleRoomChange}
-                        onAddRoom={handleAddRoom}
-                      />
-                      
-                      {/* Quick Summary */}
-                      <div className="mt-6 pt-6 border-t border-gray-200">
-                        <h3 className="text-lg font-medium mb-2">Zusammenfassung</h3>
-                        <div className="space-y-2 text-sm text-gray-600">
-                          <div className="flex justify-between">
-                            <span>Gesamtvolumen:</span>
-                            <span className="font-medium">
-                              {Object.values(roomsData).reduce((sum, room) => sum + room.totalVolume, 0).toFixed(2)} m³
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Räume:</span>
-                            <span className="font-medium">{rooms.length}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="col-span-8">
-                    <div className="bg-white rounded-lg shadow-sm">
-                      <div className="p-6 border-b border-gray-200">
-                        <h2 className="text-xl font-semibold">{currentRoom}</h2>
-                        <p className="text-gray-500 mt-1">Inventar und Fotos für diesen Raum</p>
-                      </div>
-                      <div className="p-6">
-                        <RoomItemsSelector
-                          key={currentRoom}
-                          roomName={currentRoom}
-                          onUpdateRoom={handleUpdateRoomData}
-                          initialData={roomsData[currentRoom]}
-                          onAddItem={handleAddItem}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+  <div className="grid grid-cols-12 gap-6">
+    {/* Left Sidebar */}
+    <div className="col-span-4">
+      <div className="bg-white rounded-lg shadow-sm p-6 sticky top-24">
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold">Räume</h2>
+          <p className="text-gray-500 mt-1">Wählen Sie einen Raum aus oder fügen Sie einen neuen hinzu</p>
+        </div>
+        <RoomSelector
+          rooms={rooms}
+          currentRoom={currentRoom}
+          onRoomChange={handleRoomChange}
+          onAddRoom={handleAddRoom}
+        />
+        
+        {/* Quick Summary */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <h3 className="text-lg font-medium mb-2">Zusammenfassung</h3>
+          <div className="space-y-2 text-sm text-gray-600">
+            <div className="flex justify-between">
+              <span>Gesamtvolumen:</span>
+              <span className="font-medium">
+                {Object.values(roomsData).reduce((sum, room) => sum + room.totalVolume, 0).toFixed(2)} m³
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Räume:</span>
+              <span className="font-medium">{rooms.length}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    {/* Main Content Area */}
+    <div className="col-span-8">
+      <div className="bg-white rounded-lg shadow-sm">
+        <div className="border-b border-gray-200">
+          <div className="flex items-center justify-between p-6">
+            <div>
+              <h2 className="text-xl font-semibold">{currentRoom}</h2>
+              <p className="text-gray-500 mt-1">Inventar und Fotos für diesen Raum</p>
+            </div>
+          </div>
+          <div className="px-6">
+            <div className="flex border-b">
+              <button
+                onClick={() => setActiveTab('standard')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'standard'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Standard
+              </button>
+              <button
+                onClick={() => setActiveTab('ai')}
+                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors flex items-center ${
+                  activeTab === 'ai'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                KI-Analyse
+                <span className="ml-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                  Beta
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div className="p-6">
+          {activeTab === 'standard' ? (
+            <RoomItemsSelector
+              key={`${currentRoom}-standard`}
+              roomName={currentRoom}
+              onUpdateRoom={handleUpdateRoomData}
+              initialData={roomsData[currentRoom]}
+              onAddItem={handleAddItem}
+            />
+          ) : (
+            <AIAnalysisTab
+              key={`${currentRoom}-ai`}
+              roomName={currentRoom}
+              onAnalysisComplete={(analysisData) => {
+                handleUpdateRoomData(currentRoom, {
+                  items: analysisData.items.map(item => ({
+                    name: item.name,
+                    quantity: 1,
+                    volume: item.volume || 0,
+                    demontiert: false,
+                    duebelarbeiten: false,
+                    description: item.description
+                  })),
+                  totalVolume: analysisData.totalVolume,
+                  estimatedWeight: analysisData.totalVolume * 200,
+                  analysisNotes: analysisData.description
+                });
+                
+                setActiveTab('standard');
+                setShowPopup(true);
+                setPopupMessage('KI-Analyse erfolgreich abgeschlossen!');
+              }}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
               
               {currentStep === 3 && (
                 <div className="bg-white rounded-lg shadow-sm">

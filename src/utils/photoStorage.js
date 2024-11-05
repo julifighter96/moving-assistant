@@ -29,7 +29,6 @@ export const photoStorage = {
   async getPhotos(roomId) {
     try {
       const photos = await db.photos.where('roomId').equals(roomId).toArray();
-      console.log(`📸 Found ${photos.length} photos for room ${roomId}`);
       return photos;
     } catch (error) {
       console.error(`❌ Error getting photos for room ${roomId}:`, error);
@@ -51,7 +50,6 @@ export const photoStorage = {
   async getAllPhotos() {
     try {
       const photos = await db.photos.toArray();
-      console.log(`📸 Found ${photos.length} total photos`);
       return photos;
     } catch (error) {
       console.error('❌ Error getting all photos:', error);

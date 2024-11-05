@@ -238,6 +238,25 @@ const formatDealData = (inspectionData) => {
       detailsText += `Packmaterialien:\n${packMaterials.join('\n')}\n\n`;
     }
 
+    console.log('inspectionData.rooms:', inspectionData.rooms);
+    if (inspectionData.rooms) {
+      const roomNotes = Object.entries(inspectionData.rooms)
+        .filter(([_, roomData]) => roomData.notes && roomData.notes.trim())
+        .map(([roomName, roomData]) => `${roomName}:\n${roomData.notes}`)
+        .join('\n\n');
+  
+      if (roomNotes) {
+        detailsText += `\nRaum-spezifische Anmerkungen:\n${roomNotes}\n\n`;
+        const existingNotes = formattedData[API_MAPPING['Anmerkungen für Personal']] || '';
+        formattedData[API_MAPPING['Anmerkungen für Personal']] = 
+          existingNotes ? 
+          `${existingNotes}\n\nRaum-spezifische Anmerkungen:\n${roomNotes}` : 
+          `Raum-spezifische Anmerkungen:\n${roomNotes}`;
+      }
+     
+    }
+   
+
     // Add additional information
     if (inspectionData.additionalInfo) {
       const additionalDetails = [];

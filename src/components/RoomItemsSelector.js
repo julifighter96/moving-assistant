@@ -6,6 +6,7 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
   const [packMaterials, setPackMaterials] = useState(initialData.packMaterials || []);
   const [newItem, setNewItem] = useState({ name: '', volume: 0, demontiert: false, duebelarbeiten: false });
   const [newPackMaterial, setNewPackMaterial] = useState({ name: '', quantity: 0 });
+  const [notes, setNotes] = useState(initialData.notes || '');
 
   const totalVolume = useMemo(() => {
     return items.reduce((total, item) => total + item.volume * item.quantity, 0);
@@ -19,17 +20,19 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
   useEffect(() => {
     setItems(initialData.items || []);
     setPackMaterials(initialData.packMaterials || []);
+    setNotes(initialData.notes || '');
   }, [initialData]);
 
   // Update parent component whenever data changes
   useEffect(() => {
     onUpdateRoom(roomName, {
       items,
-      packMaterials,
-      totalVolume,
-      estimatedWeight
+    packMaterials,
+    totalVolume,
+    estimatedWeight,
+    notes
     });
-  }, [roomName, items, packMaterials, totalVolume, estimatedWeight, onUpdateRoom]);
+  }, [roomName, items, packMaterials,  totalVolume, estimatedWeight, notes, onUpdateRoom]);
 
   const handleQuantityChange = useCallback((index, change, stateUpdater) => {
     stateUpdater(prevItems => {
@@ -199,6 +202,15 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
           </div>
         </div>
 
+        <div className="mt-6">
+        <h3 className="text-lg font-semibold mb-2">Raum Notizen</h3>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Zusätzliche Informationen für diesen Raum..."
+          className="w-full p-2 border border-gray-300 rounded-md min-h-[100px] focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
         <RoomPhotoCapture 
           roomName={roomName}
         />

@@ -66,22 +66,28 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
       console.log('Sending offer details to updateDealForOffer:', offerDetails);
       await updateDealForOffer(dealId, offerDetails);
 
-      // Create the note content
-      const noteContent = `Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³\n` +
-        `Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg\n` +
-        `Möbelkosten: ${furnitureCost.toFixed(2)} €\n` +
-        `Materialkosten: ${materialCost.toFixed(2)} €\n` +
-        `Gesamtkosten: ${totalCost.toFixed(2)} €\n\n` +
-        
-        `Möbel:\n${Object.entries(combinedData.items)
-          .map(([name, item]) => `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`)
-          .join('\n')}\n\n` +
-        
-        `Packmaterialien:\n${Object.entries(combinedData.packMaterials)
-          .map(([name, quantity]) => `${name}: ${quantity}`)
-          .join('\n')}`;
+      const roomNotesSection = Object.entries(inspectionData.rooms)
+      .filter(([_, roomData]) => roomData.notes && roomData.notes.trim())
+      .map(([roomName, roomData]) => `\n\nNotizen ${roomName}:\n${roomData.notes}`)
+      .join('\n');
 
-      await addNoteToDeal(dealId, noteContent);
+
+      const noteContent = `Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³\n` +
+      `Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg\n` +
+      `Möbelkosten: ${furnitureCost.toFixed(2)} €\n` +
+      `Materialkosten: ${materialCost.toFixed(2)} €\n` +
+      `Gesamtkosten: ${totalCost.toFixed(2)} €\n\n` +
+      
+      `Möbel:\n${Object.entries(combinedData.items)
+        .map(([name, item]) => `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`)
+        .join('\n')}\n\n` +
+      
+      `Packmaterialien:\n${Object.entries(combinedData.packMaterials)
+        .map(([name, quantity]) => `${name}: ${quantity}`)
+        .join('\n')}` +
+      roomNotesSection;
+
+    await addNoteToDeal(dealId, noteContent);
       onComplete();
     } catch (error) {
       console.error('Fehler beim Verarbeiten des Angebots:', error);
@@ -108,6 +114,18 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
             </li>
           ))}
         </ul>
+      </div>
+
+            <div className="mb-6">
+        <h3 className="text-xl font-semibold mb-2">Raum Notizen</h3>
+        {Object.entries(inspectionData.rooms)
+          .filter(([_, roomData]) => roomData.notes && roomData.notes.trim())
+          .map(([roomName, roomData]) => (
+            <div key={roomName} className="mb-4">
+              <h4 className="font-medium">{roomName}</h4>
+              <p className="text-gray-600 whitespace-pre-wrap">{roomData.notes}</p>
+            </div>
+          ))}
       </div>
 
       <div className="mb-6">

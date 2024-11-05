@@ -7,7 +7,7 @@ const api = axios.create({
 
 export const getDeal = async (dealId) => {
   try {
-    console.log(`Fetching deal with ID: ${dealId}`);
+    console.log(`Fetching deal with IDblalala: ${dealId}`);
     const response = await api.get(`/deals/${dealId}`);
     console.log('API response:', response.data);
     

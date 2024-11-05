@@ -10,9 +10,7 @@ const RoomPhotoCapture = ({ roomName }) => {
   // Load photos when component mounts or roomName changes
   useEffect(() => {
     const loadPhotos = async () => {
-      console.log('Loading photos for room:', roomName);
       const roomPhotos = await photoStorage.getPhotos(roomName);
-      console.log('Loaded photos:', roomPhotos);
       setPhotos(roomPhotos);
     };
     loadPhotos();

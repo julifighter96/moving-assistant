@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Camera, Loader, X } from 'lucide-react';
 import { analyzeRoomImages } from '../services/roomAnalysisService';
+import AIFeedbackDisplay from './AIFeedbackDisplay';
 
 
 const AnalysisResults = ({ results, onApplyResults }) => {
@@ -143,46 +144,54 @@ const AnalysisResults = ({ results, onApplyResults }) => {
         );
       };
   
-    const ItemDisplay = ({ item, index }) => (
-      <div className="bg-white p-4 rounded-lg shadow-sm">
-        <div className="flex justify-between items-start">
-          <div className="flex-grow">
-            <h4 className="font-medium text-lg flex items-center gap-2">
-              {item.count > 1 ? `${item.count}x ${item.name}` : item.name}
-              <button
-                onClick={() => setEditingItem(index)}
-                className="p-1 hover:bg-gray-100 rounded-full"
-              >
-                <svg className="w-4 h-4 text-gray-500" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </button>
-              <button
-                onClick={() => handleDeleteItem(index)}
-                className="p-1 hover:bg-red-100 rounded-full"
-              >
-                <X className="w-4 h-4 text-red-500" />
-              </button>
-            </h4>
-            <p className="text-gray-600 text-sm mt-1">{item.description}</p>
-          </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-500 mb-1">{item.dimensions}</div>
-            <div className="text-sm font-medium">
-              {item.count > 1 
-                ? `${(item.volume * item.count).toFixed(2)} m³ gesamt`
-                : `${item.volume.toFixed(2)} m³`
-              }
-            </div>
-            {item.count > 1 && (
-              <div className="text-xs text-gray-500">
-                ({item.volume.toFixed(2)} m³ pro Stück)
+      const ItemDisplay = ({ item, onEdit, onDelete }) => {
+        if (!item) return null;
+      
+        return (
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="flex justify-between items-start">
+              <div className="flex-grow">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-medium text-lg">
+                    {item.count > 1 ? `${item.count}x ${item.name}` : item.name}
+                  </h4>
+                  {item.confidence && (
+                    <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                      {Math.round(item.confidence)}% Konfidenz
+                    </span>
+                  )}
+                </div>
+                <p className="text-gray-600 text-sm mt-1">{item.description}</p>
               </div>
-            )}
+              <div className="text-right">
+                <div className="text-sm text-gray-500">{item.dimensions}</div>
+                <div className="text-sm font-medium">
+                  {item.volume.toFixed(2)} m³
+                </div>
+              </div>
+            </div>
+      
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => onEdit && onEdit(item)}  // Prüfe ob onEdit existiert
+                className="flex-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md 
+                         transition-colors text-gray-700"
+              >
+                Bearbeiten
+              </button>
+              <button
+                onClick={() => onDelete && onDelete(item)}  // Prüfe ob onDelete existiert
+                className="flex-1 px-3 py-2 bg-red-100 hover:bg-red-200 rounded-md 
+                         transition-colors text-red-700"
+              >
+                Entfernen
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
-    );
+        );
+      };
+      
+      
   
     if (!editableResults) return null;
   
@@ -212,6 +221,8 @@ const AnalysisResults = ({ results, onApplyResults }) => {
                   key={index}
                   item={item}
                   index={index}
+                  onEdit={() => setEditingItem(index)}
+                  onDelete={() => handleDeleteItem(index)}
                 />
               )
             ))}
@@ -251,9 +262,10 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   const [activeInput, setActiveInput] = useState('upload');
   const [stream, setStream] = useState(null);
   const [error, setError] = useState(null);
-  const [analysisResults, setAnalysisResults] = useState(null);
   const videoRef = useRef(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
+  const [analysisResults, setAnalysisResults] = useState(null);
   // Cleanup function for stream
   useEffect(() => {
     return () => {
@@ -288,6 +300,25 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   }`
   );
   
+  const handleEdit = (item) => {
+    setEditingItem(item);
+  };
+
+  const handleDelete = (itemToDelete) => {
+    if (analysisResults && analysisResults.items) {
+      const newItems = analysisResults.items.filter(item => item !== itemToDelete);
+      const newTotalVolume = newItems.reduce((sum, item) => 
+        sum + (item.volume * (item.count || 1)), 0
+      );
+      
+      setAnalysisResults({
+        ...analysisResults,
+        items: newItems,
+        totalVolume: newTotalVolume
+      });
+    }
+  };
+
   // Füge diese UI-Komponente vor dem Analysis Button ein:
   {/* Prompt Editor */}
   <div className="space-y-2">
@@ -434,14 +465,58 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
       setError('Bitte mindestens ein Foto hochladen');
       return;
     }
-
+  
     setIsAnalyzing(true);
     setError(null);
-
+  
     try {
-      const result = await analyzeRoomImages(files, roomName, customPrompt);
-      setAnalysisResults(result);
+      // Wandle Files in Base64 um
+      const imagePromises = files.map(async (file) => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(file.file);
+        });
+      });
+  
+      const base64Images = await Promise.all(imagePromises);
+      
+      console.log('Sending request with:', {  // Debug log
+        imagesCount: base64Images.length,
+        customPrompt: customPrompt,
+        roomName
+      });
+
+      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          images: base64Images,
+          roomName,
+          customPrompt
+        })
+      });
+  
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+  
+      const responseData = await response.json();
+      // Prüfe ob die Response ein Array ist und nehme das erste Element
+      const content = Array.isArray(responseData) ? responseData[0].text : responseData;
+      
+      // Parse das JSON aus dem Text
+      const analysisResults = typeof content === 'string' ? JSON.parse(content) : content;
+  
+      if (!analysisResults || !analysisResults.items) {
+        throw new Error('Ungültiges Antwortformat von der API');
+      }
+  
+      setAnalysisResults(analysisResults);
     } catch (err) {
+      console.error('Analysis error:', err);
       setError(err.message || 'Fehler bei der Analyse');
     } finally {
       setIsAnalyzing(false);

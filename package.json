@@ -1,9 +1,7 @@
 {
-  "homepage": "https://julifighter96.github.io/moving-assistant",
   "name": "pipedrive-integration",
   "version": "0.1.0",
   "private": true,
-  "proxy": "https://api.anthropic.com",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
     "@electron/remote": "^2.1.2",
@@ -24,10 +22,8 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build",
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "start": "env-cmd -f .env.development react-scripts start",
+    "build": "env-cmd -f .env.production react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -51,6 +47,7 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.20",
+    "env-cmd": "^10.1.0",
     "gh-pages": "^6.1.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13"

@@ -1,9 +1,8 @@
 // src/services/roomAnalysisService.js
-import axios from 'axios';
+const API_URL = process.env.REACT_APP_API_URL;
 
 export const analyzeRoomImages = async (images, roomName, customPrompt) => {
   try {
-    // Convert images to base64
     const imagePromises = images.map(async (image) => {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -13,13 +12,24 @@ export const analyzeRoomImages = async (images, roomName, customPrompt) => {
     });
 
     const base64Images = await Promise.all(imagePromises);
-    const response = await axios.post('/api/analyze', {
-      images: base64Images,
-      roomName,
-      prompt: customPrompt
+    const response = await fetch(`${API_URL}/api/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        images: base64Images,
+        roomName,
+        prompt: customPrompt
+      })
     });
 
-    return JSON.parse(response.data[0].text);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
   } catch (error) {
     throw new Error(error.response?.data?.error || error.message);
   }

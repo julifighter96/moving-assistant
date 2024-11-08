@@ -12,7 +12,7 @@ export const analyzeRoomImages = async (images, roomName, customPrompt) => {
     });
 
     const base64Images = await Promise.all(imagePromises);
-    const response = await fetch(`${API_URL}/api/analyze`, {
+    const response = await fetch(`${API_URL}/analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

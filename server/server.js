@@ -115,7 +115,7 @@ function calculateSimilarity(features1, features2) {
 }
 
 // Hauptendpunkte
-app.post('/api/analyze', async (req, res) => {
+app.post('/analyze', async (req, res) => {
   try {
     const { images, roomName, customPrompt } = req.body;
 

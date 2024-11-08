@@ -45,11 +45,7 @@ const AIFeedbackDisplay = ({ item, onApplySuggestion }) => {
         </div>
       )}
 
-      {item.confidence && (
-        <div className="mt-2 text-sm text-gray-500">
-          Konfidenz: {Math.round(item.confidence)}%
-        </div>
-      )}
+      
     </div>
   );
 };

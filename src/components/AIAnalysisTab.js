@@ -1,7 +1,7 @@
 // src/components/AIAnalysisTab.js
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Camera, Loader, X } from 'lucide-react';
-import { analyzeRoomImages } from '../services/roomAnalysisService';
+import { recognitionService } from '../services/recognitionService';
 import AIFeedbackDisplay from './AIFeedbackDisplay';
 
 
@@ -145,8 +145,6 @@ const AnalysisResults = ({ results, onApplyResults }) => {
       };
   
       const ItemDisplay = ({ item, onEdit, onDelete }) => {
-        if (!item) return null;
-      
         return (
           <div className="bg-white p-4 rounded-lg shadow-sm">
             <div className="flex justify-between items-start">
@@ -171,16 +169,21 @@ const AnalysisResults = ({ results, onApplyResults }) => {
               </div>
             </div>
       
+            <AIFeedbackDisplay 
+              item={item}
+              onApplySuggestion={(suggestion) => onEdit({ ...item, ...suggestion })}
+            />
+      
             <div className="flex gap-2 mt-4">
               <button
-                onClick={() => onEdit && onEdit(item)}  // Prüfe ob onEdit existiert
+                onClick={() => onEdit(item)}
                 className="flex-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-md 
                          transition-colors text-gray-700"
               >
                 Bearbeiten
               </button>
               <button
-                onClick={() => onDelete && onDelete(item)}  // Prüfe ob onDelete existiert
+                onClick={() => onDelete(item)}
                 className="flex-1 px-3 py-2 bg-red-100 hover:bg-red-200 rounded-md 
                          transition-colors text-red-700"
               >
@@ -470,7 +473,6 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
     setError(null);
   
     try {
-      // Wandle Files in Base64 um
       const imagePromises = files.map(async (file) => {
         return new Promise((resolve) => {
           const reader = new FileReader();
@@ -481,34 +483,12 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   
       const base64Images = await Promise.all(imagePromises);
       
-      console.log('Sending request with:', {  // Debug log
-        imagesCount: base64Images.length,
-        customPrompt: customPrompt,
-        roomName
-      });
-
-      const response = await fetch(`${process.env.REACT_APP_API_URL || ''}/api/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          images: base64Images,
-          roomName,
-          customPrompt
-        })
-      });
-  
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-  
-      const responseData = await response.json();
-      // Prüfe ob die Response ein Array ist und nehme das erste Element
-      const content = Array.isArray(responseData) ? responseData[0].text : responseData;
-      
-      // Parse das JSON aus dem Text
-      const analysisResults = typeof content === 'string' ? JSON.parse(content) : content;
+      // Verwende recognitionService statt direktem fetch
+      const analysisResults = await recognitionService.analyzeRoom(
+        base64Images, 
+        roomName,
+        customPrompt
+      );
   
       if (!analysisResults || !analysisResults.items) {
         throw new Error('Ungültiges Antwortformat von der API');

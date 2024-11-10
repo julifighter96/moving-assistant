@@ -16,7 +16,7 @@ const LoginWrapper = ({ children }) => {
   };
 
   if (isAuthenticated) {
-    return children;
+    return React.cloneElement(children, { isAdmin: true }); // Immer admin
   }
 
   return (

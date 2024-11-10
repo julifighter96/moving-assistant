@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { updateDealForOffer } from '../utils/dealUpdateFunctions';
 import { addNoteToDeal } from '../services/pipedriveService';
+import { adminService } from '../services/adminService';
 
 const PRICE_MAP = {
   'furniture': 50,
@@ -10,46 +11,92 @@ const PRICE_MAP = {
 };
 
 const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
-  const combinedData = useMemo(() => {
-    const items = {};
-    const packMaterials = {};
-    let totalVolume = 0;
-    let estimatedWeight = 0;
-    let demontageCount = 0;
-    let duebelarbeitenCount = 0;
+  const [prices, setPrices] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  useEffect(() => {
+    const loadPrices = async () => {
+      try {
+        const loadedPrices = await adminService.getPrices();
+        setPrices(loadedPrices.reduce((acc, price) => {
+          acc[price.name] = price.price;
+          return acc;
+        }, {}));
+        setLoading(false);
+      } catch (err) {
+        setError('Fehler beim Laden der Preise');
+        console.error(err);
+      }
+    };
+    loadPrices();
+  }, []);
+
+  const { furnitureCost, materialCost, totalCost, combinedData } = useMemo(() => {
+    if (!prices) return { 
+      furnitureCost: 0, 
+      materialCost: 0, 
+      totalCost: 0,
+      combinedData: {
+        items: {},
+        packMaterials: {},
+        totalVolume: 0,
+        estimatedWeight: 0,
+        demontageCount: 0,
+        duebelarbeitenCount: 0
+      }
+    };
+
+    const combinedData = {
+      items: {},
+      packMaterials: {},
+      totalVolume: 0,
+      estimatedWeight: 0,
+      demontageCount: 0,
+      duebelarbeitenCount: 0
+    };
+
+    // Daten aus den Räumen kombinieren
     Object.values(inspectionData.rooms).forEach(room => {
       room.items.forEach(item => {
-        if (!items[item.name]) {
-          items[item.name] = { ...item, quantity: 0 };
+        if (!combinedData.items[item.name]) {
+          combinedData.items[item.name] = { ...item, quantity: 0 };
         }
-        items[item.name].quantity += item.quantity;
-        if (item.demontiert) demontageCount += item.quantity;
-        if (item.duebelarbeiten) duebelarbeitenCount += item.quantity;
+        combinedData.items[item.name].quantity += item.quantity;
+        if (item.demontiert) combinedData.demontageCount += item.quantity;
+        if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
       });
 
       room.packMaterials.forEach(material => {
-        packMaterials[material.name] = (packMaterials[material.name] || 0) + material.quantity;
+        combinedData.packMaterials[material.name] = 
+          (combinedData.packMaterials[material.name] || 0) + material.quantity;
       });
 
-      totalVolume += room.totalVolume;
-      estimatedWeight += room.estimatedWeight;
+      combinedData.totalVolume += room.totalVolume;
+      combinedData.estimatedWeight += room.estimatedWeight;
     });
 
-    return { items, packMaterials, totalVolume, estimatedWeight, demontageCount, duebelarbeitenCount };
-  }, [inspectionData]);
-
-  const { furnitureCost, materialCost, totalCost } = useMemo(() => {
-    const furnitureCost = combinedData.totalVolume * PRICE_MAP.furniture;
+    // Kosten berechnen mit Preisen aus der Datenbank
+    const furnitureCost = combinedData.totalVolume * (prices.furniture || 0);
     const materialCost = Object.entries(combinedData.packMaterials).reduce((total, [name, quantity]) => {
-      return total + (PRICE_MAP[name] || 0) * quantity;
+      return total + (prices[name] || 0) * quantity;
     }, 0);
+
     return {
       furnitureCost,
       materialCost,
-      totalCost: furnitureCost + materialCost
+      totalCost: furnitureCost + materialCost,
+      combinedData
     };
-  }, [combinedData]);
+  }, [inspectionData, prices]);
+
+  if (loading) {
+    return <div>Lade Preise...</div>;
+  }
+
+  if (error) {
+    return <div className="text-red-600">{error}</div>;
+  }
 
   const handleAcceptOffer = async () => {
     try {

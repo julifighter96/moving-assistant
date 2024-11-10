@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect  } from 'react';
 import { Home, ClipboardList, Settings, Check, Plus } from 'lucide-react';
 import DealViewer from './components/DealViewer';
 import MoveInformationComponent from './components/MoveInformationComponent';
@@ -11,10 +11,16 @@ import LoginWrapper from './components/LoginWrapper';
 import { theme } from './theme';
 import logo from './assets/images/Riedlin-Logo-512px_Neu.webp';
 import AIAnalysisTab from './components/AIAnalysisTab';
-
+import { adminService } from './services/adminService';
+import AdminPanel from './components/AdminPanel';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
+// Bei den anderen useState Definitionen (ca. Zeile 40)
+
+
+// isAdmin wird bereits vom LoginWrapper gesetzt
+
 
 const DEFAULT_ROOM_INVENTORY = {
   'Wohnzimmer': [
@@ -69,10 +75,11 @@ const STEPS = [
   { label: 'Umzugsinformationen', status: 'pending' },
   { label: 'Räume & Gegenstände', status: 'pending' },
   { label: 'Zusätzliche Details', status: 'pending' },
-  { label: 'Angebot erstellen', status: 'pending' }
+  { label: 'Angebot erstellen', status: 'pending' },
+  { label: 'Administration', status: 'pending', id: 'admin' }
 ];
 
-const TabletHeader = ({ currentDeal }) => {
+const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick }) => {
   return (
     <header className="bg-white border-b border-neutral-200 h-16 fixed top-0 left-0 right-0 z-50">
       <div className="h-full flex items-center justify-between px-6">
@@ -94,19 +101,40 @@ const TabletHeader = ({ currentDeal }) => {
         )}
         
         <nav className="flex items-center space-x-2">
-          {[
-            { icon: Home, label: 'Home' },
-            { icon: ClipboardList, label: 'Inspektionen' },
-            { icon: Settings, label: 'Settings' }
-          ].map(({ icon: Icon, label }) => (
-            <button 
-              key={label}
-              className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
-            >
-              <Icon className="h-6 w-6" />
-              <span className="ml-2 text-base">{label}</span>
-            </button>
-          ))}
+          {/* Separate Buttons statt map */}
+          <button 
+            type="button"
+            onClick={() => onHomeClick && onHomeClick()}
+            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
+          >
+            <Home className="h-6 w-6" />
+            <span className="ml-2 text-base">Home</span>
+          </button>
+
+          <button 
+            type="button"
+            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
+          >
+            <ClipboardList className="h-6 w-6" />
+            <span className="ml-2 text-base">Inspektionen</span>
+          </button>
+
+          <button 
+            type="button"
+            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
+          >
+            <Settings className="h-6 w-6" />
+            <span className="ml-2 text-base">Settings</span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => onAdminClick && onAdminClick()}
+            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
+          >
+            <Settings className="h-6 w-6" />
+            <span className="ml-2">Admin</span>
+          </button>
         </nav>
       </div>
     </header>
@@ -149,15 +177,14 @@ function App() {
   const [moveInfo, setMoveInfo] = useState(null);
   const [selectedDealId, setSelectedDealId] = useState(null);
   const [dealData, setDealData] = useState(null);
-  const [rooms, setRooms] = useState(INITIAL_ROOMS);
+  const [rooms, setRooms] = useState([]);
   const [currentRoom, setCurrentRoom] = useState(INITIAL_ROOMS[0]);
   // Neuer State für Tab-Verwaltung
-  const [activeTab, setActiveTab] = useState('standard');
   const [roomsData, setRoomsData] = useState(() => {
     const initialRoomsData = {};
-    INITIAL_ROOMS.forEach(room => {
+    rooms.forEach(room => {
       initialRoomsData[room] = {
-        items: DEFAULT_ROOM_INVENTORY[room] || [],
+        items: [],
         packMaterials: DEFAULT_PACK_MATERIALS,
         photos: [],
         totalVolume: 0,
@@ -167,6 +194,46 @@ function App() {
     });
     return initialRoomsData;
   });
+  
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [activeTab, setActiveTab] = useState('standard');
+  
+  useEffect(() => {
+    const loadConfiguration = async () => {
+      try {
+        const configuredRooms = await adminService.getRooms();
+        setRooms(configuredRooms.map(room => room.name));
+        
+        const initialRoomsData = {};
+        for (const room of configuredRooms) {
+          const items = await adminService.getItems(room.name);
+          initialRoomsData[room.name] = {
+            items: items.map(item => ({ 
+              ...item, 
+              quantity: 0,
+              demontiert: false,
+              duebelarbeiten: false 
+            })),
+            packMaterials: DEFAULT_PACK_MATERIALS,
+            photos: [],
+            totalVolume: 0,
+            estimatedWeight: 0,
+            notes: ''
+          };
+        }
+        setRoomsData(initialRoomsData);
+        
+        if (configuredRooms.length > 0) {
+          setCurrentRoom(configuredRooms[0].name);
+        }
+      } catch (error) {
+        console.error('Error loading configuration:', error);
+      }
+    };
+
+    loadConfiguration();
+  }, []);
+
   const [additionalInfo, setAdditionalInfo] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
   const [popupMessage, setPopupMessage] = useState('');
@@ -277,24 +344,27 @@ function App() {
   };
 
   const handleStepChange = (newStep) => {
-    if (newStep >= 0 && newStep < STEPS.length) {
+    if (typeof newStep === 'number' && newStep >= 0 && newStep < STEPS.length - 1) {
       setCurrentStep(newStep);
+    } else if (newStep === 'admin') {
+      setCurrentStep('admin');
     }
   };
 
   return (
     <LoginWrapper>
     <div className="min-h-screen bg-neutral-50">
-      <TabletHeader currentDeal={dealData} />
-      
+      <TabletHeader currentDeal={dealData} 
+      onAdminClick={() => setCurrentStep('admin')}
+      onHomeClick={() => setCurrentStep(0)} />
       <main className="pt-20 px-6 pb-6">
         <div className="max-w-none mx-auto">
           {/* Step Progress */}
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <div className="flex justify-between">
-              {STEPS.map((step, index) => {
-                const isCompleted = index < currentStep;
-                const isCurrent = index === currentStep;
+  <div className="flex justify-between">
+    {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
+      const isCompleted = typeof currentStep === 'number' && index < currentStep;
+      const isCurrent = currentStep === step.id;
                 
                 return (
                   <div key={step.label} className="flex flex-col items-center flex-1">
@@ -338,25 +408,29 @@ function App() {
 
           {/* CHANGE 1: Add Step Controls here */}
           <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex justify-between items-center">
-            <button 
-              onClick={() => handleStepChange(currentStep - 1)} 
-              disabled={currentStep === 0}
-              className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
-            >
-              Zurück
-            </button>
-            <div className="flex flex-col items-center">
-              <span className="text-lg font-medium">{`Schritt ${currentStep + 1} von ${STEPS.length}`}</span>
-              <span className="text-sm text-gray-500">{STEPS[currentStep].label}</span>
-            </div>
-            <button 
-              onClick={() => handleStepChange(currentStep + 1)} 
-              disabled={currentStep === STEPS.length - 1}
-              className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
-            >
-              Weiter
-            </button>
-          </div>
+  <button 
+    onClick={() => handleStepChange(currentStep - 1)} 
+    disabled={currentStep === 0 || currentStep === 'admin'}
+    className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
+  >
+    Zurück
+  </button>
+  <div className="flex flex-col items-center">
+    <span className="text-lg font-medium">
+      {currentStep === 'admin' ? 'Administration' : `Schritt ${currentStep + 1} von ${STEPS.length - 1}`}
+    </span>
+    <span className="text-sm text-gray-500">
+      {STEPS.find(step => step.id === currentStep)?.label}
+    </span>
+  </div>
+  <button 
+    onClick={() => handleStepChange(currentStep + 1)} 
+    disabled={currentStep === STEPS.length - 2 || currentStep === 'admin'}
+    className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
+  >
+    Weiter
+  </button>
+</div>
 
           {/* Main Content Area */}
           {/* CHANGE 2: Remove the old StepNavigation component if it exists */}
@@ -529,6 +603,27 @@ function App() {
                   </div>
                 </div>
               )}
+              {currentStep === 'admin' && (
+  <div className="bg-white rounded-lg shadow-sm">
+    <div className="p-6 border-b border-gray-200">
+      <h2 className="text-xl font-semibold">Administration</h2>
+      <p className="text-gray-500 mt-1">Verwalten Sie Räume und Gegenstände</p>
+    </div>
+    <div className="p-6">
+      <AdminPanel 
+        currentStep={currentStep}
+        onUpdateRooms={setRooms} 
+        onUpdateItems={(items) => setRoomsData(prev => ({
+          ...prev,
+          [currentRoom]: {
+            ...prev[currentRoom],
+            items
+          }
+        }))}
+      />
+    </div>
+  </div>
+)}
             </div>
           </div>
         </main>

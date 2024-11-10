@@ -1,110 +1,267 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { adminService } from '../services/adminService';
+import PriceConfiguration from './PriceConfiguration';
 
-const AdminPanel = ({ rooms, items, onUpdateRooms, onUpdateItems }) => {
+const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
+  const [rooms, setRooms] = useState([]);
+  const [selectedRoom, setSelectedRoom] = useState(null);
+  const [items, setItems] = useState([]);
   const [newRoom, setNewRoom] = useState('');
   const [newItem, setNewItem] = useState({ name: '', volume: 0 });
+  const [editingItem, setEditingItem] = useState(null); 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const handleAddRoom = () => {
-    if (newRoom && !rooms.includes(newRoom)) {
-      onUpdateRooms([...rooms, newRoom]);
+  // Lade Räume beim Komponenten-Mount
+  useEffect(() => {
+    loadRooms();
+  }, []);
+
+  // Lade Items wenn ein Raum ausgewählt wird
+  useEffect(() => {
+    if (selectedRoom) {
+      loadItems(selectedRoom);
+    }
+  }, [selectedRoom]);
+
+  const handleUpdateItem = async (item) => {
+    try {
+      setLoading(true);
+      setError(null);
+      await adminService.updateItem(item.id, item);
+      setEditingItem(null);
+      await loadItems(selectedRoom);
+      
+      if (onUpdateItems) {
+        onUpdateItems(await adminService.getItems(selectedRoom));
+      }
+    } catch (err) {
+      setError('Fehler beim Aktualisieren des Gegenstands');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadRooms = async () => {
+    try {
+      setLoading(true);
+      const loadedRooms = await adminService.getRooms();
+      setRooms(loadedRooms);
+      if (loadedRooms.length > 0 && !selectedRoom) {
+        setSelectedRoom(loadedRooms[0].name);
+      }
+    } catch (err) {
+      setError('Fehler beim Laden der Räume');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadItems = async (roomName) => {
+    try {
+      setLoading(true);
+      const loadedItems = await adminService.getItems(roomName);
+      setItems(loadedItems);
+    } catch (err) {
+      setError('Fehler beim Laden der Gegenstände');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddRoom = async () => {
+    if (!newRoom.trim()) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      await adminService.addRoom(newRoom);
       setNewRoom('');
+      await loadRooms();
+      if (onUpdateRooms) {
+        onUpdateRooms(await adminService.getRooms());
+      }
+    } catch (err) {
+      setError('Fehler beim Hinzufügen des Raums');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleRemoveRoom = (roomToRemove) => {
-    onUpdateRooms(rooms.filter(room => room !== roomToRemove));
-  };
-
-  const handleAddItem = () => {
-    if (newItem.name && !items.some(item => item.name === newItem.name)) {
-      onUpdateItems([...items, newItem]);
+  const handleAddItem = async () => {
+    if (!newItem.name.trim() || !selectedRoom) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      await adminService.addItem({
+        ...newItem,
+        room: selectedRoom
+      });
       setNewItem({ name: '', volume: 0 });
+      await loadItems(selectedRoom);
+      if (onUpdateItems) {
+        onUpdateItems(await adminService.getItems(selectedRoom));
+      }
+    } catch (err) {
+      setError('Fehler beim Hinzufügen des Gegenstands');
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleRemoveItem = (itemToRemove) => {
-    onUpdateItems(items.filter(item => item.name !== itemToRemove));
-  };
-
-  const handleUpdateItemVolume = (index, newVolume) => {
-    const updatedItems = [...items];
-    updatedItems[index].volume = parseFloat(newVolume);
-    onUpdateItems(updatedItems);
-  };
+  if (loading && !rooms.length) {
+    return (
+      <div className="flex justify-center items-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
-      <h2 className="text-2xl font-bold mb-4">Admin Panel</h2>
-      
-      <div className="mb-8">
-        <h3 className="text-xl font-semibold mb-2">Räume</h3>
-        <ul className="mb-4">
-          {rooms.map(room => (
-            <li key={room} className="flex justify-between items-center mb-2">
-              {room}
-              <button onClick={() => handleRemoveRoom(room)} className="text-red-500">Entfernen</button>
-            </li>
-          ))}
-        </ul>
-        <div className="flex">
+    <div className="space-y-8">
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Räume Sektion */}
+      <div className="bg-white rounded-lg p-6 shadow-sm">
+        <h2 className="text-xl font-semibold mb-4">Räume verwalten</h2>
+        <div className="flex gap-4 mb-6">
           <input
             type="text"
             value={newRoom}
             onChange={(e) => setNewRoom(e.target.value)}
             placeholder="Neuer Raum"
-            className="flex-grow p-2 border border-gray-300 rounded-l-md"
+            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
           />
           <button
             onClick={handleAddRoom}
-            className="bg-blue-500 text-white p-2 rounded-r-md hover:bg-blue-600 transition duration-200"
+            disabled={loading}
+            className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:bg-gray-300"
           >
-            Hinzufügen
+            {loading ? 'Lädt...' : 'Hinzufügen'}
           </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4">
+          {rooms.map((room) => (
+            <button
+              key={room.id}
+              onClick={() => setSelectedRoom(room.name)}
+              className={`p-4 rounded-lg border ${
+                selectedRoom === room.name
+                  ? 'border-primary bg-primary-light text-primary'
+                  : 'border-gray-200 hover:border-primary'
+              }`}
+            >
+              {room.name}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div>
-        <h3 className="text-xl font-semibold mb-2">Gegenstände</h3>
-        <ul className="mb-4">
-          {items.map((item, index) => (
-            <li key={item.name} className="flex justify-between items-center mb-2">
-              <span>{item.name}</span>
-              <div className="flex items-center">
-                <label className="mr-2">Volumen (m³):</label>
-                <input
-                  type="number"
-                  value={item.volume}
-                  onChange={(e) => handleUpdateItemVolume(index, e.target.value)}
-                  className="w-20 p-1 border border-gray-300 rounded-md mr-2"
-                />
-                <button onClick={() => handleRemoveItem(item.name)} className="text-red-500">Entfernen</button>
+       {/* Gegenstände Sektion */}
+       {selectedRoom && (
+        <div className="bg-white rounded-lg p-6 shadow-sm">
+          <h2 className="text-xl font-semibold mb-4">
+            Gegenstände für {selectedRoom}
+          </h2>
+          
+          {/* Neuen Gegenstand hinzufügen */}
+          <div className="flex gap-4 mb-6">
+            {/* ... bestehender Code für neuen Gegenstand ... */}
+          </div>
+
+          {/* Liste der Gegenstände */}
+          <div className="space-y-2">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="flex justify-between items-center p-4 bg-gray-50 rounded-lg"
+              >
+                {editingItem?.id === item.id ? (
+                  // Bearbeitungsmodus
+                  <div className="flex w-full gap-4">
+                    <input
+                      type="text"
+                      value={editingItem.name}
+                      onChange={(e) => setEditingItem({
+                        ...editingItem,
+                        name: e.target.value
+                      })}
+                      className="flex-1 rounded-md border-gray-300 px-3 py-2"
+                    />
+                    <input
+                      type="number"
+                      value={editingItem.volume}
+                      onChange={(e) => setEditingItem({
+                        ...editingItem,
+                        volume: parseFloat(e.target.value) || 0
+                      })}
+                      className="w-32 rounded-md border-gray-300 px-3 py-2"
+                    />
+                    <button
+                      onClick={() => handleUpdateItem(editingItem)}
+                      className="px-4 py-2 bg-green-500 text-white rounded-md"
+                    >
+                      Speichern
+                    </button>
+                    <button
+                      onClick={() => setEditingItem(null)}
+                      className="px-4 py-2 bg-gray-500 text-white rounded-md"
+                    >
+                      Abbrechen
+                    </button>
+                  </div>
+                ) : (
+                  // Anzeigemodus
+                  <>
+                    <span className="font-medium">{item.name}</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-gray-600">{item.volume} m³</span>
+                      <button
+                        onClick={() => setEditingItem(item)}
+                        className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md"
+                      >
+                        Bearbeiten
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-            </li>
-          ))}
-        </ul>
-        <div className="flex items-center">
-          <input
-            type="text"
-            value={newItem.name}
-            onChange={(e) => setNewItem({...newItem, name: e.target.value})}
-            placeholder="Neuer Gegenstand"
-            className="flex-grow p-2 border border-gray-300 rounded-l-md"
-          />
-          <input
-            type="number"
-            value={newItem.volume}
-            onChange={(e) => setNewItem({...newItem, volume: parseFloat(e.target.value)})}
-            placeholder="Volumen (m³)"
-            className="w-32 p-2 border-t border-b border-gray-300"
-          />
-          <button
-            onClick={handleAddItem}
-            className="bg-blue-500 text-white p-2 rounded-r-md hover:bg-blue-600 transition duration-200"
-          >
-            Hinzufügen
-          </button>
-        </div>
+            ))}
+            {!items.length && (
+              <p className="text-gray-500 text-center py-4">
+                Keine Gegenstände vorhanden
+              </p>
+            )}
+            {/* Preiskonfiguration als neue Sektion am Ende */}
+      <div className="bg-white rounded-lg p-6 shadow-sm">
+        <h2 className="text-xl font-semibold mb-4">Preiskonfiguration</h2>
+        <p className="text-gray-500 mb-6">Verwalten Sie hier die Preise für Möbel und Materialien</p>
+        <PriceConfiguration />
       </div>
+          </div>
+        </div>
+      )}
+      
     </div>
   );
 };

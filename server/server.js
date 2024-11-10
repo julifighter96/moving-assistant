@@ -5,6 +5,7 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
+const INITIAL_ROOMS_AND_ITEMS = require('./initialData');
 require('dotenv').config({ path: __dirname + '/.env' });
 
 // Logging für Debugging
@@ -25,6 +26,21 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
     console.log('Connected to SQLite database');
     
     db.serialize(() => {
+
+      db.run(`CREATE TABLE IF NOT EXISTS admin_rooms (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      
+      db.run(`CREATE TABLE IF NOT EXISTS admin_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        volume REAL NOT NULL,
+        room TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(name, room)
+      )`);
       // Haupt-Erkennungstabelle
       db.run(`CREATE TABLE IF NOT EXISTS recognitions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,9 +70,78 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
         UNIQUE(imageHash, objectType)
       )`);
 
+      
+    db.run(`CREATE TABLE IF NOT EXISTS admin_prices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      price REAL NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
       // Indizes für bessere Performance
       db.run('CREATE INDEX IF NOT EXISTS idx_recognitions_hash ON recognitions(imageHash)');
       db.run('CREATE INDEX IF NOT EXISTS idx_features_hash ON image_features(imageHash)');
+      db.get('SELECT COUNT(*) as count FROM admin_rooms', [], (err, row) => {
+        if (err) {
+          console.error('Error checking rooms:', err);
+          return;
+        }
+
+        if (row.count === 0) {
+          console.log('Inserting initial data...');
+          
+          Object.entries(INITIAL_ROOMS_AND_ITEMS).forEach(([roomName, items]) => {
+            db.run('INSERT INTO admin_rooms (name) VALUES (?)', [roomName], function(err) {
+              if (err) {
+                console.error('Error inserting room:', err);
+                return;
+              }
+
+              items.forEach(item => {
+                db.run(
+                  'INSERT INTO admin_items (name, volume, room) VALUES (?, ?, ?)',
+                  [item.name, item.volume, roomName],
+                  (err) => {
+                    if (err) {
+                      console.error('Error inserting item:', err);
+                    }
+                  }
+                );
+              });
+            });
+          });
+          
+          console.log('Initial data inserted successfully');
+        }
+      });
+      
+    });
+    
+    // Initial Preisdaten einfügen (falls noch keine existieren)
+    db.get('SELECT COUNT(*) as count FROM admin_prices', [], (err, row) => {
+      if (err) {
+        console.error('Error checking prices:', err);
+        return;
+      }
+    
+      if (row.count === 0) {
+        const initialPrices = [
+          { name: 'furniture', price: 50, description: 'Preis pro m³' },
+          { name: 'Umzugskartons (Standard)', price: 2, description: 'Preis pro Stück' },
+          { name: 'Bücherkartons (Bücher&Geschirr)', price: 5, description: 'Preis pro Stück' },
+          { name: 'Kleiderkisten', price: 3, description: 'Preis pro Stück' }
+        ];
+    
+        initialPrices.forEach(price => {
+          db.run(
+            'INSERT INTO admin_prices (name, price) VALUES (?, ?)',
+            [price.name, price.price],
+            (err) => {
+              if (err) console.error('Error inserting price:', err);
+            }
+          );
+        });
+      }
     });
   }
 });
@@ -341,6 +426,113 @@ app.post('/api/recognition/feedback', async (req, res) => {
     console.error('Feedback error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Admin Routes
+app.get('/api/admin/rooms', async (req, res) => {
+  db.all('SELECT * FROM admin_rooms', [], (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+app.post('/api/admin/rooms', async (req, res) => {
+  const { name } = req.body;
+  db.run('INSERT INTO admin_rooms (name) VALUES (?)', [name], function(err) {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json({ id: this.lastID, name });
+  });
+});
+
+app.get('/api/admin/items', async (req, res) => {
+  const { room } = req.query;
+  db.all('SELECT * FROM admin_items WHERE room = ?', [room], (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json(rows);
+  });
+});
+
+app.post('/api/admin/items', async (req, res) => {
+  const { name, volume, room } = req.body;
+  db.run(
+    'INSERT INTO admin_items (name, volume, room) VALUES (?, ?, ?)',
+    [name, volume, room],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ id: this.lastID, name, volume, room });
+    }
+  );
+});
+
+app.put('/api/admin/items/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, volume } = req.body;
+  
+  if (!name || volume === undefined) {
+    return res.status(400).json({ error: 'Name and volume are required' });
+  }
+
+  db.run(
+    'UPDATE admin_items SET name = ?, volume = ? WHERE id = ?',
+    [name, volume, id],
+    function(err) {
+      if (err) {
+        console.error('Error updating item:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Item not found' });
+      }
+      res.json({ id: parseInt(id), name, volume });
+    }
+  );
+});
+
+app.get('/api/admin/prices', (req, res) => {
+  db.all('SELECT * FROM admin_prices ORDER BY created_at ASC', [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching prices:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Preis aktualisieren
+app.put('/api/admin/prices/:id', (req, res) => {
+  const { id } = req.params;
+  const { price } = req.body;
+  
+  if (price === undefined) {
+    return res.status(400).json({ error: 'Price is required' });
+  }
+
+  db.run(
+    'UPDATE admin_prices SET price = ? WHERE id = ?',
+    [price, id],
+    function(err) {
+      if (err) {
+        console.error('Error updating price:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Price not found' });
+      }
+      res.json({ id: parseInt(id), price });
+    }
+  );
 });
 
 // Statistik-Endpoint (optional)

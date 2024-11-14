@@ -8,20 +8,55 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
   const [items, setItems] = useState([]);
   const [newRoom, setNewRoom] = useState('');
   const [newItem, setNewItem] = useState({ name: '', volume: 0 });
-  const [editingItem, setEditingItem] = useState(null); 
+  const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Lade Räume beim Komponenten-Mount
   useEffect(() => {
-    loadRooms();
-  }, []);
+    const loadConfiguration = async () => {
+      try {
+        const loadedRooms = await adminService.getRooms();
+        if (Array.isArray(loadedRooms)) {  // Prüfen ob es ein Array ist
+          setRooms(loadedRooms);
+          if (loadedRooms.length > 0 && !selectedRoom) {
+            setSelectedRoom(loadedRooms[0].name);
+          }
+        } else {
+          setRooms([]);  // Fallback zu leerem Array
+          console.error('Loaded rooms is not an array:', loadedRooms);
+        }
+      } catch (err) {
+        console.error('Error loading configuration:', err);
+        setError('Fehler beim Laden der Räume');
+        setRooms([]);  // Fallback zu leerem Array im Fehlerfall
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Lade Items wenn ein Raum ausgewählt wird
+    loadConfiguration();
+  }, [selectedRoom]);
+
   useEffect(() => {
-    if (selectedRoom) {
-      loadItems(selectedRoom);
-    }
+    const loadItems = async () => {
+      if (selectedRoom) {
+        try {
+          const loadedItems = await adminService.getItems(selectedRoom);
+          if (Array.isArray(loadedItems)) {  // Prüfen ob es ein Array ist
+            setItems(loadedItems);
+          } else {
+            setItems([]);  // Fallback zu leerem Array
+            console.error('Loaded items is not an array:', loadedItems);
+          }
+        } catch (err) {
+          console.error('Error loading items:', err);
+          setError('Fehler beim Laden der Gegenstände');
+          setItems([]);  // Fallback zu leerem Array im Fehlerfall
+        }
+      }
+    };
+
+    loadItems();
   }, [selectedRoom]);
 
   const handleUpdateItem = async (item) => {
@@ -161,9 +196,9 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
         </div>
 
         <div className="grid grid-cols-3 gap-4">
-          {rooms.map((room) => (
+          {Array.isArray(rooms) && rooms.map((room) => (  // Sicherstellen dass rooms ein Array ist
             <button
-              key={room.id}
+              key={room.id || room.name}  // Fallback für key
               onClick={() => setSelectedRoom(room.name)}
               className={`p-4 rounded-lg border ${
                 selectedRoom === room.name
@@ -186,8 +221,33 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
           
           {/* Neuen Gegenstand hinzufügen */}
           <div className="flex gap-4 mb-6">
-            {/* ... bestehender Code für neuen Gegenstand ... */}
-          </div>
+  <input
+    type="text"
+    value={newItem.name}
+    onChange={(e) => setNewItem({...newItem, name: e.target.value})}
+    placeholder="Name des Gegenstands"
+    className="flex-grow p-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-primary"
+  />
+  <input
+    type="number"
+    value={newItem.volume}
+    onChange={(e) => setNewItem({...newItem, volume: parseFloat(e.target.value) || 0})}
+    placeholder="Volumen (m³)"
+    className="w-32 p-2 border-t border-b border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+  />
+  <button
+    onClick={() => {
+      if (newItem.name && newItem.volume > 0) {
+        handleAddItem();
+      }
+    }}
+    disabled={!newItem.name || newItem.volume <= 0}
+    className="px-6 py-2 bg-green-500 text-white rounded-r-md hover:bg-green-600 
+               disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+  >
+    Hinzufügen
+  </button>
+</div>
 
           {/* Liste der Gegenstände */}
           <div className="space-y-2">

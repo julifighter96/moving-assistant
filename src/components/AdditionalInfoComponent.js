@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { Package, Truck, Home, Clock } from 'lucide-react';
 
 const INITIAL_ADDITIONAL_INFO = [
   {
@@ -44,10 +45,16 @@ const INITIAL_ADDITIONAL_INFO = [
         options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
         value: 'Nein'
       },
-      
     ]
   }
 ];
+
+const CategoryIcons = {
+  'Umzugstechnische Details': Truck,
+  'Packmaterialien': Package,
+  'Umgebungsbedingungen': Home,
+  'Zusätzliche Dienstleistungen': Clock
+};
 
 const AdditionalInfoComponent = ({ onComplete }) => {
   const [additionalInfo, setAdditionalInfo] = useState(INITIAL_ADDITIONAL_INFO);
@@ -95,13 +102,13 @@ const AdditionalInfoComponent = ({ onComplete }) => {
     if (field.type === 'select') {
       return (
         <div className="mb-4">
-          <label className="block mb-2 text-sm font-medium text-gray-900">
+          <label className="block mb-2 font-medium text-gray-700">
             {field.name}
           </label>
           <select
             value={field.value}
             onChange={(e) => handleInfoChange(categoryIndex, fieldIndex, e.target.value)}
-            className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
           >
             {field.options.map(option => (
               <option key={option} value={option}>
@@ -115,20 +122,20 @@ const AdditionalInfoComponent = ({ onComplete }) => {
 
     if (field.multiple) {
       return (
-        <div className="mb-4">
-          <label className="block mb-2 text-sm font-medium text-gray-900">
+        <div className="mb-6">
+          <label className="block mb-3 font-medium text-gray-700">
             {field.name}
           </label>
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {field.options.map(option => (
-              <label key={option} className="flex items-center cursor-pointer">
+              <label key={option} className="flex items-center p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer group">
                 <input
                   type="checkbox"
                   checked={Array.isArray(field.value) && field.value.includes(option)}
                   onChange={() => handleMultipleChoiceChange(categoryIndex, fieldIndex, option)}
-                  className="mr-2 cursor-pointer"
+                  className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary transition-colors"
                 />
-                <span className="text-sm">{option}</span>
+                <span className="ml-3 text-sm text-gray-600 group-hover:text-gray-900">{option}</span>
               </label>
             ))}
           </div>
@@ -137,42 +144,63 @@ const AdditionalInfoComponent = ({ onComplete }) => {
     }
 
     return (
-      <div className="flex items-center mb-4">
+      <label className="flex items-center p-3 mb-2 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer group">
         <input
-          id={field.name}
           type="checkbox"
           checked={field.value}
           onChange={(e) => handleInfoChange(categoryIndex, fieldIndex, e.target.checked)}
-          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 cursor-pointer"
+          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary transition-colors"
         />
-        <label htmlFor={field.name} className="ml-2 text-sm font-medium text-gray-900 cursor-pointer">
+        <span className="ml-3 font-medium text-gray-600 group-hover:text-gray-900">
           {field.name}
-        </label>
-      </div>
+        </span>
+      </label>
     );
   }, [handleInfoChange, handleMultipleChoiceChange]);
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-4xl mx-auto">
-      <h2 className="text-2xl font-bold mb-6 text-center">Zusätzliche Informationen</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {additionalInfo.map((category, categoryIndex) => (
-          <div key={category.category} className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-xl font-semibold mb-4">{category.category}</h3>
-            {category.fields.map((field, fieldIndex) => (
-              <div key={field.name}>
-                {renderField(field, categoryIndex, fieldIndex)}
-              </div>
-            ))}
+    <div className="max-w-5xl mx-auto">
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-2xl font-bold text-center text-gray-900">
+            Zusätzliche Informationen
+          </h2>
+        </div>
+        
+        <div className="p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {additionalInfo.map((category, categoryIndex) => {
+              const IconComponent = CategoryIcons[category.category];
+              return (
+                <div key={category.category} className="bg-gray-50 rounded-xl p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    {IconComponent && <IconComponent className="w-5 h-5 text-primary" />}
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {category.category}
+                    </h3>
+                  </div>
+                  <div className="space-y-4">
+                    {category.fields.map((field, fieldIndex) => (
+                      <div key={field.name}>
+                        {renderField(field, categoryIndex, fieldIndex)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ))}
+
+          <div className="mt-8">
+            <button
+              onClick={handleSubmit}
+              className="w-full bg-primary hover:bg-primary-dark text-white font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
+            >
+              Informationen speichern und fortfahren
+            </button>
+          </div>
+        </div>
       </div>
-      <button
-        onClick={handleSubmit}
-        className="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition duration-300 mt-6 cursor-pointer"
-      >
-        Informationen speichern und fortfahren
-      </button>
     </div>
   );
 };

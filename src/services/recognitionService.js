@@ -2,25 +2,55 @@
 const API_URL = process.env.REACT_APP_API_URL;
 
 export const recognitionService = {
-  async analyzeRoom(images, roomName) {
+  async analyzeRoom(images, roomName, customPrompt) {
     try {
-      const companyId = localStorage.getItem('companyId');
-      const response = await fetch(`${API_URL}/analyze`, {
+      // Remove any trailing slashes from API_URL
+      const baseUrl = API_URL.replace(/\/+$/, '');
+      const url = `${baseUrl}/analyze`;
+
+      console.log('Starting analysis request:', {
+        url,
+        roomName,
+        imageCount: images.length,
+        hasCustomPrompt: !!customPrompt
+      });
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'  // Add explicit Accept header
+        },
         body: JSON.stringify({
           images,
           roomName,
-          companyId
+          customPrompt
         })
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response headers:', [...response.headers.entries()]);
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Error response body:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
       }
-      return await response.json();
+
+      const data = await response.json();
+      console.log('Successful analysis response:', {
+        hasItems: !!data.items,
+        itemCount: data.items?.length,
+        totalVolume: data.totalVolume
+      });
+
+      return data;
     } catch (error) {
-      console.error('Analysis error:', error);
+      console.error('Analysis error details:', {
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause
+      });
       throw error;
     }
   },
@@ -28,7 +58,7 @@ export const recognitionService = {
   async submitFeedback(originalItem, correctedItem, imageData, roomName) {
     try {
       const companyId = localStorage.getItem('companyId');
-      const response = await fetch(`${API_URL}/api/recognition/feedback`, {
+      const response = await fetch(`${API_URL}/recognition/feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

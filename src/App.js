@@ -13,6 +13,7 @@ import logo from './assets/images/Riedlin-Logo-512px_Neu.webp';
 import AIAnalysisTab from './components/AIAnalysisTab';
 import { adminService } from './services/adminService';
 import AdminPanel from './components/AdminPanel';
+import InspectionOverview from './components/InspectionOverview';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -79,7 +80,7 @@ const STEPS = [
   { label: 'Administration', status: 'pending', id: 'admin' }
 ];
 
-const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick }) => {
+const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsClick }) => {
   return (
     <header className="bg-white border-b border-neutral-200 h-16 fixed top-0 left-0 right-0 z-50">
       <div className="h-full flex items-center justify-between px-6">
@@ -113,9 +114,11 @@ const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick }) => {
 
           <button 
             type="button"
+            onClick = {() => onInspectionsClick && onInspectionsClick()}
             className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
           >
             <ClipboardList className="h-6 w-6" />
+
             <span className="ml-2 text-base">Inspektionen</span>
           </button>
 
@@ -202,35 +205,58 @@ function App() {
     const loadConfiguration = async () => {
       try {
         const configuredRooms = await adminService.getRooms();
+  
+        if (!Array.isArray(configuredRooms) || configuredRooms.length === 0) {
+          console.warn('No rooms received, using default rooms');
+          setRooms(INITIAL_ROOMS);
+          return;
+        }
+  
         setRooms(configuredRooms.map(room => room.name));
         
         const initialRoomsData = {};
-        for (const room of configuredRooms) {
-          const items = await adminService.getItems(room.name);
-          initialRoomsData[room.name] = {
-            items: items.map(item => ({ 
-              ...item, 
-              quantity: 0,
-              demontiert: false,
-              duebelarbeiten: false 
-            })),
-            packMaterials: DEFAULT_PACK_MATERIALS,
-            photos: [],
-            totalVolume: 0,
-            estimatedWeight: 0,
-            notes: ''
-          };
-        }
-        setRoomsData(initialRoomsData);
         
+        for (const room of configuredRooms) {
+          try {
+            const items = await adminService.getItems(room.name);
+  
+            initialRoomsData[room.name] = {
+              items: items.length > 0 ? items.map(item => ({
+                ...item,
+                quantity: 0,
+                demontiert: false,
+                duebelarbeiten: false
+              })) : [],
+              packMaterials: DEFAULT_PACK_MATERIALS,
+              photos: [],
+              totalVolume: 0,
+              estimatedWeight: 0,
+              notes: ''
+            };
+          } catch (error) {
+            console.error(`Failed to load items for room ${room.name}:`, error);
+            // Fallback to default items if available
+            initialRoomsData[room.name] = {
+              items: DEFAULT_ROOM_INVENTORY[room.name] || [],
+              packMaterials: DEFAULT_PACK_MATERIALS,
+              photos: [],
+              totalVolume: 0,
+              estimatedWeight: 0,
+              notes: ''
+            };
+          }
+        }
+  
+        setRoomsData(initialRoomsData);
+  
         if (configuredRooms.length > 0) {
           setCurrentRoom(configuredRooms[0].name);
         }
       } catch (error) {
-        console.error('Error loading configuration:', error);
+        console.error('Error in loadConfiguration:', error);
       }
     };
-
+  
     loadConfiguration();
   }, []);
 
@@ -356,7 +382,9 @@ function App() {
     <div className="min-h-screen bg-neutral-50">
       <TabletHeader currentDeal={dealData} 
       onAdminClick={() => setCurrentStep('admin')}
-      onHomeClick={() => setCurrentStep(0)} />
+      onHomeClick={() => setCurrentStep(0)}
+      onInspectionsClick={() => setCurrentStep('inspections')}
+       />
       <main className="pt-20 px-6 pb-6">
         <div className="max-w-none mx-auto">
           {/* Step Progress */}
@@ -623,6 +651,10 @@ function App() {
       />
     </div>
   </div>
+)}
+
+{currentStep === 'inspections' && (
+  <InspectionOverview />
 )}
             </div>
           </div>

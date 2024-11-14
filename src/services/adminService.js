@@ -6,43 +6,84 @@ const API_URL = process.env.REACT_APP_API_URL;
 let priceCache = null;
 
 export const adminService = {
-  async getRooms() {
-    const response = await axios.get(`${API_URL}/api/admin/rooms`);
+  async addRoom(name) {
+    // Add leading slash if missing in API_URL
+    const url = API_URL.endsWith('/') 
+      ? `${API_URL}admin/rooms`
+      : `${API_URL}/admin/rooms`;
+      
+    const response = await axios.post(url, { name });
     return response.data;
   },
 
-  async addRoom(name) {
-    const response = await axios.post(`${API_URL}/api/admin/rooms`, { name });
-    return response.data;
+  async getRooms() {
+    try {
+      console.log('Fetching rooms from:', `${API_URL}/admin/rooms`);
+      const response = await axios.get(`${API_URL}/admin/rooms`);
+      console.log('Rooms response:', response.data);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('Error fetching rooms:', error.response || error);
+      return [];
+    }
   },
 
   async getItems(room) {
-    const response = await axios.get(`${API_URL}/api/admin/items`, { 
-      params: { room } 
-    });
-    return response.data;
+    try {
+      console.log(`Fetching items for room "${room}" from ${API_URL}/admin/items`);
+      const response = await axios.get(`${API_URL}/admin/items`, {
+        params: { room }
+      });
+      console.log(`Items response for room "${room}":`, response.data);
+      
+      if (!Array.isArray(response.data)) {
+        console.warn('Response is not an array:', response.data);
+        return [];
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching items for room "${room}":`, error);
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+        console.error('Status:', error.response.status);
+      }
+      return [];
+    }
   },
 
   async addItem(item) {
-    const response = await axios.post(`${API_URL}/api/admin/items`, item);
+    const response = await axios.post(`${API_URL}/admin/items`, item);
     return response.data;
   },
   async updateItem(id, item) {
-    const response = await axios.put(`${API_URL}/api/admin/items/${id}`, {
+    const response = await axios.put(`${API_URL}/admin/items/${id}`, {
       name: item.name,
       volume: item.volume
     });
     return response.data;
   },
   async getPrices() {
-    const response = await axios.get(`${API_URL}/api/admin/prices`);
-    return response.data;
+    try {
+      console.log('Fetching prices...');
+      const response = await axios.get(`${API_URL}/admin/prices`);
+      console.log('Prices response:', response.data);
+      // Sicherstellen dass wir ein Array zurückgeben
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('Error fetching prices:', error);
+      return [];
+    }
   },
 
-  async getPrices() {
-    const response = await axios.get(`${API_URL}/api/admin/prices`);
-    priceCache = response.data;
-    return response.data;
+  async updatePrice(id, price) {
+    try {
+      const response = await axios.put(`${API_URL}/admin/prices/${id}`, { price });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating price:', error);
+      throw error;
+    }
   },
 
   getCachedPrices() {

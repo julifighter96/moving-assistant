@@ -11,7 +11,8 @@ require('dotenv').config({ path: __dirname + '/.env' });
 // Logging für Debugging
 console.log('ENV check:', {
   envPath: require.resolve('dotenv'),
-  anthropicKey: process.env.ANTHROPIC_API_KEY ? 'Key exists' : 'No key found'
+  anthropicKey: process.env.ANTHROPIC_API_KEY ? 'Key exists' : 'No key found',
+  dbPath: path.join(__dirname, 'recognition.db')
 });
 
 const app = express();
@@ -59,6 +60,50 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
+      db.run(`CREATE TABLE IF NOT EXISTS inspections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deal_id TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        status TEXT CHECK(status IN ('draft', 'completed')) DEFAULT 'draft',
+        move_date DATE,
+        total_volume REAL,
+        total_rooms INTEGER,
+        
+        origin_address TEXT,
+        origin_floor INTEGER,
+        origin_has_elevator BOOLEAN,
+        
+        destination_address TEXT,
+        destination_floor INTEGER,
+        destination_has_elevator BOOLEAN,
+        
+        packing_service BOOLEAN DEFAULT FALSE,
+        unpacking_service BOOLEAN DEFAULT FALSE,
+        lift_loading BOOLEAN DEFAULT FALSE,
+        lift_unloading BOOLEAN DEFAULT FALSE,
+        
+        furniture_cost REAL,
+        materials_cost REAL,
+        total_cost REAL,
+        
+        notes TEXT,
+        data JSON
+      )`);
+    
+      db.run(`CREATE TABLE IF NOT EXISTS inspection_photos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        inspection_id INTEGER,
+        room_name TEXT,
+        photo_path TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(inspection_id) REFERENCES inspections(id)
+      )`);
+    
+      // Indizes für bessere Performance
+      db.run('CREATE INDEX IF NOT EXISTS idx_inspections_deal ON inspections(deal_id)');
+      db.run('CREATE INDEX IF NOT EXISTS idx_inspection_photos ON inspection_photos(inspection_id)');
+
+      
       // Bildmerkmale-Tabelle
       db.run(`CREATE TABLE IF NOT EXISTS image_features (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,12 +116,52 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
       )`);
 
       
-    db.run(`CREATE TABLE IF NOT EXISTS admin_prices (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      price REAL NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+      db.run(`CREATE TABLE IF NOT EXISTS admin_prices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        price REAL NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`, (err) => {
+        if (err) {
+          console.error('Error creating admin_prices table:', err);
+        } else {
+          console.log('admin_prices table created successfully');
+          
+          // Prüfe und füge initiale Preise ein
+          db.get('SELECT COUNT(*) as count FROM admin_prices', [], (err, row) => {
+            if (err) {
+              console.error('Error checking prices:', err);
+              return;
+            }
+    
+            if (row.count === 0) {
+              console.log('Inserting initial prices...');
+              const initialPrices = [
+                { name: 'Preis pro m³', price: 50 },
+                { name: 'Umzugskartons (Standard)', price: 2 },
+                { name: 'Bücherkartons (Bücher&Geschirr)', price: 5 },
+                { name: 'Kleiderkisten', price: 3 }
+              ];
+    
+              initialPrices.forEach(price => {
+                db.run(
+                  'INSERT INTO admin_prices (name, price) VALUES (?, ?)',
+                  [price.name, price.price],
+                  function(err) {
+                    if (err) {
+                      console.error(`Error inserting price ${price.name}:`, err);
+                    } else {
+                      console.log(`Successfully inserted price: ${price.name} = ${price.price}`);
+                    }
+                  }
+                );
+              });
+            } else {
+              console.log('Prices already exist, skipping initialization');
+            }
+          });
+        }
+      });
 
       // Indizes für bessere Performance
       db.run('CREATE INDEX IF NOT EXISTS idx_recognitions_hash ON recognitions(imageHash)');
@@ -86,7 +171,8 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
           console.error('Error checking rooms:', err);
           return;
         }
-
+        console.log('Rooms count:', row.count);
+        // Wenn keine Räume existieren, füge die initialen Daten ein
         if (row.count === 0) {
           console.log('Inserting initial data...');
           
@@ -96,14 +182,18 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
                 console.error('Error inserting room:', err);
                 return;
               }
-
+              console.log(`Inserted room: ${roomName}`);
+    
+              // Füge Items für diesen Raum ein
               items.forEach(item => {
                 db.run(
                   'INSERT INTO admin_items (name, volume, room) VALUES (?, ?, ?)',
                   [item.name, item.volume, roomName],
                   (err) => {
                     if (err) {
-                      console.error('Error inserting item:', err);
+                      console.error(`Error inserting item ${item.name}:`, err);
+                    } else {
+                      console.log(`Inserted item: ${item.name} for room ${roomName}`);
                     }
                   }
                 );
@@ -111,38 +201,113 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
             });
           });
           
-          console.log('Initial data inserted successfully');
+          console.log('Initial data insertion started');
+        } else {
+          console.log('Data already exists, skipping initial insert');
         }
       });
+  
       
     });
+    app.get('/api/admin/inspections', (req, res) => {
+      console.log('Fetching inspections from database');
+      
+      db.all('SELECT * FROM inspections', [], (err, rows) => {
+        if (err) {
+          console.error('Database error:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        
+        // Always return an array, even if empty
+        console.log('Found inspections:', rows);
+        return res.json(rows || []);
+      });
+    });
+
+// In server.js bei den anderen API-Endpunkten
+app.get('/api/debug/tables', (req, res) => {
+  db.all(`
+    SELECT name 
+    FROM sqlite_master 
+    WHERE type='table'
+  `, [], (err, tables) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json(tables);
+  });
+});
+
+// Zusätzlich für die Struktur der inspections Tabelle
+app.get('/moving-assistant/api/debug/inspections-schema', (req, res) => {
+  db.all(`
+    SELECT sql 
+    FROM sqlite_master 
+    WHERE type='table' 
+    AND name='inspections'
+  `, [], (err, schema) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json(schema);
+  });
+});
     
-    // Initial Preisdaten einfügen (falls noch keine existieren)
-    db.get('SELECT COUNT(*) as count FROM admin_prices', [], (err, row) => {
-      if (err) {
-        console.error('Error checking prices:', err);
-        return;
-      }
+    // POST-Endpunkt für neue Inspektion
+    app.post('/moving-assistant/api/inspections', async (req, res) => {
+      const {
+        dealId,
+        moveDate,
+        totalVolume,
+        totalRooms,
+        originAddress,
+        originFloor,
+        originHasElevator,
+        destinationAddress,
+        destinationFloor,
+        destinationHasElevator,
+        packingService,
+        unpackingService,
+        liftLoading,
+        liftUnloading,
+        furnitureCost,
+        materialsCost,
+        totalCost,
+        notes,
+        data
+      } = req.body;
     
-      if (row.count === 0) {
-        const initialPrices = [
-          { name: 'furniture', price: 50, description: 'Preis pro m³' },
-          { name: 'Umzugskartons (Standard)', price: 2, description: 'Preis pro Stück' },
-          { name: 'Bücherkartons (Bücher&Geschirr)', price: 5, description: 'Preis pro Stück' },
-          { name: 'Kleiderkisten', price: 3, description: 'Preis pro Stück' }
-        ];
+      try {
+        const result = await db.run(`
+          INSERT INTO inspections (
+            deal_id, move_date, total_volume, total_rooms,
+            origin_address, origin_floor, origin_has_elevator,
+            destination_address, destination_floor, destination_has_elevator,
+            packing_service, unpacking_service,
+            lift_loading, lift_unloading,
+            furniture_cost, materials_cost, total_cost,
+            notes, data
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          dealId, moveDate, totalVolume, totalRooms,
+          originAddress, originFloor, originHasElevator,
+          destinationAddress, destinationFloor, destinationHasElevator,
+          packingService, unpackingService,
+          liftLoading, liftUnloading,
+          furnitureCost, materialsCost, totalCost,
+          notes, JSON.stringify(data)
+        ]);
     
-        initialPrices.forEach(price => {
-          db.run(
-            'INSERT INTO admin_prices (name, price) VALUES (?, ?)',
-            [price.name, price.price],
-            (err) => {
-              if (err) console.error('Error inserting price:', err);
-            }
-          );
-        });
+        res.json({ id: result.lastID });
+      } catch (error) {
+        console.error('Error creating inspection:', error);
+        res.status(500).json({ error: error.message });
       }
     });
+    
+    
   }
 });
 
@@ -200,7 +365,8 @@ function calculateSimilarity(features1, features2) {
 }
 
 // Hauptendpunkte
-app.post('/analyze', async (req, res) => {
+app.post(['/api/analyze', '/api/analyze/'], async (req, res) => {
+  console.log('Analyze endpoint hit', { body: req.body });
   try {
     const { images, roomName, customPrompt } = req.body;
 
@@ -429,35 +595,39 @@ app.post('/api/recognition/feedback', async (req, res) => {
 });
 
 // Admin Routes
-app.get('/api/admin/rooms', async (req, res) => {
-  db.all('SELECT * FROM admin_rooms', [], (err, rows) => {
+
+
+app.get('/api/admin/rooms', (req, res) => {
+  db.all('SELECT * FROM admin_rooms ORDER BY name ASC', [], (err, rows) => {
     if (err) {
-      res.status(500).json({ error: err.message });
-      return;
+      console.error('Error fetching rooms:', err);
+      return res.status(500).json({ error: err.message });
     }
-    res.json(rows);
+    // Ensure we always return an array
+    res.json(rows || []);
   });
 });
 
-app.post('/api/admin/rooms', async (req, res) => {
-  const { name } = req.body;
-  db.run('INSERT INTO admin_rooms (name) VALUES (?)', [name], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json({ id: this.lastID, name });
-  });
-});
-
-app.get('/api/admin/items', async (req, res) => {
+app.get('/api/admin/items', (req, res) => {
   const { room } = req.query;
-  db.all('SELECT * FROM admin_items WHERE room = ?', [room], (err, rows) => {
+  console.log('GET /api/admin/items called with room:', room);
+
+  if (!room) {
+    console.log('No room parameter provided');
+    return res.status(400).json([]);
+  }
+
+  const query = 'SELECT * FROM admin_items WHERE room = ?';
+  console.log('Executing query:', query, 'with room:', room);
+
+  db.all(query, [room], (err, rows) => {
     if (err) {
-      res.status(500).json({ error: err.message });
-      return;
+      console.error('Database error fetching items:', err);
+      return res.status(500).json({ error: err.message });
     }
-    res.json(rows);
+    
+    console.log(`Found ${rows?.length || 0} items for room ${room}:`, rows);
+    res.json(rows || []);
   });
 });
 

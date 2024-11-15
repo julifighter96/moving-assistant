@@ -1,57 +1,64 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Package, Truck, Calculator, ClipboardList, FileText } from 'lucide-react';
 import { updateDealForOffer } from '../utils/dealUpdateFunctions';
 import { addNoteToDeal } from '../services/pipedriveService';
+import MovingPriceCalculator from './MovingPriceCalculator';
 
 const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
-  const { furnitureCost, materialCost, totalCost, combinedData } = useMemo(() => {
-    const combinedData = {
-      items: {},
-      packMaterials: {},
-      totalVolume: 0,
-      estimatedWeight: 0,
-      demontageCount: 0,
-      duebelarbeitenCount: 0
-    };
+ const [showPriceCalculator, setShowPriceCalculator] = useState(false);
+ const [totalCost, setTotalCost] = useState(0);
 
-    // Combine data from rooms
-    Object.values(inspectionData.rooms || {}).forEach(room => {
-      room.items.forEach(item => {
-        if (!combinedData.items[item.name]) {
-          combinedData.items[item.name] = { ...item, quantity: 0 };
-        }
-        combinedData.items[item.name].quantity += item.quantity;
-        if (item.demontiert) combinedData.demontageCount += item.quantity;
-        if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
-      });
+ const { furnitureCost, materialCost, combinedData } = useMemo(() => {
+   const combinedData = {
+     items: {},
+     packMaterials: {},
+     totalVolume: 0,
+     estimatedWeight: 0,
+     demontageCount: 0,
+     duebelarbeitenCount: 0
+   };
 
-      room.packMaterials.forEach(material => {
-        combinedData.packMaterials[material.name] = 
-          (combinedData.packMaterials[material.name] || 0) + material.quantity;
-      });
+   // Combine data from rooms
+   Object.values(inspectionData.rooms || {}).forEach(room => {
+     room.items.forEach(item => {
+       if (!combinedData.items[item.name]) {
+         combinedData.items[item.name] = { ...item, quantity: 0 };
+       }
+       combinedData.items[item.name].quantity += item.quantity;
+       if (item.demontiert) combinedData.demontageCount += item.quantity;
+       if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
+     });
 
-      combinedData.totalVolume += room.totalVolume;
-      combinedData.estimatedWeight += room.estimatedWeight;
-    });
+     room.packMaterials.forEach(material => {
+       combinedData.packMaterials[material.name] = 
+         (combinedData.packMaterials[material.name] || 0) + material.quantity;
+     });
 
-    // Calculate costs
-    const furnitureCost = combinedData.totalVolume * 50; // Base rate per m³
-    const materialCost = Object.entries(combinedData.packMaterials).reduce((total, [name, quantity]) => {
-      const prices = {
-        'Umzugskartons (Standard)': 2,
-        'Bücherkartons (Bücher&Geschirr)': 5,
-        'Kleiderkisten': 3,
-      };
-      return total + (prices[name] || 0) * quantity;
-    }, 0);
+     combinedData.totalVolume += room.totalVolume;
+     combinedData.estimatedWeight += room.estimatedWeight;
+   });
 
-    return {
-      furnitureCost,
-      materialCost,
-      totalCost: furnitureCost + materialCost,
-      combinedData
-    };
-  }, [inspectionData]);
+   // Calculate costs
+   const furnitureCost = combinedData.totalVolume * 50; // Base rate per m³
+   const materialCost = Object.entries(combinedData.packMaterials).reduce((total, [name, quantity]) => {
+     const prices = {
+       'Umzugskartons (Standard)': 2,
+       'Bücherkartons (Bücher&Geschirr)': 5,
+       'Kleiderkisten': 3,
+     };
+     return total + (prices[name] || 0) * quantity;
+   }, 0);
+
+   return {
+     furnitureCost,
+     materialCost,
+     combinedData
+   };
+ }, [inspectionData]);
+
+ useEffect(() => {
+   setTotalCost(furnitureCost + materialCost);
+ }, [furnitureCost, materialCost]);
 
   // Filter out items with quantity 0
   const activeItems = Object.entries(combinedData.items || {})
@@ -62,7 +69,6 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
 
   const handleAcceptOffer = async () => {
     try {
-      console.log('Starting offer acceptance with inspection data:', inspectionData);
       
       const offerDetails = {
         rooms: inspectionData.rooms,
@@ -245,6 +251,32 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
               </div>
             </div>
           </div>
+
+       <div className="bg-gray-50 rounded-xl p-6 mt-6">
+  <div className="flex items-center justify-between mb-4">
+    <div className="flex items-center gap-3">
+      <Truck className="w-5 h-5 text-gray-600" />
+      <h3 className="text-lg font-semibold text-gray-900">Streckenberechnung</h3>
+    </div>
+    <button
+      onClick={() => setShowPriceCalculator(!showPriceCalculator)}
+      className="text-sm text-primary hover:text-primary-dark"
+    >
+      {showPriceCalculator ? 'Ausblenden' : 'Anzeigen'}
+    </button>
+  </div>
+  {console.log('inspectionData:', inspectionData)}
+  {showPriceCalculator && (
+  <MovingPriceCalculator 
+    defaultOrigin={inspectionData?.moveInfo?.['07c3da8804f7b96210e45474fba35b8691211ddd']} // Auszugsadresse
+    defaultDestination={inspectionData?.moveInfo?.['9cb4de1018ec8404feeaaaf7ee9b293c78c44281']} // Einzugsadresse
+    onPriceCalculated={(calculatedPrice) => {
+      const transportCost = parseFloat(calculatedPrice);
+      setTotalCost(prev => prev + transportCost);
+    }}
+  />
+)}
+</div>
 
           {/* Submit Button */}
           <button

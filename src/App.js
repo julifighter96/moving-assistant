@@ -14,6 +14,7 @@ import AIAnalysisTab from './components/AIAnalysisTab';
 import { adminService } from './services/adminService';
 import AdminPanel from './components/AdminPanel';
 import InspectionOverview from './components/InspectionOverview';
+import MovingTruckSimulator, { TRUCK_DIMENSIONS, autoPackItems } from './components/MovingTruckSimulator';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -77,6 +78,7 @@ const STEPS = [
   { label: 'Räume & Gegenstände', status: 'pending' },
   { label: 'Zusätzliche Details', status: 'pending' },
   { label: 'Angebot erstellen', status: 'pending' },
+  { label: 'Beladungssimulation', status: 'pending' },
   { label: 'Administration', status: 'pending', id: 'admin' }
 ];
 
@@ -144,6 +146,54 @@ const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsCli
   );
 };
 
+const transformRoomItemsForSimulator = (roomsData) => {
+  let simulatorItems = [];
+  let idCounter = 1;
+
+  Object.entries(roomsData).forEach(([roomName, roomData]) => {
+    roomData.items.forEach(item => {
+      if (item.quantity > 0) {
+        // Create items based on quantity
+        for (let i = 0; i < item.quantity; i++) {
+          // Estimate dimensions based on volume
+          // Assuming a somewhat standard ratio for furniture
+          const volume = item.volume;
+          const estimatedDimensions = calculateDimensions(volume);
+
+          simulatorItems.push({
+            id: idCounter++,
+            name: `${item.name} (${roomName})`,
+            position: [0, estimatedDimensions[1]/2, 0], // Start at ground level
+            size: estimatedDimensions,
+            color: getRandomColor(),
+          });
+        }
+      }
+    });
+  });
+
+  return simulatorItems;
+};
+
+const calculateDimensions = (volume) => {
+  // This is a simple estimation - adjust based on your needs
+  const ratio = Math.cbrt(volume);
+  return [
+    ratio * 1.5, // width - typically wider
+    ratio * 0.8, // height - typically shorter
+    ratio * 1.2  // length - typically longer
+  ];
+};
+
+// Helper function to get random colors for items
+const getRandomColor = () => {
+  const colors = [
+    '#f87171', '#fb923c', '#fbbf24', '#a3e635', 
+    '#22d3ee', '#818cf8', '#2dd4bf', '#4ade80'
+  ];
+  return colors[Math.floor(Math.random() * colors.length)];
+};
+
 const StepNavigation = ({ currentStep, totalSteps, onStepChange }) => {
   return (
     <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
@@ -162,6 +212,7 @@ const StepNavigation = ({ currentStep, totalSteps, onStepChange }) => {
           {currentStep === 2 && "Räume & Gegenstände"}
           {currentStep === 3 && "Zusätzliche Informationen"}
           {currentStep === 4 && "Angebot erstellen"}
+          {currentStep === 5 && "Beladungssimulation"}
         </span>
       </div>
       <button 
@@ -329,6 +380,80 @@ function App() {
     setCurrentRoom(newRoom);
   }, []);
 
+  const [items, setItems] = useState([]);
+
+  // Add effect to initialize items when step 5 is reached
+  useEffect(() => {
+    if (currentStep === 5) {
+      const initialItems = Object.entries(roomsData).flatMap(([roomName, roomData]) => 
+        roomData.items
+          .filter(item => item.quantity > 0)
+          .flatMap(item => Array(item.quantity).fill().map((_, i) => {
+            const volume = parseFloat(item.volume) || 1;
+            const estimatedDimensions = [
+              Math.cbrt(volume) * 1.5,
+              Math.cbrt(volume) * 0.8,
+              Math.cbrt(volume) * 1.2
+            ];
+            const row = Math.floor(i / 3);
+            const col = i % 3;
+            
+            return {
+              id: `${roomName}-${item.name}-${i}`,
+              name: `${item.name} (${roomName})`,
+              position: [
+                -TRUCK_DIMENSIONS.width/3 + col * (TRUCK_DIMENSIONS.width/3),
+                estimatedDimensions[1]/2,
+                -TRUCK_DIMENSIONS.length/2 + 1 + row * 2
+              ],
+              size: estimatedDimensions,
+              color: '#' + Math.floor(Math.random()*16777215).toString(16)
+            };
+          }))
+      );
+      setItems(initialItems);
+    }
+  }, [currentStep, roomsData]);
+
+
+  const handleAutoPack = () => {
+    const packed = autoPackItems(items, TRUCK_DIMENSIONS);
+    setItems(packed);
+  };
+
+const getInitialItemPositions = (roomsData) => {
+  const items = Object.entries(roomsData).flatMap(([roomName, roomData]) => 
+    roomData.items
+      .filter(item => item.quantity > 0)
+      .flatMap(item => Array(item.quantity).fill().map((_, i) => ({
+        id: `${roomName}-${item.name}-${i}`,
+        name: `${item.name} (${roomName})`,
+        position: [0, 0.4, 0],
+        size: [Math.cbrt(item.volume) * 1.5, Math.cbrt(item.volume) * 0.8, Math.cbrt(item.volume) * 1.2],
+        color: '#' + Math.floor(Math.random()*16777215).toString(16)
+      })))
+  );
+
+  return items.map((item, index) => {
+    const row = Math.floor(index / 3);
+    const col = index % 3;
+    return {
+      ...item,
+      position: [
+        -TRUCK_DIMENSIONS.width/3 + col * (TRUCK_DIMENSIONS.width/3),
+        item.size[1]/2,
+        -TRUCK_DIMENSIONS.length/2 + 1 + row * 2
+      ]
+    };
+  });
+};
+
+useEffect(() => {
+  if (currentStep === 5) {
+    setItems(getInitialItemPositions(roomsData));
+  }
+}, [currentStep, roomsData]);
+
   const handleAddItem = useCallback((newItem) => {
     setRoomsData(prevData => {
       const updatedData = { ...prevData };
@@ -360,6 +485,7 @@ function App() {
   const handleOfferComplete = () => {
     setShowPopup(true);
     setPopupMessage('Das Angebot wurde erfolgreich erstellt und der Deal aktualisiert.');
+    setCurrentStep(5);
     setTimeout(() => {
       resetToStart();
     }, 3000);
@@ -375,6 +501,12 @@ function App() {
     } else if (newStep === 'admin') {
       setCurrentStep('admin');
     }
+  };
+
+  const handleFinish = () => {
+    setTimeout(() => {
+      resetToStart();
+    }, 3000);
   };
 
   return (
@@ -631,6 +763,23 @@ function App() {
                   </div>
                 </div>
               )}
+{currentStep === 5 && (
+  <div className="bg-white rounded-lg shadow-sm">
+    <div className="p-6 border-b border-gray-200">
+      <h2 className="text-xl font-semibold">3D Beladungssimulation</h2>
+      <p className="text-gray-500 mt-1">
+        Planen Sie die optimale Beladung des Umzugswagens
+      </p>
+    </div>
+    <div className="p-6">
+      
+      <div className="h-[calc(100vh-250px)]">
+        <MovingTruckSimulator items={items} 
+      setItems={setItems}/>
+      </div>
+    </div>
+  </div>
+)}
               {currentStep === 'admin' && (
   <div className="bg-white rounded-lg shadow-sm">
     <div className="p-6 border-b border-gray-200">

@@ -6,6 +6,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
     "@electron/remote": "^2.1.2",
+    "@react-three/drei": "^9.116.3",
+    "@react-three/fiber": "^8.17.10",
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
@@ -15,11 +17,15 @@
     "dexie": "^4.0.9",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
+    "lodash": "^4.17.21",
     "lucide-react": "^0.263.1",
     "react": "^18.3.1",
     "react-datepicker": "^7.4.0",
+    "react-dnd": "^16.0.1",
+    "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^18.3.1",
     "react-scripts": "5.0.1",
+    "three": "^0.170.0",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

@@ -37,6 +37,9 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
       db.run(`CREATE TABLE IF NOT EXISTS admin_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+        width REAL DEFAULT 0,
+        length REAL DEFAULT 0,
+        height REAL DEFAULT 0,
         volume REAL NOT NULL,
         room TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -166,6 +169,30 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
       // Indizes für bessere Performance
       db.run('CREATE INDEX IF NOT EXISTS idx_recognitions_hash ON recognitions(imageHash)');
       db.run('CREATE INDEX IF NOT EXISTS idx_features_hash ON image_features(imageHash)');
+      db.run("PRAGMA foreign_keys=off;");
+      db.run("BEGIN TRANSACTION;");
+      
+      db.all("PRAGMA table_info(admin_items);", [], (err, rows) => {
+        if (err) {
+          console.error('Error checking columns:', err);
+          return;
+        }
+    
+        const columns = rows.map(row => row.name);
+        
+        if (!columns.includes('width')) {
+          db.run("ALTER TABLE admin_items ADD COLUMN width REAL DEFAULT 0;");
+        }
+        if (!columns.includes('length')) {
+          db.run("ALTER TABLE admin_items ADD COLUMN length REAL DEFAULT 0;");
+        }
+        if (!columns.includes('height')) {
+          db.run("ALTER TABLE admin_items ADD COLUMN height REAL DEFAULT 0;");
+        }
+      });
+      
+      db.run("COMMIT;");
+      db.run("PRAGMA foreign_keys=on;");
       db.get('SELECT COUNT(*) as count FROM admin_rooms', [], (err, row) => {
         if (err) {
           console.error('Error checking rooms:', err);
@@ -632,31 +659,36 @@ app.get('/api/admin/items', (req, res) => {
 });
 
 app.post('/api/admin/items', async (req, res) => {
-  const { name, volume, room } = req.body;
+  const { name, width, length, height, volume, room } = req.body;
+  
   db.run(
-    'INSERT INTO admin_items (name, volume, room) VALUES (?, ?, ?)',
-    [name, volume, room],
+    'INSERT INTO admin_items (name, width, length, height, volume, room) VALUES (?, ?, ?, ?, ?, ?)',
+    [name, width, length, height, volume, room],
     function(err) {
       if (err) {
-        res.status(500).json({ error: err.message });
-        return;
+        console.error('Error inserting item:', err);
+        return res.status(500).json({ error: err.message });
       }
-      res.json({ id: this.lastID, name, volume, room });
+      res.json({ 
+        id: this.lastID, 
+        name, 
+        width, 
+        length, 
+        height, 
+        volume, 
+        room 
+      });
     }
   );
 });
 
 app.put('/api/admin/items/:id', (req, res) => {
   const { id } = req.params;
-  const { name, volume } = req.body;
+  const { name, width, length, height, volume } = req.body;
   
-  if (!name || volume === undefined) {
-    return res.status(400).json({ error: 'Name and volume are required' });
-  }
-
   db.run(
-    'UPDATE admin_items SET name = ?, volume = ? WHERE id = ?',
-    [name, volume, id],
+    'UPDATE admin_items SET name = ?, width = ?, length = ?, height = ?, volume = ? WHERE id = ?',
+    [name, width, length, height, volume, id],
     function(err) {
       if (err) {
         console.error('Error updating item:', err);
@@ -665,7 +697,7 @@ app.put('/api/admin/items/:id', (req, res) => {
       if (this.changes === 0) {
         return res.status(404).json({ error: 'Item not found' });
       }
-      res.json({ id: parseInt(id), name, volume });
+      res.json({ id: parseInt(id), name, width, length, height, volume });
     }
   );
 });

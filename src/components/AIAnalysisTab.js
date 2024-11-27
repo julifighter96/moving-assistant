@@ -289,13 +289,17 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   Berechne auch das Gesamtvolumen aller Möbel.
   Gib auch Umzugshinweise und Besonderheiten an.
   
+
+  Das Format der gegenstände muss in m sein also bei 100cm 0.1, aber das Volumen in m³.
   Format als JSON:
   {
     "items": [{
-      "name": string,        // Name des Möbelstücks
-      "dimensions": string,  // Maße in cm (z.B. "200 x 100 x 75")
-      "volume": number,      // Volumen in m³
-      "description": string  // Beschreibung
+      "name": string, 
+      "length": number, 
+      "width": number, 
+      "height": number,
+      "volume": number,
+      "description": string
     }],
     "totalVolume": number,   // Gesamtvolumen in m³
     "summary": string,       // Zusammenfassung des Raums
@@ -331,24 +335,30 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
         onClick={() => setCustomPrompt(`Analysiere diese Bilder eines ${roomName}s und identifiziere alle Möbelstücke. 
   Für jeden Gegenstand gib an:
   1. Name auf Deutsch
-  2. Geschätzte Maße (L x B x H in cm)
+  2. Exakte Maße in Zentimetern:
+     - Länge (L)
+     - Breite (B) 
+     - Höhe (H)
   3. Geschätztes Volumen in m³
   4. Kurze Beschreibung (Material, Farbe, Zustand)
   
   Berechne auch das Gesamtvolumen aller Möbel.
   Gib auch Umzugshinweise und Besonderheiten an.
   
+  
   Format als JSON:
   {
     "items": [{
-      "name": string,
-      "dimensions": string,
+      "name": string, 
+      "length": number, 
+      "width": number, 
+      "height": number,
       "volume": number,
       "description": string
     }],
-    "totalVolume": number,
-    "summary": string,
-    "movingTips": string
+    "totalVolume": number,   // Gesamtvolumen in m³
+    "summary": string,       // Zusammenfassung des Raums
+    "movingTips": string    // Umzugshinweise
   }`)}
         className="text-sm text-blue-600 hover:text-blue-800"
       >

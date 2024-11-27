@@ -59,14 +59,22 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
     loadItems();
   }, [selectedRoom]);
 
+
   const handleUpdateItem = async (item) => {
     try {
       setLoading(true);
       setError(null);
-      await adminService.updateItem(item.id, item);
+      const itemData = {
+        name: item.name,
+        width: parseFloat(item.width) || 0,
+        length: parseFloat(item.length) || 0,
+        height: parseFloat(item.height) || 0,
+        volume: parseFloat(item.width * item.length * item.height) || 0,
+        room: selectedRoom
+      };
+      await adminService.updateItem(item.id, itemData);
       setEditingItem(null);
       await loadItems(selectedRoom);
-      
       if (onUpdateItems) {
         onUpdateItems(await adminService.getItems(selectedRoom));
       }
@@ -126,18 +134,22 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
       setLoading(false);
     }
   };
-
   const handleAddItem = async () => {
     if (!newItem.name.trim() || !selectedRoom) return;
     
     try {
       setLoading(true);
       setError(null);
-      await adminService.addItem({
-        ...newItem,
+      const itemData = {
+        name: newItem.name,
+        width: parseFloat(newItem.width) || 0,
+        length: parseFloat(newItem.length) || 0, 
+        height: parseFloat(newItem.height) || 0,
+        volume: parseFloat(newItem.width * newItem.length * newItem.height) || 0,
         room: selectedRoom
-      });
-      setNewItem({ name: '', volume: 0 });
+      };
+      await adminService.addItem(itemData);
+      setNewItem({ name: '', width: 0, length: 0, height: 0 });
       await loadItems(selectedRoom);
       if (onUpdateItems) {
         onUpdateItems(await adminService.getItems(selectedRoom));
@@ -221,20 +233,38 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
           
           {/* Neuen Gegenstand hinzufügen */}
           <div className="flex gap-4 mb-6">
+          <div className="grid grid-cols-5 gap-4 mb-6">
   <input
     type="text"
     value={newItem.name}
     onChange={(e) => setNewItem({...newItem, name: e.target.value})}
     placeholder="Name des Gegenstands"
-    className="flex-grow p-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-primary"
+    className="col-span-2 p-2 border rounded"
   />
-  <input
-    type="number"
-    value={newItem.volume}
-    onChange={(e) => setNewItem({...newItem, volume: parseFloat(e.target.value) || 0})}
-    placeholder="Volumen (m³)"
-    className="w-32 p-2 border-t border-b border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
-  />
+  <div className="col-span-3 grid grid-cols-3 gap-2">
+    <input
+      type="number"
+      value={newItem.width}
+      onChange={(e) => setNewItem({...newItem, width: parseFloat(e.target.value)})}
+      placeholder="Breite (cm)"
+      className="p-2 border rounded"
+    />
+    <input
+      type="number" 
+      value={newItem.length}
+      onChange={(e) => setNewItem({...newItem, length: parseFloat(e.target.value)})}
+      placeholder="Länge (cm)"
+      className="p-2 border rounded"
+    />
+    <input
+      type="number"
+      value={newItem.height}
+      onChange={(e) => setNewItem({...newItem, height: parseFloat(e.target.value)})}
+      placeholder="Höhe (cm)"
+      className="p-2 border rounded"
+    />
+    </div>
+    </div>
   <button
     onClick={() => {
       if (newItem.name && newItem.volume > 0) {
@@ -249,64 +279,87 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
   </button>
 </div>
 
-          {/* Liste der Gegenstände */}
-          <div className="space-y-2">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="flex justify-between items-center p-4 bg-gray-50 rounded-lg"
-              >
-                {editingItem?.id === item.id ? (
-                  // Bearbeitungsmodus
-                  <div className="flex w-full gap-4">
-                    <input
-                      type="text"
-                      value={editingItem.name}
-                      onChange={(e) => setEditingItem({
-                        ...editingItem,
-                        name: e.target.value
-                      })}
-                      className="flex-1 rounded-md border-gray-300 px-3 py-2"
-                    />
-                    <input
-                      type="number"
-                      value={editingItem.volume}
-                      onChange={(e) => setEditingItem({
-                        ...editingItem,
-                        volume: parseFloat(e.target.value) || 0
-                      })}
-                      className="w-32 rounded-md border-gray-300 px-3 py-2"
-                    />
-                    <button
-                      onClick={() => handleUpdateItem(editingItem)}
-                      className="px-4 py-2 bg-green-500 text-white rounded-md"
-                    >
-                      Speichern
-                    </button>
-                    <button
-                      onClick={() => setEditingItem(null)}
-                      className="px-4 py-2 bg-gray-500 text-white rounded-md"
-                    >
-                      Abbrechen
-                    </button>
-                  </div>
-                ) : (
-                  // Anzeigemodus
-                  <>
-                    <span className="font-medium">{item.name}</span>
-                    <div className="flex items-center gap-4">
-                      <span className="text-gray-600">{item.volume} m³</span>
-                      <button
-                        onClick={() => setEditingItem(item)}
-                        className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-md"
-                      >
-                        Bearbeiten
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
+<div className="grid grid-cols-6 gap-4 px-4 py-2 bg-gray-100 rounded-t-lg font-medium">
+  <div className="col-span-2">Name</div>
+  <div>Breite (cm)</div>
+  <div>Länge (cm)</div>
+  <div>Höhe (cm)</div>
+  <div>Aktionen</div>
+</div>
+
+<div className="space-y-2">
+  {items.map((item) => (
+    <div key={item.id} className="grid grid-cols-6 gap-4 p-4 bg-white rounded-lg items-center">
+      {editingItem?.id === item.id ? (
+        <>
+          <div className="col-span-2">
+            <input
+              type="text"
+              value={editingItem.name}
+              onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+          <div>
+            <input
+              type="number"
+              value={editingItem.width || 0}
+              onChange={(e) => setEditingItem({...editingItem, width: parseFloat(e.target.value)})}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+          <div>
+            <input
+              type="number"
+              value={editingItem.length || 0}
+              onChange={(e) => setEditingItem({...editingItem, length: parseFloat(e.target.value)})}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+          <div>
+            <input
+              type="number"
+              value={editingItem.height || 0}
+              onChange={(e) => setEditingItem({...editingItem, height: parseFloat(e.target.value)})}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleUpdateItem(editingItem)}
+              className="px-3 py-1 bg-green-500 text-white rounded"
+            >
+              Speichern
+            </button>
+            <button
+              onClick={() => setEditingItem(null)}
+              className="px-3 py-1 bg-gray-500 text-white rounded"
+            >
+              Abbrechen
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="col-span-2 font-medium">{item.name}</div>
+          <div>{item.width || 0}</div>
+          <div>{item.length || 0}</div>
+          <div>{item.height || 0}</div>
+          <div>
+            <button
+              onClick={() => setEditingItem(item)}
+              className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded"
+            >
+              Bearbeiten
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+    
+  ))}
+
+
             {!items.length && (
               <p className="text-gray-500 text-center py-4">
                 Keine Gegenstände vorhanden

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect  } from 'react';
-import { Home, ClipboardList, Settings, Check, Plus } from 'lucide-react';
+import { Home, ClipboardList, Settings, Check, Plus, MapPin } from 'lucide-react';
 import DealViewer from './components/DealViewer';
 import MoveInformationComponent from './components/MoveInformationComponent';
 import RoomSelector from './components/RoomSelector';
@@ -11,6 +11,7 @@ import LoginWrapper from './components/LoginWrapper';
 import { theme } from './theme';
 import logo from './assets/images/Riedlin-Logo-512px_Neu.webp';
 import AIAnalysisTab from './components/AIAnalysisTab';
+import DailyRoutePlanner from './components/DailyRoutePlanner';
 import { adminService } from './services/adminService';
 import AdminPanel from './components/AdminPanel';
 import InspectionOverview from './components/InspectionOverview';
@@ -18,11 +19,6 @@ import MovingTruckSimulator, { TRUCK_DIMENSIONS, autoPackItems } from './compone
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
-// Bei den anderen useState Definitionen (ca. Zeile 40)
-
-
-// isAdmin wird bereits vom LoginWrapper gesetzt
-
 
 const DEFAULT_ROOM_INVENTORY = {
   'Wohnzimmer': [
@@ -82,7 +78,7 @@ const STEPS = [
   { label: 'Administration', status: 'pending', id: 'admin' }
 ];
 
-const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsClick }) => {
+const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsClick, onRouteClick  }) => {
   return (
     <header className="bg-white border-b border-neutral-200 h-16 fixed top-0 left-0 right-0 z-50">
       <div className="h-full flex items-center justify-between px-6">
@@ -131,6 +127,13 @@ const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsCli
             <Settings className="h-6 w-6" />
             <span className="ml-2 text-base">Settings</span>
           </button>
+          <button 
+            onClick={onRouteClick}
+            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
+          >
+            <MapPin className="h-6 w-6" />
+            <span className="ml-2 text-base">Routen</span>
+          </button>
 
           <button 
             type="button"
@@ -146,34 +149,7 @@ const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsCli
   );
 };
 
-const transformRoomItemsForSimulator = (roomsData) => {
-  let simulatorItems = [];
-  let idCounter = 1;
 
-  Object.entries(roomsData).forEach(([roomName, roomData]) => {
-    roomData.items.forEach(item => {
-      if (item.quantity > 0) {
-        // Create items based on quantity
-        for (let i = 0; i < item.quantity; i++) {
-          // Estimate dimensions based on volume
-          // Assuming a somewhat standard ratio for furniture
-          const volume = item.volume;
-          const estimatedDimensions = calculateDimensions(volume);
-
-          simulatorItems.push({
-            id: idCounter++,
-            name: `${item.name} (${roomName})`,
-            position: [0, estimatedDimensions[1]/2, 0], // Start at ground level
-            size: estimatedDimensions,
-            color: getRandomColor(),
-          });
-        }
-      }
-    });
-  });
-
-  return simulatorItems;
-};
 
 const calculateDimensions = (volume) => {
   // This is a simple estimation - adjust based on your needs
@@ -184,6 +160,8 @@ const calculateDimensions = (volume) => {
     ratio * 1.2  // length - typically longer
   ];
 };
+
+
 
 // Helper function to get random colors for items
 const getRandomColor = () => {
@@ -227,6 +205,7 @@ const StepNavigation = ({ currentStep, totalSteps, onStepChange }) => {
 };
 
 function App() {
+  
   const [currentStep, setCurrentStep] = useState(0);
   const [moveInfo, setMoveInfo] = useState(null);
   const [selectedDealId, setSelectedDealId] = useState(null);
@@ -315,31 +294,81 @@ function App() {
   const [showPopup, setShowPopup] = useState(false);
   const [popupMessage, setPopupMessage] = useState('');
 
+  const handleRouteClick = () => {
+    setCurrentStep('route-planner');
+  };
   const handleStartInspection = useCallback((deal) => {
     setSelectedDealId(deal.id);
     setDealData(deal);
     setCurrentStep(1);
   }, []);
 
-  const resetToStart = useCallback(() => {
+  const calculateTotalVolume = (roomData) => {
+    return roomData.items.reduce((itemSum, item) => {
+      const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
+      return itemSum + itemVolume;
+    }, 0);
+  };
+
+  const resetToStart = useCallback(async () => {
     setCurrentStep(0);
     setMoveInfo(null);
     setSelectedDealId(null);
     setDealData(null);
-    setRooms(INITIAL_ROOMS);
-    setCurrentRoom(INITIAL_ROOMS[0]);
-    setRoomsData(() => {
+    
+    try {
+      const configuredRooms = await adminService.getRooms();
+      const roomNames = configuredRooms.map(room => room.name);
+      setRooms(roomNames);
+      setCurrentRoom(roomNames[0]);
+
       const initialRoomsData = {};
-      INITIAL_ROOMS.forEach(room => {
-        initialRoomsData[room] = {
-          items: DEFAULT_ROOM_INVENTORY[room] || [],
-          packMaterials: DEFAULT_PACK_MATERIALS,
-          totalVolume: 0,
-          estimatedWeight: 0,
-        };
+      for (const room of configuredRooms) {
+        try {
+          const items = await adminService.getItems(room.name);
+          initialRoomsData[room.name] = {
+            items: items.map(item => ({
+              ...item,
+              quantity: 0,
+              demontiert: false,
+              duebelarbeiten: false
+            })),
+            packMaterials: DEFAULT_PACK_MATERIALS,
+            totalVolume: 0,
+            estimatedWeight: 0,
+            notes: ''
+          };
+        } catch (error) {
+          console.error(`Failed to load items for room ${room.name}:`, error);
+          initialRoomsData[room.name] = {
+            items: DEFAULT_ROOM_INVENTORY[room.name] || [],
+            packMaterials: DEFAULT_PACK_MATERIALS,
+            totalVolume: 0,
+            estimatedWeight: 0,
+            notes: ''
+          };
+        }
+      }
+      setRoomsData(initialRoomsData);
+    } catch (error) {
+      console.error('Error resetting to start:', error);
+      // Fallback zu Default-Werten
+      setRooms(INITIAL_ROOMS);
+      setCurrentRoom(INITIAL_ROOMS[0]);
+      setRoomsData(() => {
+        const initialRoomsData = {};
+        INITIAL_ROOMS.forEach(room => {
+          initialRoomsData[room] = {
+            items: DEFAULT_ROOM_INVENTORY[room] || [],
+            packMaterials: DEFAULT_PACK_MATERIALS,
+            totalVolume: 0,
+            estimatedWeight: 0,
+          };
+        });
+        return initialRoomsData;
       });
-      return initialRoomsData;
-    });
+    }
+    
     setAdditionalInfo(null);
   }, []);
 
@@ -421,32 +450,36 @@ function App() {
     setItems(packed);
   };
 
-const getInitialItemPositions = (roomsData) => {
-  const items = Object.entries(roomsData).flatMap(([roomName, roomData]) => 
-    roomData.items
-      .filter(item => item.quantity > 0)
-      .flatMap(item => Array(item.quantity).fill().map((_, i) => ({
-        id: `${roomName}-${item.name}-${i}`,
-        name: `${item.name} (${roomName})`,
-        position: [0, 0.4, 0],
-        size: [Math.cbrt(item.volume) * 1.5, Math.cbrt(item.volume) * 0.8, Math.cbrt(item.volume) * 1.2],
-        color: '#' + Math.floor(Math.random()*16777215).toString(16)
-      })))
-  );
-
-  return items.map((item, index) => {
-    const row = Math.floor(index / 3);
-    const col = index % 3;
-    return {
-      ...item,
-      position: [
-        -TRUCK_DIMENSIONS.width/3 + col * (TRUCK_DIMENSIONS.width/3),
-        item.size[1]/2,
-        -TRUCK_DIMENSIONS.length/2 + 1 + row * 2
-      ]
-    };
-  });
-};
+  const getInitialItemPositions = (roomsData) => {
+    const items = Object.entries(roomsData).flatMap(([roomName, roomData]) => 
+      roomData.items
+        .filter(item => item.quantity > 0)
+        .flatMap(item => Array(item.quantity).fill().map((_, i) => ({
+          id: `${roomName}-${item.name}-${i}`,
+          name: `${item.name} (${roomName})`,
+          position: [0, 0.4, 0],
+          size: [
+            item.width / 100,   // Convert width to meters
+            item.height / 100,  // Convert height to meters
+            item.length / 100   // Convert length to meters
+          ],
+          color: '#' + Math.floor(Math.random()*16777215).toString(16)
+        })))
+    );
+  
+    return items.map((item, index) => {
+      const row = Math.floor(index / 3);
+      const col = index % 3;
+      return {
+        ...item,
+        position: [
+          -TRUCK_DIMENSIONS.width/3 + col * (TRUCK_DIMENSIONS.width/3),
+          item.size[1]/2,  // Using the converted height
+          -TRUCK_DIMENSIONS.length/2 + 1 + row * 2
+        ]
+      };
+    });
+  };
 
 useEffect(() => {
   if (currentStep === 5) {
@@ -485,7 +518,6 @@ useEffect(() => {
   const handleOfferComplete = () => {
     setShowPopup(true);
     setPopupMessage('Das Angebot wurde erfolgreich erstellt und der Deal aktualisiert.');
-    setCurrentStep(5);
     setTimeout(() => {
       resetToStart();
     }, 3000);
@@ -516,6 +548,7 @@ useEffect(() => {
       onAdminClick={() => setCurrentStep('admin')}
       onHomeClick={() => setCurrentStep(0)}
       onInspectionsClick={() => setCurrentStep('inspections')}
+      onRouteClick={handleRouteClick}  
        />
       <main className="pt-20 px-6 pb-6">
         <div className="max-w-none mx-auto">
@@ -584,10 +617,12 @@ useEffect(() => {
     </span>
   </div>
   <button 
-    onClick={() => handleStepChange(currentStep + 1)} 
-    disabled={currentStep === STEPS.length - 2 || currentStep === 'admin'}
-    className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
-  >
+  onClick={() => handleStepChange(currentStep + 1)} 
+  disabled={currentStep === STEPS.length - 2 || currentStep === 'admin' || currentStep === 4 || currentStep === 5}
+  className={`h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px] ${
+    currentStep === 4 || currentStep === 5 ? 'hidden' : ''
+  }`}
+>
     Weiter
   </button>
 </div>
@@ -638,22 +673,23 @@ useEffect(() => {
           onAddRoom={handleAddRoom}
         />
         
-        {/* Quick Summary */}
         <div className="mt-6 pt-6 border-t border-gray-200">
-          <h3 className="text-lg font-medium mb-2">Zusammenfassung</h3>
-          <div className="space-y-2 text-sm text-gray-600">
-            <div className="flex justify-between">
-              <span>Gesamtvolumen:</span>
-              <span className="font-medium">
-                {Object.values(roomsData).reduce((sum, room) => sum + room.totalVolume, 0).toFixed(2)} m³
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Räume:</span>
-              <span className="font-medium">{rooms.length}</span>
-            </div>
+        <h3 className="text-lg font-medium mb-2">Zusammenfassung</h3>
+        <div className="space-y-2 text-sm text-gray-600">
+          <div className="flex justify-between">
+            <span>Gesamtvolumen:</span>
+            <span className="font-medium">
+              {Object.values(roomsData || {}).reduce((sum, room) => {
+                return sum + calculateTotalVolume(room);
+              }, 0).toFixed(2)} m³
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Räume:</span>
+            <span className="font-medium">{rooms.length}</span>
           </div>
         </div>
+      </div>
       </div>
     </div>
     
@@ -714,7 +750,11 @@ useEffect(() => {
                   items: analysisData.items.map(item => ({
                     name: item.name,
                     quantity: 1,
-                    volume: item.volume || 0,
+                    // Convert cm to m for internal storage
+                    width: Math.round(item.width) ,
+                    height: Math.round(item.height) ,
+                    length: Math.round(item.length) ,
+                    volume: (item.length * item.width * item.height), // cm³ to m³
                     demontiert: false,
                     duebelarbeiten: false,
                     description: item.description
@@ -723,7 +763,7 @@ useEffect(() => {
                   estimatedWeight: analysisData.totalVolume * 200,
                   analysisNotes: analysisData.description
                 });
-                
+                              
                 setActiveTab('standard');
                 setShowPopup(true);
                 setPopupMessage('KI-Analyse erfolgreich abgeschlossen!');
@@ -756,9 +796,10 @@ useEffect(() => {
                   </div>
                   <div className="p-6">
                     <OfferComponent 
-                      inspectionData={{ rooms: roomsData, additionalInfo, moveInfo }}
-                      dealId={selectedDealId}
-                      onComplete={handleOfferComplete}
+                        inspectionData={{ rooms: roomsData, additionalInfo, moveInfo }}
+                        dealId={selectedDealId}
+                        onComplete={handleOfferComplete}
+                        setCurrentStep={setCurrentStep}
                     />
                   </div>
                 </div>
@@ -801,6 +842,18 @@ useEffect(() => {
     </div>
   </div>
 )}
+
+{currentStep === 'route-planner' && <DailyRoutePlanner />}
+
+
+
+<button 
+  type="button"
+  onClick={() => handleRouteClick && handleRouteClick()}
+  className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
+>
+ 
+</button>
 
 {currentStep === 'inspections' && (
   <InspectionOverview />

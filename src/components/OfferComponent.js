@@ -4,57 +4,63 @@ import { updateDealForOffer } from '../utils/dealUpdateFunctions';
 import { addNoteToDeal } from '../services/pipedriveService';
 import MovingPriceCalculator from './MovingPriceCalculator';
 
-const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
+const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  }) => {
  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
  const [totalCost, setTotalCost] = useState(0);
 
  const { furnitureCost, materialCost, combinedData } = useMemo(() => {
-   const combinedData = {
-     items: {},
-     packMaterials: {},
-     totalVolume: 0,
-     estimatedWeight: 0,
-     demontageCount: 0,
-     duebelarbeitenCount: 0
-   };
+  const combinedData = {
+    items: {},
+    packMaterials: {},
+    totalVolume: 0,
+    estimatedWeight: 0,
+    demontageCount: 0,
+    duebelarbeitenCount: 0
+  };
 
-   // Combine data from rooms
-   Object.values(inspectionData.rooms || {}).forEach(room => {
-     room.items.forEach(item => {
-       if (!combinedData.items[item.name]) {
-         combinedData.items[item.name] = { ...item, quantity: 0 };
-       }
-       combinedData.items[item.name].quantity += item.quantity;
-       if (item.demontiert) combinedData.demontageCount += item.quantity;
-       if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
-     });
+  // Combine data from rooms
+  Object.values(inspectionData.rooms || {}).forEach(room => {
+    room.items.forEach(item => {
+      if (!combinedData.items[item.name]) {
+        combinedData.items[item.name] = { ...item, quantity: 0 };
+      }
+      combinedData.items[item.name].quantity += item.quantity;
+      if (item.demontiert) combinedData.demontageCount += item.quantity;
+      if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
+      
+      // Calculate volume for each item in m³
+      const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
+      combinedData.totalVolume += itemVolume;
+    });
 
-     room.packMaterials.forEach(material => {
-       combinedData.packMaterials[material.name] = 
-         (combinedData.packMaterials[material.name] || 0) + material.quantity;
-     });
+    room.packMaterials.forEach(material => {
+      combinedData.packMaterials[material.name] = 
+        (combinedData.packMaterials[material.name] || 0) + material.quantity;
+    });
+  });
 
-     combinedData.totalVolume += room.totalVolume;
-     combinedData.estimatedWeight += room.estimatedWeight;
-   });
+  // Calculate estimated weight (200kg per m³)
+  combinedData.estimatedWeight = combinedData.totalVolume * 200;
 
-   // Calculate costs
-   const furnitureCost = combinedData.totalVolume * 50; // Base rate per m³
-   const materialCost = Object.entries(combinedData.packMaterials).reduce((total, [name, quantity]) => {
-     const prices = {
-       'Umzugskartons (Standard)': 2,
-       'Bücherkartons (Bücher&Geschirr)': 5,
-       'Kleiderkisten': 3,
-     };
-     return total + (prices[name] || 0) * quantity;
-   }, 0);
+  // Calculate costs
+  const BASE_RATE = 50; // €/m³
+  const furnitureCost = combinedData.totalVolume * BASE_RATE;
 
-   return {
-     furnitureCost,
-     materialCost,
-     combinedData
-   };
- }, [inspectionData]);
+  const materialCost = Object.entries(combinedData.packMaterials).reduce((total, [name, quantity]) => {
+    const prices = {
+      'Umzugskartons (Standard)': 2,
+      'Bücherkartons (Bücher&Geschirr)': 5,
+      'Kleiderkisten': 3,
+    };
+    return total + (prices[name] || 0) * quantity;
+  }, 0);
+
+  return {
+    furnitureCost,
+    materialCost,
+    combinedData
+  };
+}, [inspectionData]);
 
  useEffect(() => {
    setTotalCost(furnitureCost + materialCost);
@@ -152,7 +158,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
                 <h3 className="text-lg font-semibold text-gray-900">Möbel</h3>
               </div>
               <div className="space-y-3">
-                {activeItems.map(([name, item]) => (
+              {activeItems.map(([name, item]) => (
                   <div key={name} className="bg-white rounded-lg p-4 shadow-sm">
                     <div className="flex justify-between items-center">
                       <div>
@@ -174,7 +180,12 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
                       </div>
                       <div className="text-right">
                         <div className="text-lg font-semibold">{item.quantity}x</div>
-                        <div className="text-sm text-gray-500">{item.volume} m³</div>
+                        <div className="text-sm">
+                          <span className="text-gray-600">{item.length}x{item.width}x{item.height}cm</span>
+                          <div className="text-gray-500">
+                            {((item.length * item.width * item.height) / 1000000).toFixed(2)} m³
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -279,12 +290,20 @@ const OfferComponent = ({ inspectionData, dealId, onComplete }) => {
 </div>
 
           {/* Submit Button */}
-          <button
-            onClick={handleAcceptOffer}
-            className="w-full mt-6 bg-primary hover:bg-primary-dark text-white font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
-          >
-            Angebot akzeptieren und Deal aktualisieren
-          </button>
+          <div className="mt-6 flex gap-4">
+            <button
+              onClick={handleAcceptOffer}
+              className="flex-1 bg-primary hover:bg-primary-dark text-white font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
+            >
+              Angebot akzeptieren und Deal aktualisieren
+            </button>
+            <button
+              onClick={() => setCurrentStep(5)}
+              className="flex-1 bg-green-500 hover:bg-green-600 text-white font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
+            >
+              Weiter zum Beladungssimulator
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -53,15 +53,23 @@ export const adminService = {
   },
 
   async addItem(item) {
-    const response = await axios.post(`${API_URL}/admin/items`, item);
-    return response.data;
-  },
-  async updateItem(id, item) {
-    const response = await axios.put(`${API_URL}/admin/items/${id}`, {
+    return await axios.post(`${API_URL}/admin/items`, {
       name: item.name,
-      volume: item.volume
+      volume: item.volume,
+      width: item.width,
+      length: item.length,
+      height: item.height
     });
-    return response.data;
+  },
+  
+  async updateItem(id, item) {
+    return await axios.put(`${API_URL}/admin/items/${id}`, {
+      name: item.name,
+      volume: item.volume,
+      width: item.width,
+      length: item.length,
+      height: item.height
+    });
   },
   async getPrices() {
     try {

@@ -1,10 +1,13 @@
+// src/modules/inspection/components/ModulePortal.js
 import React, { useState } from 'react';
-import { ClipboardList, Users, Truck, Package, BarChart3, Calendar, ArrowLeft } from 'lucide-react';
-import App from '../App';
-import logo from '../assets/images/Riedlin-Logo-512px_Neu.webp';
+import { ClipboardList, Users, Truck, Package, BarChart3, Calendar } from 'lucide-react';
+import InspectionModule from '../InspectionModule';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../context/AuthContext';
 
 const ModulePortal = () => {
   const [activeModule, setActiveModule] = useState(null);
+  const { isAuthenticated } = useAuth();
 
   const modules = [
     {
@@ -12,7 +15,7 @@ const ModulePortal = () => {
       name: 'Besichtigungen & Planung',
       description: 'Umzugsbesichtigungen durchführen und Angebote erstellen',
       icon: ClipboardList,
-      component: App
+      component: InspectionModule
     },
     {
       id: 'personnel',
@@ -64,7 +67,7 @@ const ModulePortal = () => {
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center">
             <img 
-              src={logo}
+              src="/moving-assistant/assets/images/Riedlin-Logo-512px_Neu.webp"
               alt="Riedlin Logo" 
               className="h-16 w-auto"
             />

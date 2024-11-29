@@ -1,5 +1,5 @@
 import axios from 'axios';
-import photoStorage from '../utils/photoStorage';  // Add this import
+import photoStorage from './photoStorage';  // Add this import
 
 
 const API_MAPPING = {

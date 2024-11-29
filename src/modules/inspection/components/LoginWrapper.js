@@ -1,23 +1,19 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../../context/AuthContext';
 
-const LoginWrapper = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+const LoginWrapper = () => {
+  const { login } = useAuth();
   const [credentials, setCredentials] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (credentials.username === 'admin' && credentials.password === 'riedlin2024') {
-      setIsAuthenticated(true);
+    if (login(credentials.username, credentials.password)) {
       setError('');
     } else {
       setError('Ungültige Anmeldedaten');
     }
   };
-
-  if (isAuthenticated) {
-    return React.cloneElement(children, { isAdmin: true }); // Immer admin
-  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">

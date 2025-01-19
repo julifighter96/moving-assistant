@@ -4,11 +4,13 @@ import { updateDealForOffer } from '../utils/dealUpdateFunctions';
 import { addNoteToDeal } from '../services/pipedriveService';
 import MovingPriceCalculator from './MovingPriceCalculator';
 
-const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  }) => {
+const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, volumeReductions, onVolumeReductionChange }) => {
  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
  const [totalCost, setTotalCost] = useState(0);
 
  const { furnitureCost, materialCost, combinedData } = useMemo(() => {
+  console.log('Berechne combinedData mit volumeReductions:', volumeReductions);
+  
   const combinedData = {
     items: {},
     packMaterials: {},
@@ -21,7 +23,6 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
     duebelarbeitenCount: 0
   };
 
-  // Combine data from rooms
   Object.values(inspectionData.rooms || {}).forEach(room => {
     room.items.forEach(item => {
       if (!combinedData.items[item.name]) {
@@ -31,18 +32,29 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
       if (item.demontiert) combinedData.demontageCount += item.quantity;
       if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
       
-      // Calculate weight and volume
+      // Berechne das Volumen OHNE Reduktion
+      const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
+      
+      console.log('Item Volumen berechnet:', {
+        name: item.name,
+        dimensions: { length: item.length, width: item.width, height: item.height },
+        quantity: item.quantity,
+        volume: itemVolume
+      });
+
       if (item.weight) {
         combinedData.customWeightTotal += item.weight * item.quantity;
         combinedData.itemsWithCustomWeight += item.quantity;
       } else {
-        const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
-        combinedData.volumeBasedWeightTotal += itemVolume * 200; // 200kg per m³
+        // Wende die Reduktion NUR auf das volumeBasedWeight an
+        const reductionFactor = volumeReductions[item.name] || 1;
+        combinedData.volumeBasedWeightTotal += itemVolume * 200 * reductionFactor;
         combinedData.itemsWithVolumeWeight += item.quantity;
       }
       
-      const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
-      combinedData.totalVolume += itemVolume;
+      // Wende die Reduktion NUR auf das Gesamtvolumen an
+      const reductionFactor = volumeReductions[item.name] || 1;
+      combinedData.totalVolume += itemVolume * reductionFactor;
     });
 
     room.packMaterials.forEach(material => {
@@ -67,12 +79,13 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
     return total + (prices[name] || 0) * quantity;
   }, 0);
 
+  console.log('Berechnete combinedData:', combinedData);
   return {
     furnitureCost,
     materialCost,
     combinedData
   };
-}, [inspectionData]);
+}, [inspectionData, volumeReductions]);
 
  useEffect(() => {
    setTotalCost(furnitureCost + materialCost);
@@ -233,9 +246,24 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
                         <div className="text-sm">
                           <span className="text-gray-600">{item.length}x{item.width}x{item.height}cm</span>
                           <div className="text-gray-500">
-                            {((item.length * item.width * item.height) / 1000000).toFixed(2)} m³
+                            Original: {((item.length * item.width * item.height) / 1000000).toFixed(2)} m³
+                            {volumeReductions[name] !== 1 && (
+                              <div>
+                                Reduziert: {((item.length * item.width * item.height * (volumeReductions[name] || 1)) / 1000000).toFixed(2)} m³
+                              </div>
+                            )}
                           </div>
                         </div>
+                        <select
+                          className="mt-2 text-sm border rounded p-1"
+                          value={volumeReductions[name] || 1}
+                          onChange={(e) => onVolumeReductionChange(name, parseFloat(e.target.value))}
+                        >
+                          <option value={1}>100% Volumen</option>
+                          <option value={0.75}>75% Volumen</option>
+                          <option value={0.5}>50% Volumen</option>
+                          <option value={0.25}>25% Volumen</option>
+                        </select>
                       </div>
                     </div>
                   </div>

@@ -3,8 +3,53 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
-const MAX_HEIGHT = 2.4;
+const MAX_HEIGHT = 3.3;
 const GRID_SIZE = 0.5;
+
+export const AVAILABLE_TRUCKS = {
+  'Ducato': {
+    name: 'Ducato',
+    kennzeichen: 'KA - AR 575',
+    width: 2.25,    // Breite in Metern
+    length: 6.67,   // Länge in Metern
+    height: 3.29    // Höhe in Metern
+  },
+  'Mercedes 3,5 T': {
+    name: 'Mercedes 3,5 T',
+    kennzeichen: 'KA - AR 579',
+    width: 2.16,
+    length: 6.96,
+    height: 3.42
+  },
+  'Renault': {
+    name: 'Renault',
+    kennzeichen: 'KA - AR 581',
+    width: 2.16,
+    length: 7.05,
+    height: 3.2
+  },
+  'Alter 7,5 Tonner': {
+    name: 'Alter 7,5 Tonner',
+    kennzeichen: 'KA - AR 578',
+    width: 2.55,
+    length: 7.55,
+    height: 3.55
+  },
+  'Neuer 7,5 Tonner': {
+    name: 'Neuer 7,5 Tonner',
+    kennzeichen: 'KA - AR 583',
+    width: 2.55,
+    length: 8.15,
+    height: 3.7
+  },
+  '12 Tonner': {
+    name: '12 Tonner',
+    kennzeichen: 'KA - AR 577',
+    width: 2.55,
+    length: 9.6,
+    height: 3.7
+  }
+};
 
 export const TRUCK_DIMENSIONS = {
   width: 2.25,   // Breite in Metern
@@ -14,7 +59,12 @@ export const TRUCK_DIMENSIONS = {
 
 
 // Auto-Pack Funktionen
-const calculateVolume = (item) => item.size[0] * item.size[1] * item.size[2];
+const calculateVolume = (item) => {
+  // Die size ist bereits in Metern und bereits reduziert
+  // Wir müssen nur die drei Dimensionen multiplizieren
+  const volume = item.size[0] * item.size[1] * item.size[2];
+  return volume;
+};
 
 const findBestPosition = (item, placedItems, truckDimensions) => {
   const { size } = item;
@@ -59,6 +109,13 @@ const findBestPosition = (item, placedItems, truckDimensions) => {
 };
 
 export const autoPackItems = (itemsToPlace, dimensions) => {
+  console.log('Checking item dimensions:', itemsToPlace.map(item => ({
+    name: item.name,
+    size: item.size,
+    heightInM: item.size[1],
+    heightCheck: item.size[1] > MAX_HEIGHT
+  })));
+
   // Sort by volume (largest first)
   const sortedItems = [...itemsToPlace].sort((a, b) => {
     const volumeA = a.size[0] * a.size[1] * a.size[2];
@@ -71,11 +128,22 @@ export const autoPackItems = (itemsToPlace, dimensions) => {
   // Check if position is valid and doesn't overlap
   const isValidPosition = (item, pos) => {
     // Check truck boundaries
+    const exceedsHeight = pos[1] + item.size[1]/2 > MAX_HEIGHT;
+    if (exceedsHeight) {
+      console.log('Height check failed:', {
+        itemName: item.name,
+        itemHeight: item.size[1],
+        position: pos[1],
+        totalHeight: pos[1] + item.size[1]/2,
+        maxHeight: MAX_HEIGHT
+      });
+    }
+
     if (pos[0] - item.size[0]/2 < -dimensions.width/2 || 
         pos[0] + item.size[0]/2 > dimensions.width/2 || 
         pos[2] - item.size[2]/2 < -dimensions.length/2 || 
         pos[2] + item.size[2]/2 > dimensions.length/2 || 
-        pos[1] + item.size[1] > dimensions.height) {
+        exceedsHeight) {
       return false;
     }
 
@@ -180,29 +248,29 @@ const HeightWarning = ({ isVisible, itemName }) => {
   );
 };
 
-const TruckContainer = () => (
+const TruckContainer = ({ dimensions }) => (
   <group>
     {/* Boden */}
     <mesh position={[0, 0, 0]} receiveShadow>
-      <boxGeometry args={[TRUCK_DIMENSIONS.width, 0.1, TRUCK_DIMENSIONS.length]} />
+      <boxGeometry args={[dimensions.width, 0.1, dimensions.length]} />
       <meshStandardMaterial color="#e2e8f0" />
     </mesh>
     
     {/* Linke Wand */}
-    <mesh position={[TRUCK_DIMENSIONS.width/2, TRUCK_DIMENSIONS.height/2, 0]}>
-      <boxGeometry args={[0.1, TRUCK_DIMENSIONS.height, TRUCK_DIMENSIONS.length]} />
+    <mesh position={[dimensions.width/2, dimensions.height/2, 0]}>
+      <boxGeometry args={[0.1, dimensions.height, dimensions.length]} />
       <meshStandardMaterial color="#64748b" transparent opacity={0.3} />
     </mesh>
     
     {/* Rechte Wand */}
-    <mesh position={[-TRUCK_DIMENSIONS.width/2, TRUCK_DIMENSIONS.height/2, 0]}>
-      <boxGeometry args={[0.1, TRUCK_DIMENSIONS.height, TRUCK_DIMENSIONS.length]} />
+    <mesh position={[-dimensions.width/2, dimensions.height/2, 0]}>
+      <boxGeometry args={[0.1, dimensions.height, dimensions.length]} />
       <meshStandardMaterial color="#64748b" transparent opacity={0.3} />
     </mesh>
     
     {/* Rückwand */}
-    <mesh position={[0, TRUCK_DIMENSIONS.height/2, TRUCK_DIMENSIONS.length/2]}>
-      <boxGeometry args={[TRUCK_DIMENSIONS.width, TRUCK_DIMENSIONS.height, 0.1]} />
+    <mesh position={[0, dimensions.height/2, dimensions.length/2]}>
+      <boxGeometry args={[dimensions.width, dimensions.height, 0.1]} />
       <meshStandardMaterial color="#64748b" transparent opacity={0.3} />
     </mesh>
   </group>
@@ -344,19 +412,23 @@ const DraggableItem = ({ position, size, name, color, onDragStart, onDragEnd, on
 };
 
 const MovingTruckSimulator = ({ items, setItems }) => { 
+  const [selectedTruck, setSelectedTruck] = useState('Ducato');
   const [isDragging, setIsDragging] = useState(false);
   const [isCameraLocked, setIsCameraLocked] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [warningItemName, setWarningItemName] = useState('');
   const controlsRef = useRef();
 
+  // Aktuelle Truck-Dimensionen
+  const truckDimensions = AVAILABLE_TRUCKS[selectedTruck];
+  
   const handleHeightWarning = (show, itemName) => {
     setShowWarning(show);
     setWarningItemName(itemName);
   };
 
   const handleAutoPack = () => {
-    const packedItems = autoPackItems(items, TRUCK_DIMENSIONS);
+    const packedItems = autoPackItems(items, truckDimensions);
     setItems(packedItems); // Aktualisiere alle Items
   };
 
@@ -375,53 +447,67 @@ const MovingTruckSimulator = ({ items, setItems }) => {
       return {
         ...item,
         position: [
-          -TRUCK_DIMENSIONS.width/3 + col * (TRUCK_DIMENSIONS.width/3),
+          -truckDimensions.width/3 + col * (truckDimensions.width/3),
           item.size[1]/2,
-          -TRUCK_DIMENSIONS.length/2 + 1 + row * 2
+          -truckDimensions.length/2 + 1 + row * 2
         ]
       };
     });
   };
 
-  const calculateUsedCapacity = () => {
-    const totalVolume = items.reduce((sum, item) => {
-      return sum + (item.size[0] * item.size[1] * item.size[2]);
-    }, 0);
-    const truckVolume = TRUCK_DIMENSIONS.width * TRUCK_DIMENSIONS.height * TRUCK_DIMENSIONS.length;
-    const percentageUsed = (totalVolume / truckVolume) * 100;
-    return {
-      used: totalVolume.toFixed(2),
-      total: truckVolume.toFixed(2),
-      percentage: percentageUsed.toFixed(1)
-    };
-  };
+  // Berechne die Gesamtkapazität des ausgewählten Trucks
+  const truckVolume = truckDimensions.width * truckDimensions.height * truckDimensions.length;
+  
+  // Berechne das Gesamtvolumen der Möbel
+  const totalVolume = items.reduce((sum, item) => sum + calculateVolume(item), 0);
+  
+  // Berechne die Auslastung
+  const capacityUsed = (totalVolume / truckVolume) * 100;
 
   return (
-    <div className="h-screen relative">
+    <div className="relative h-full">
       <div className="absolute top-4 left-4 bg-white p-4 rounded-lg shadow-lg space-y-4 z-10 w-80">
+        <div className="space-y-2">
+          <h3 className="font-medium">Fahrzeug auswählen</h3>
+          <select
+            className="w-full p-2 border rounded-md"
+            value={selectedTruck}
+            onChange={(e) => setSelectedTruck(e.target.value)}
+          >
+            {Object.values(AVAILABLE_TRUCKS).map(truck => (
+              <option key={truck.kennzeichen} value={truck.name}>
+                {truck.name} ({truck.kennzeichen}) - {truck.length}m × {truck.width}m × {truck.height}m
+              </option>
+            ))}
+          </select>
+          <div className="text-sm text-gray-600">
+            Laderaum: {truckDimensions.length}m × {truckDimensions.width}m × {truckDimensions.height}m
+          </div>
+        </div>
+  
         <h2 className="text-lg font-bold">Ladekapazität</h2>
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
             <span>Genutztes Volumen:</span>
-            <span className="font-medium">{calculateUsedCapacity().used}m³</span>
+            <span className="font-medium">{totalVolume.toFixed(2)}m³</span>
           </div>
           <div className="flex justify-between text-sm">
             <span>Gesamtvolumen:</span>
-            <span className="font-medium">{calculateUsedCapacity().total}m³</span>
+            <span className="font-medium">{truckVolume.toFixed(2)}m³</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
               className="bg-blue-500 h-2 rounded-full"
-              style={{ width: `${Math.min(calculateUsedCapacity().percentage, 100)}%` }}
+              style={{ width: `${Math.min(capacityUsed, 100)}%` }}
             />
           </div>
           <div className="text-sm text-center text-blue-500">
-            {calculateUsedCapacity().percentage}% genutzt
+            {capacityUsed.toFixed(1)}% genutzt
           </div>
         </div>
   
         <div className="space-y-2">
-          <h3 className="font-medium">Möbel Liste</h3>
+          <h3 className="font-medium">Möbelliste</h3>
           <div className="max-h-64 overflow-y-auto border rounded-lg divide-y">
             {items.map((item) => (
               <div key={item.id} className="p-2 hover:bg-gray-50">
@@ -433,8 +519,7 @@ const MovingTruckSimulator = ({ items, setItems }) => {
                   />
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
-                  {item.size[0].toFixed(2)}m × {item.size[1].toFixed(2)}m × {item.size[2].toFixed(2)}m
-                  <span className="ml-2">({(item.size[0] * item.size[1] * item.size[2]).toFixed(2)}m³)</span>
+                  {calculateVolume(item).toFixed(2)}m³
                 </div>
               </div>
             ))}
@@ -494,7 +579,7 @@ const MovingTruckSimulator = ({ items, setItems }) => {
           enableDamping={false}
           enabled={!isDragging && !isCameraLocked}
         />
-        <TruckContainer />
+        <TruckContainer dimensions={truckDimensions} />
         {items.map((item) => (
           <DraggableItem 
             key={item.id} 
@@ -511,6 +596,30 @@ const MovingTruckSimulator = ({ items, setItems }) => {
         isVisible={showWarning}
         itemName={warningItemName}
       />
+
+      {/* Möbelliste und Kapazitätsanzeige */}
+      <div className="absolute top-4 right-4 bg-white p-4 rounded-lg shadow-lg max-w-sm">
+        <h3 className="text-lg font-semibold mb-2">Möbelliste</h3>
+        <div className="mb-4">
+          <div className="h-2 bg-gray-200 rounded">
+            <div 
+              className="h-2 bg-blue-500 rounded" 
+              style={{ width: `${Math.min(capacityUsed, 100)}%` }}
+            />
+          </div>
+          <div className="text-sm text-gray-600 mt-1">
+            Ladekapazität: {totalVolume.toFixed(2)}m³ / {truckVolume.toFixed(2)}m³ ({capacityUsed.toFixed(1)}%)
+          </div>
+        </div>
+        <div className="max-h-96 overflow-y-auto">
+          {items.map(item => (
+            <div key={item.id} className="flex justify-between items-center py-1">
+              <span>{item.name}</span>
+              <span className="text-gray-600">{calculateVolume(item).toFixed(2)}m³</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };

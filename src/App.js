@@ -231,6 +231,9 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState('standard');
   
+  const [items, setItems] = useState([]);
+  const [volumeReductions, setVolumeReductions] = useState({});
+  
   useEffect(() => {
     const loadConfiguration = async () => {
       try {
@@ -409,83 +412,94 @@ function App() {
     setCurrentRoom(newRoom);
   }, []);
 
-  const [items, setItems] = useState([]);
+  // Handler für Volumenreduktionen
+  const handleVolumeReductionChange = useCallback((itemName, value) => {
+    console.log('Volumenreduktion geändert:', { itemName, value });
+    setVolumeReductions(prev => {
+      const newReductions = {
+        ...prev,
+        [itemName]: value
+      };
+      console.log('Neue volumeReductions:', newReductions);
+      return newReductions;
+    });
+  }, []);
 
-  // Add effect to initialize items when step 5 is reached
-  useEffect(() => {
-    if (currentStep === 5) {
-      const initialItems = Object.entries(roomsData).flatMap(([roomName, roomData]) => 
-        roomData.items
-          .filter(item => item.quantity > 0)
-          .flatMap(item => Array(item.quantity).fill().map((_, i) => {
-            const volume = parseFloat(item.volume) || 1;
-            const estimatedDimensions = [
-              Math.cbrt(volume) * 1.5,
-              Math.cbrt(volume) * 0.8,
-              Math.cbrt(volume) * 1.2
-            ];
-            const row = Math.floor(i / 3);
-            const col = i % 3;
-            
-            return {
-              id: `${roomName}-${item.name}-${i}`,
-              name: `${item.name} (${roomName})`,
-              position: [
-                -TRUCK_DIMENSIONS.width/3 + col * (TRUCK_DIMENSIONS.width/3),
-                estimatedDimensions[1]/2,
-                -TRUCK_DIMENSIONS.length/2 + 1 + row * 2
-              ],
-              size: estimatedDimensions,
-              color: '#' + Math.floor(Math.random()*16777215).toString(16)
-            };
-          }))
-      );
-      setItems(initialItems);
-    }
-  }, [currentStep, roomsData]);
-
-
-  const handleAutoPack = () => {
-    const packed = autoPackItems(items, TRUCK_DIMENSIONS);
-    setItems(packed);
-  };
-
-  const getInitialItemPositions = (roomsData) => {
+  // Funktion zum Erstellen der Items mit aktuellen volumeReductions
+  const createItems = useCallback((roomsData, reductions) => {
+    console.log('Creating items with dimensions:');
+    
     const items = Object.entries(roomsData).flatMap(([roomName, roomData]) => 
       roomData.items
         .filter(item => item.quantity > 0)
-        .flatMap(item => Array(item.quantity).fill().map((_, i) => ({
-          id: `${roomName}-${item.name}-${i}`,
-          name: `${item.name} (${roomName})`,
-          position: [0, 0.4, 0],
-          size: [
-            item.width / 100,   // Convert width to meters
-            item.height / 100,  // Convert height to meters
-            item.length / 100   // Convert length to meters
-          ],
-          color: '#' + Math.floor(Math.random()*16777215).toString(16)
-        })))
-    );
-  
-    return items.map((item, index) => {
-      const row = Math.floor(index / 3);
-      const col = index % 3;
-      return {
-        ...item,
-        position: [
-          -TRUCK_DIMENSIONS.width/3 + col * (TRUCK_DIMENSIONS.width/3),
-          item.size[1]/2,  // Using the converted height
-          -TRUCK_DIMENSIONS.length/2 + 1 + row * 2
-        ]
-      };
-    });
-  };
+        .flatMap(item => Array(item.quantity).fill().map((_, i) => {
+          // Berechne zuerst das Volumen in m³
+          const width = item.width / 100;   // cm zu m
+          const height = item.height / 100;  // cm zu m
+          const length = item.length / 100;  // cm zu m
+          
+          // Berechne den Reduktionsfaktor für die Kubikwurzel des Volumens
+          const reductionFactor = reductions[item.name] || 1;
+          const volumeReductionFactor = Math.cbrt(reductionFactor); // Kubikwurzel, da Volumen = Länge * Breite * Höhe
 
-useEffect(() => {
-  if (currentStep === 5) {
-    setItems(getInitialItemPositions(roomsData));
-  }
-}, [currentStep, roomsData]);
+          // Reduziere jede Dimension mit der Kubikwurzel des Reduktionsfaktors
+          const reducedWidth = width * volumeReductionFactor;
+          const reducedHeight = height * volumeReductionFactor;
+          const reducedLength = length * volumeReductionFactor;
+
+          console.log('Item dimensions:', {
+            name: item.name,
+            originalCm: { width: item.width, height: item.height, length: item.length },
+            originalVolume: (width * height * length),
+            reductionFactor,
+            reducedVolume: (reducedWidth * reducedHeight * reducedLength)
+          });
+
+          const row = Math.floor(i / 3);
+          const col = i % 3;
+          
+          return {
+            id: `${roomName}-${item.name}-${i}`,
+            name: `${item.name} (${roomName})`,
+            position: [
+              -TRUCK_DIMENSIONS.width/3 + col * (TRUCK_DIMENSIONS.width/3),
+              reducedHeight/2,
+              -TRUCK_DIMENSIONS.length/2 + 1 + row * 2
+            ],
+            size: [reducedWidth, reducedHeight, reducedLength],
+            color: '#' + Math.floor(Math.random()*16777215).toString(16)
+          };
+        }))
+    );
+
+    return items;
+  }, []);
+
+  // Effect für Updates wenn sich roomsData oder volumeReductions ändern
+  useEffect(() => {
+    if (currentStep === 5) {
+      console.log('Step 5 erreicht, aktualisiere Items mit:', {
+        roomsData,
+        volumeReductions
+      });
+      setItems(createItems(roomsData, volumeReductions));
+    }
+  }, [currentStep, roomsData, volumeReductions, createItems]);
+
+  const handleAutoPack = () => {
+    console.log('Starting auto-pack with items:', items);
+    const packed = autoPackItems(items, TRUCK_DIMENSIONS);
+    console.log('Packed items:', packed);
+    
+    if (packed.length < items.length) {
+      console.warn('Not all items could be placed:', {
+        total: items.length,
+        placed: packed.length
+      });
+    }
+
+    setItems(packed); // Keine weitere Transformation nötig
+  };
 
   const handleAddItem = useCallback((newItem) => {
     setRoomsData(prevData => {
@@ -800,6 +814,8 @@ useEffect(() => {
                         dealId={selectedDealId}
                         onComplete={handleOfferComplete}
                         setCurrentStep={setCurrentStep}
+                        volumeReductions={volumeReductions}
+                        onVolumeReductionChange={handleVolumeReductionChange}
                     />
                   </div>
                 </div>

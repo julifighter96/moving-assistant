@@ -136,7 +136,7 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
   };
   const handleAddItem = async () => {
     if (!newItem.name.trim() || !selectedRoom) return;
-    
+    console.log(selectedRoom);
     try {
       setLoading(true);
       setError(null);
@@ -265,18 +265,14 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
     />
     </div>
     </div>
-  <button
-    onClick={() => {
-      if (newItem.name && newItem.volume > 0) {
-        handleAddItem();
-      }
-    }}
-    disabled={!newItem.name || newItem.volume <= 0}
-    className="px-6 py-2 bg-green-500 text-white rounded-r-md hover:bg-green-600 
-               disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-  >
-    Hinzufügen
-  </button>
+    <button
+  onClick={handleAddItem}
+  disabled={!newItem.name}
+  className="px-6 py-2 bg-green-500 text-white rounded-r-md hover:bg-green-600 
+             disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+>
+  Hinzufügen
+</button>
 </div>
 
 <div className="grid grid-cols-6 gap-4 px-4 py-2 bg-gray-100 rounded-t-lg font-medium">

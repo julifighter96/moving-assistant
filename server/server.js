@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
+const OpenAI = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
 const INITIAL_ROOMS_AND_ITEMS = require('./initialData');
@@ -18,6 +19,15 @@ console.log('ENV check:', {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+app.use((req, res, next) => {
+  console.log('Request received:', {
+    method: req.method,
+    path: req.path,
+    body: req.body
+  });
+  next();
+});
 
 // SQLite Setup mit erweitertem Schema
 const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) => {
@@ -164,6 +174,33 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
             }
           });
         }
+      });
+
+      db.all("PRAGMA table_info(admin_prices);", [], (err, rows) => {
+        if (err) {
+          console.error('Error checking admin_prices columns:', err);
+          return;
+        }
+      
+        const columns = rows.map(row => row.name);
+        
+        if (!columns.includes('width')) {
+          db.run("ALTER TABLE admin_prices ADD COLUMN width REAL DEFAULT 0;");
+        }
+        if (!columns.includes('length')) {
+          db.run("ALTER TABLE admin_prices ADD COLUMN length REAL DEFAULT 0;");
+        }
+        if (!columns.includes('height')) {
+          db.run("ALTER TABLE admin_prices ADD COLUMN height REAL DEFAULT 0;");
+        }
+      
+        // Aktualisiere Standardwerte für existierende Einträge
+        db.run(`UPDATE admin_prices SET width = 60, length = 40, height = 40 
+                WHERE name = 'Umzugskartons (Standard)' AND width = 0;`);
+        db.run(`UPDATE admin_prices SET width = 50, length = 35, height = 35 
+                WHERE name = 'Bücherkartons (Bücher&Geschirr)' AND width = 0;`);
+        db.run(`UPDATE admin_prices SET width = 100, length = 50, height = 50 
+                WHERE name = 'Kleiderkisten' AND width = 0;`);
       });
 
       // Indizes für bessere Performance
@@ -429,7 +466,7 @@ app.post(['/api/analyze', '/api/analyze/'], async (req, res) => {
   Gib auch Umzugshinweise und Besonderheiten an.
   
   Format als JSON:
-  {
+  {F
     "items": [{
       "name": string,
       "dimensions": string,
@@ -457,8 +494,7 @@ app.post(['/api/analyze', '/api/analyze/'], async (req, res) => {
     if (!message.content || !Array.isArray(message.content) || !message.content[0] || !message.content[0].text) {
       throw new Error('Invalid response format from Claude');
     }
-    console.log('Prompt:', customPrompt); // Prompt-Log
-    const textContent = message.content[0].text;
+ 
     let initialResults;
 try {
   // Versuche den JSON-Teil aus der Antwort zu extrahieren
@@ -467,7 +503,6 @@ try {
   
   const jsonMatch = text.match(/{[\s\S]*}/);
   if (!jsonMatch) {
-    console.error('No JSON found in response');
     throw new Error('No JSON found in response');
   }
   
@@ -509,7 +544,6 @@ try {
       return { ...item, confidence: 85 };
     }));
 
-    // Berechne neues Gesamtvolumen
     const totalVolume = improvedItems.reduce((sum, item) => 
       sum + (item.volume * (item.count || 1)), 0
     );
@@ -635,6 +669,19 @@ app.get('/api/admin/rooms', (req, res) => {
   });
 });
 
+app.post('/api/admin/rooms', async (req, res) => {
+  const { name } = req.body;
+  
+  try {
+    const sql = 'INSERT INTO admin_rooms (name) VALUES (?) RETURNING *';
+    const result = await db.run(sql, [name]);
+    res.json({ id: result.lastID, name });
+  } catch (error) {
+    console.error('Error saving room:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.get('/api/admin/items', (req, res) => {
   const { room } = req.query;
   console.log('GET /api/admin/items called with room:', room);
@@ -659,7 +706,9 @@ app.get('/api/admin/items', (req, res) => {
 });
 
 app.post('/api/admin/items', async (req, res) => {
-  const { name, width, length, height, volume, room } = req.body;
+  console.log('Received item data:', req.body);
+  const { name, width, length, height, room } = req.body;
+  const volume = (width * length * height) / 1000000; // Convert from cm³ to m³
   
   db.run(
     'INSERT INTO admin_items (name, width, length, height, volume, room) VALUES (?, ?, ?, ?, ?, ?)',
@@ -674,8 +723,8 @@ app.post('/api/admin/items', async (req, res) => {
         name, 
         width, 
         length, 
-        height, 
-        volume, 
+        height,
+        volume,
         room 
       });
     }
@@ -715,24 +764,17 @@ app.get('/api/admin/prices', (req, res) => {
 // Preis aktualisieren
 app.put('/api/admin/prices/:id', (req, res) => {
   const { id } = req.params;
-  const { price } = req.body;
-  
-  if (price === undefined) {
-    return res.status(400).json({ error: 'Price is required' });
-  }
+  const { price, width, length, height } = req.body;
 
   db.run(
-    'UPDATE admin_prices SET price = ? WHERE id = ?',
-    [price, id],
+    'UPDATE admin_prices SET price = ?, width = ?, length = ?, height = ? WHERE id = ?',
+    [price, width, length, height, id],
     function(err) {
       if (err) {
         console.error('Error updating price:', err);
         return res.status(500).json({ error: err.message });
       }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Price not found' });
-      }
-      res.json({ id: parseInt(id), price });
+      res.json({ id: parseInt(id), price, width, length, height });
     }
   );
 });

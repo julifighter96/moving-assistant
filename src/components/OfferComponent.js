@@ -13,7 +13,10 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
     items: {},
     packMaterials: {},
     totalVolume: 0,
-    estimatedWeight: 0,
+    customWeightTotal: 0,
+    volumeBasedWeightTotal: 0,
+    itemsWithCustomWeight: 0,
+    itemsWithVolumeWeight: 0,
     demontageCount: 0,
     duebelarbeitenCount: 0
   };
@@ -28,7 +31,16 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
       if (item.demontiert) combinedData.demontageCount += item.quantity;
       if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
       
-      // Calculate volume for each item in m³
+      // Calculate weight and volume
+      if (item.weight) {
+        combinedData.customWeightTotal += item.weight * item.quantity;
+        combinedData.itemsWithCustomWeight += item.quantity;
+      } else {
+        const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
+        combinedData.volumeBasedWeightTotal += itemVolume * 200; // 200kg per m³
+        combinedData.itemsWithVolumeWeight += item.quantity;
+      }
+      
       const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
       combinedData.totalVolume += itemVolume;
     });
@@ -40,7 +52,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
   });
 
   // Calculate estimated weight (200kg per m³)
-  combinedData.estimatedWeight = combinedData.totalVolume * 200;
+  combinedData.estimatedWeight = combinedData.customWeightTotal + combinedData.volumeBasedWeightTotal;
 
   // Calculate costs
   const BASE_RATE = 50; // €/m³
@@ -73,50 +85,75 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
   const activePackMaterials = Object.entries(combinedData.packMaterials || {})
     .filter(([_, quantity]) => quantity > 0);
 
-  const handleAcceptOffer = async () => {
-    try {
-      
-      const offerDetails = {
-        rooms: inspectionData.rooms,
-        additionalInfo: inspectionData.additionalInfo,
-        combinedData: combinedData,
-        moveInfo: inspectionData.moveInfo
-      };
-
-      await updateDealForOffer(dealId, offerDetails);
-
-      // Create detailed note content
-      const roomNotesSection = Object.entries(inspectionData.rooms)
-        .filter(([_, roomData]) => roomData.notes && roomData.notes.trim())
-        .map(([roomName, roomData]) => `\n\nNotizen ${roomName}:\n${roomData.notes}`)
-        .join('\n');
-
-      const noteContent = `Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³\n` +
-        `Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg\n` +
-        `Möbelkosten: ${furnitureCost.toFixed(2)} €\n` +
-        `Materialkosten: ${materialCost.toFixed(2)} €\n` +
-        `Gesamtkosten: ${totalCost.toFixed(2)} €\n\n` +
-        
-        `Möbel:\n${Object.entries(combinedData.items)
-          .filter(([_, item]) => item.quantity > 0)
-          .map(([name, item]) => 
-            `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, ` +
-            `Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`)
-          .join('\n')}\n\n` +
-        
-        `Packmaterialien:\n${Object.entries(combinedData.packMaterials)
+    const handleAcceptOffer = async () => {
+      try {
+        const offerDetails = {
+          rooms: inspectionData.rooms,
+          additionalInfo: inspectionData.additionalInfo,
+          combinedData: combinedData,
+          moveInfo: inspectionData.moveInfo
+        };
+     
+        // Hauptinfo
+        const summarySection = `Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³
+Gewicht Details:
+- Manuell eingegebenes Gewicht (${combinedData.itemsWithCustomWeight} Artikel): ${Math.round(combinedData.customWeightTotal)} kg
+- Volumenbasiertes Gewicht (${combinedData.itemsWithVolumeWeight} Artikel): ${Math.round(combinedData.volumeBasedWeightTotal)} kg
+- Gesamtgewicht: ${Math.round(combinedData.estimatedWeight)} kg
+Möbelkosten: ${furnitureCost.toFixed(2)} €
+Materialkosten: ${materialCost.toFixed(2)} €
+Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
+     
+        // Packmaterial Sektion
+        const packingSection = Object.entries(combinedData.packMaterials)
           .filter(([_, quantity]) => quantity > 0)
           .map(([name, quantity]) => `${name}: ${quantity}`)
-          .join('\n')}` +
-        roomNotesSection;
+          .join('\n');
+     
+        // Räume mit Möbeln und Notizen
+        const roomsSection = Object.entries(inspectionData.rooms)
+  .map(([roomName, roomData]) => {
+    const roomItems = roomData.items
+      .filter(item => item.quantity > 0)
+      .map(item => {
+        let itemStr = `  - ${item.name} (${item.quantity}x)`;
+        const options = [];
+        if (item.demontiert) options.push('Demontiert');
+        if (item.duebelarbeiten) options.push('Dübelarbeiten');
+        if (item.remontiert) options.push('Remontiert');
+        if (item.elektro) options.push('Elektro');
 
-      await addNoteToDeal(dealId, noteContent);
-      onComplete();
-    } catch (error) {
-      console.error('Fehler beim Verarbeiten des Angebots:', error);
-      alert(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
-    }
-  };
+        if (options.length > 0) {
+          itemStr += ` [${options.join(', ')}]`;
+        }
+        return itemStr;
+      })
+      .join('\n');
+     
+            const roomNote = roomData.notes ? `\nNotizen:\n${roomData.notes}` : '';
+            
+            return roomItems || roomNote ? 
+              `\n${roomName}:\n${roomItems}${roomNote}` : '';
+          })
+          .filter(section => section)
+          .join('\n');
+     
+        const noteContent = [
+          summarySection,
+          '\nPackmaterialien:',
+          packingSection,
+          roomsSection
+        ].join('\n');
+     
+        await updateDealForOffer(dealId, offerDetails);
+        await addNoteToDeal(dealId, noteContent);
+        
+        onComplete();
+      } catch (error) {
+        console.error('Fehler beim Verarbeiten des Angebots:', error);
+        alert(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
+      }
+     };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -130,25 +167,38 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
         <div className="p-6">
           {/* Summary Card */}
           <div className="bg-blue-50 rounded-xl p-6 mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <ClipboardList className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-semibold text-blue-900">Zusammenfassung</h3>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="text-sm text-gray-500">Gesamtvolumen</div>
-                <div className="text-xl font-bold text-blue-900">
-                  {combinedData.totalVolume.toFixed(2)} m³
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="text-sm text-gray-500">Geschätztes Gewicht</div>
-                <div className="text-xl font-bold text-blue-900">
-                  {Math.round(combinedData.estimatedWeight)} kg
-                </div>
-              </div>
-            </div>
-          </div>
+  <div className="flex items-center gap-3 mb-4">
+    <ClipboardList className="w-5 h-5 text-blue-600" />
+    <h3 className="text-lg font-semibold text-blue-900">Zusammenfassung</h3>
+  </div>
+  <div className="space-y-4">
+    <div className="bg-white rounded-lg p-4 shadow-sm">
+      <div className="text-sm text-gray-500">Gesamtvolumen</div>
+      <div className="text-xl font-bold text-blue-900">
+        {combinedData.totalVolume.toFixed(2)} m³
+      </div>
+    </div>
+    <div className="bg-white rounded-lg p-4 shadow-sm">
+      <div className="text-sm text-gray-500 mb-2">Gewicht</div>
+      {combinedData.itemsWithCustomWeight > 0 && (
+        <div className="flex justify-between text-sm mb-1">
+          <span>Manuell eingegeben ({combinedData.itemsWithCustomWeight} Artikel)</span>
+          <span>{Math.round(combinedData.customWeightTotal)} kg</span>
+        </div>
+      )}
+      {combinedData.itemsWithVolumeWeight > 0 && (
+        <div className="flex justify-between text-sm mb-1">
+          <span>Volumenbasiert ({combinedData.itemsWithVolumeWeight} Artikel)</span>
+          <span>{Math.round(combinedData.volumeBasedWeightTotal)} kg</span>
+        </div>
+      )}
+      <div className="flex justify-between font-bold text-blue-900 pt-2 border-t">
+        <span>Gesamtgewicht</span>
+        <span>{Math.round(combinedData.estimatedWeight)} kg</span>
+      </div>
+    </div>
+  </div>
+</div>
 
           {/* Furniture Section */}
           {activeItems.length > 0 && (

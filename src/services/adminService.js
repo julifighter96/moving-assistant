@@ -58,7 +58,8 @@ export const adminService = {
       volume: item.volume,
       width: item.width,
       length: item.length,
-      height: item.height
+      height: item.height,
+      room: item.room 
     });
   },
   
@@ -84,15 +85,16 @@ export const adminService = {
     }
   },
 
-  async updatePrice(id, price) {
-    try {
-      const response = await axios.put(`${API_URL}/admin/prices/${id}`, { price });
-      return response.data;
-    } catch (error) {
-      console.error('Error updating price:', error);
-      throw error;
-    }
-  },
+  // In adminService.js
+async updatePrice(id, priceData) {
+  try {
+    const response = await axios.put(`${API_URL}/admin/prices/${id}`, priceData);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating price:', error);
+    throw error;
+  }
+},
 
   getCachedPrices() {
     return priceCache;

@@ -7,7 +7,6 @@ import RoomItemsSelector from './components/RoomItemsSelector';
 import AdditionalInfoComponent from './components/AdditionalInfoComponent';
 import OfferComponent from './components/OfferComponent';
 import SuccessPopup from '../shared//components/SuccessPopup';
-import LoginWrapper from './components/LoginWrapper';
 import logo from '../shared/assets/images/Riedlin-Logo-512px_Neu.webp';
 import AIAnalysisTab from './components/AIAnalysisTab';
 import DailyRoutePlanner from './components/DailyRoutePlanner';
@@ -15,6 +14,8 @@ import { adminService } from './services/adminService';
 import AdminPanel from './components/AdminPanel';
 import InspectionOverview from './components/InspectionOverview';
 import MovingTruckSimulator, { TRUCK_DIMENSIONS, autoPackItems } from './components/MovingTruckSimulator';
+import { useAuth } from '../../context/AuthContext';
+import TabletHeader from '../shared/components/TabletHeader';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -77,79 +78,6 @@ const STEPS = [
   { label: 'Administration', status: 'pending', id: 'admin' }
 ];
 
-const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsClick, onRouteClick  }) => {
-  return (
-    <header className="bg-white border-b border-neutral-200 h-16 fixed top-0 left-0 right-0 z-50">
-      <div className="h-full flex items-center justify-between px-6">
-        <div className="flex items-center">
-        <img 
-            src={logo}
-            alt="Riedlin Logo" 
-            className="h-16 w-auto"  // Adjusted height for better visibility
-          />
-          <span className="ml-3 text-2xl font-semibold text-neutral-900">Umzugshelfer</span>
-        </div>
-        
-        {currentDeal && (
-          <div className="flex items-center px-4 py-2 bg-primary-light rounded-lg mr-4">
-            <span className="text-primary font-medium">
-              {currentDeal.title || 'Aktueller Deal'}
-            </span>
-          </div>
-        )}
-        
-        <nav className="flex items-center space-x-2">
-          {/* Separate Buttons statt map */}
-          <button 
-            type="button"
-            onClick={() => onHomeClick && onHomeClick()}
-            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
-          >
-            <Home className="h-6 w-6" />
-            <span className="ml-2 text-base">Home</span>
-          </button>
-
-          <button 
-            type="button"
-            onClick = {() => onInspectionsClick && onInspectionsClick()}
-            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
-          >
-            <ClipboardList className="h-6 w-6" />
-
-            <span className="ml-2 text-base">Inspektionen</span>
-          </button>
-
-          <button 
-            type="button"
-            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
-          >
-            <Settings className="h-6 w-6" />
-            <span className="ml-2 text-base">Settings</span>
-          </button>
-          <button 
-            onClick={onRouteClick}
-            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
-          >
-            <MapPin className="h-6 w-6" />
-            <span className="ml-2 text-base">Routen</span>
-          </button>
-
-          <button 
-            type="button"
-            onClick={() => onAdminClick && onAdminClick()}
-            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
-          >
-            <Settings className="h-6 w-6" />
-            <span className="ml-2">Admin</span>
-          </button>
-        </nav>
-      </div>
-    </header>
-  );
-};
-
-
-
 const calculateDimensions = (volume) => {
   // This is a simple estimation - adjust based on your needs
   const ratio = Math.cbrt(volume);
@@ -159,8 +87,6 @@ const calculateDimensions = (volume) => {
     ratio * 1.2  // length - typically longer
   ];
 };
-
-
 
 // Helper function to get random colors for items
 const getRandomColor = () => {
@@ -204,6 +130,7 @@ const StepNavigation = ({ currentStep, totalSteps, onStepChange }) => {
 };
 
 const InspectionModule = ({ onBack }) => {
+  const { isAuthenticated } = useAuth();
   
   const [currentStep, setCurrentStep] = useState(0);
   const [moveInfo, setMoveInfo] = useState(null);
@@ -540,10 +467,28 @@ useEffect(() => {
     }, 3000);
   };
 
+  useEffect(() => {
+    console.log('InspectionModule - Mount', {
+      isAuthenticated,
+      currentStep,
+      hasSelectedDeal: !!selectedDealId
+    });
+  }, []);
+
+  useEffect(() => {
+    console.log('InspectionModule - Auth Status Change:', { isAuthenticated });
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    console.log('InspectionModule - Step Change:', { 
+      currentStep,
+      isAuthenticated 
+    });
+  }, [currentStep]);
+
   return (
-    <LoginWrapper>
     <div className="min-h-screen bg-neutral-50">
-    <TabletHeader 
+      <TabletHeader 
         currentDeal={dealData}
         onAdminClick={() => setCurrentStep('admin')}
         onHomeClick={() => setCurrentStep(0)}
@@ -555,10 +500,10 @@ useEffect(() => {
         <div className="max-w-none mx-auto">
           {/* Step Progress */}
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-  <div className="flex justify-between">
-    {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
-      const isCompleted = typeof currentStep === 'number' && index < currentStep;
-      const isCurrent = currentStep === step.id;
+            <div className="flex justify-between">
+              {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
+                const isCompleted = typeof currentStep === 'number' && index < currentStep;
+                const isCurrent = currentStep === step.id;
                 
                 return (
                   <div key={step.label} className="flex flex-col items-center flex-1">
@@ -600,36 +545,7 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* CHANGE 1: Add Step Controls here */}
-          <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex justify-between items-center">
-  <button 
-    onClick={() => handleStepChange(currentStep - 1)} 
-    disabled={currentStep === 0 || currentStep === 'admin'}
-    className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
-  >
-    Zurück
-  </button>
-  <div className="flex flex-col items-center">
-    <span className="text-lg font-medium">
-      {currentStep === 'admin' ? 'Administration' : `Schritt ${currentStep + 1} von ${STEPS.length - 1}`}
-    </span>
-    <span className="text-sm text-gray-500">
-      {STEPS.find(step => step.id === currentStep)?.label}
-    </span>
-  </div>
-  <button 
-  onClick={() => handleStepChange(currentStep + 1)} 
-  disabled={currentStep === STEPS.length - 2 || currentStep === 'admin' || currentStep === 4 || currentStep === 5}
-  className={`h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px] ${
-    currentStep === 4 || currentStep === 5 ? 'hidden' : ''
-  }`}
->
-    Weiter
-  </button>
-</div>
-
           {/* Main Content Area */}
-          {/* CHANGE 2: Remove the old StepNavigation component if it exists */}
           <div className="space-y-6">
             {currentStep === 0 && (
               <div className="bg-white rounded-lg shadow-sm">
@@ -846,36 +762,23 @@ useEffect(() => {
 
 {currentStep === 'route-planner' && <DailyRoutePlanner />}
 
-
-
-<button 
-  type="button"
-  onClick={() => handleRouteClick && handleRouteClick()}
-  className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
->
- 
-</button>
-
 {currentStep === 'inspections' && (
   <InspectionOverview />
 )}
-            </div>
           </div>
-        </main>
-        
-        <SuccessPopup 
-          isVisible={showPopup}
-          onClose={handleClosePopup}
-          message={popupMessage}
-        />
-        
-        
-        
-        <div className="fixed bottom-2 right-2 text-xs text-gray-500">
-          {APP_VERSION}
         </div>
+      </main>
+      
+      <SuccessPopup 
+        isVisible={showPopup}
+        onClose={handleClosePopup}
+        message={popupMessage}
+      />
+      
+      <div className="fixed bottom-2 right-2 text-xs text-gray-500">
+        {APP_VERSION}
       </div>
-    </LoginWrapper>
+    </div>
   );
 }
 

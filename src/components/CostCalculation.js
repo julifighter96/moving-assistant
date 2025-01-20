@@ -6,13 +6,13 @@ const EMPLOYEE_TYPES = {
   'Teamleiter': { hourlyRate: 45 }
 };
 
-// Basiszeitwerte in Minuten pro m³
+// Basiszeitwerte in Minuten
 const BASE_TIMES = {
   BASE_TIME: 30,        // Grundzeit pro m³
-  FLOOR_TIME: 5,        // Zeit pro Stockwerk pro m³
-  ELEVATOR_TIME: 3,     // Zeit für Aufzug pro m³
-  DISTANCE_TIME: 0.5,   // Zeit pro Meter Trageweg pro m³
-  INCLINED_LIFT: 8      // Zeit für Schrägaufzug pro m³
+  FLOOR_TIME: 5,        // Zeit pro Stockwerk
+  ELEVATOR_TIME: 3,     // Zeit für Aufzug
+  DISTANCE_TIME: 0.5,   // Zeit pro Meter Trageweg
+  INCLINED_LIFT: 8      // Zeit für Schrägaufzug
 };
 
 const CostCalculation = ({ onComplete, volumeData }) => {
@@ -28,12 +28,11 @@ const CostCalculation = ({ onComplete, volumeData }) => {
     ]
   });
 
-  const [totalHours, setTotalHours] = useState(0);
+  const [totalMinutes, setTotalMinutes] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
 
   // Berechne die Gesamtstunden basierend auf den Eingaben
   const calculateTotalHours = () => {
-    // Volumen ist bereits in m³
     const volume = volumeData?.totalVolume || 0;
     console.log('Berechne Zeit für Volumen:', volume, 'm³');
 
@@ -41,44 +40,41 @@ const CostCalculation = ({ onComplete, volumeData }) => {
     let totalMinutes = volume * BASE_TIMES.BASE_TIME;
     console.log('Grundzeit:', totalMinutes, 'Minuten');
 
-    // Zusätzliche Zeit für Trageweg (pro Meter)
+    // Zusätzliche Zeit für Trageweg
     const distanceTime = calculationData.carryingDistance * BASE_TIMES.DISTANCE_TIME;
     totalMinutes += distanceTime;
     console.log('Zeit nach Trageweg:', totalMinutes, 'Minuten');
 
-    // Zeit für Stockwerke (pro Stockwerk)
+    // Zeit für Stockwerke
     const floorTime = calculationData.floors * 
       (calculationData.hasElevator ? BASE_TIMES.ELEVATOR_TIME : BASE_TIMES.FLOOR_TIME);
     totalMinutes += floorTime;
     console.log('Zeit nach Stockwerken:', totalMinutes, 'Minuten');
 
-    // Zusätzliche Zeit für Schrägaufzug (pro Stockwerk)
+    // Zusätzliche Zeit für Schrägaufzug
     if (calculationData.hasInclinedLift) {
       const inclinedLiftTime = calculationData.floors * BASE_TIMES.INCLINED_LIFT;
       totalMinutes += inclinedLiftTime;
       console.log('Zeit nach Schrägaufzug:', totalMinutes, 'Minuten');
     }
 
-    // Konvertiere zu Stunden und runde auf halbe Stunden auf
-    const totalHours = Math.ceil(totalMinutes / 30) / 2;
-    console.log('Gesamtstunden:', totalHours);
-
-    return totalHours;
+    // Behalte die exakten Minuten
+    return totalMinutes;
   };
 
   // Berechne die Gesamtkosten
-  const calculateTotalCost = (hours) => {
-    // Multipliziere die Stunden mit der Anzahl der Mitarbeiter und ihren jeweiligen Stundensätzen
+  const calculateTotalCost = (minutes) => {
+    // Multipliziere die Minuten mit der Anzahl der Mitarbeiter und ihren jeweiligen Stundensätzen
     return calculationData.employees.reduce((total, emp) => {
       const hourlyRate = EMPLOYEE_TYPES[emp.type].hourlyRate;
-      return total + (hourlyRate * emp.count * hours); // Jeder Mitarbeiter arbeitet die vollen Stunden
+      return total + (hourlyRate * emp.count * (minutes / 60)); // Jeder Mitarbeiter arbeitet die vollen Stunden
     }, 0);
   };
 
   useEffect(() => {
-    const hours = calculateTotalHours();
-    setTotalHours(hours);
-    setTotalCost(calculateTotalCost(hours));
+    const minutes = calculateTotalHours();
+    setTotalMinutes(minutes);
+    setTotalCost(calculateTotalCost(minutes));
   }, [calculationData, volumeData]);
 
   const handleInputChange = (field, value) => {
@@ -187,19 +183,24 @@ const CostCalculation = ({ onComplete, volumeData }) => {
           <div className="mt-6 bg-gray-50 p-4 rounded-lg">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <h4 className="text-sm font-medium text-gray-500">Geschätzte Arbeitsstunden</h4>
-                <p className="text-2xl font-bold">{totalHours} Stunden</p>
+                <h4 className="text-sm font-medium text-gray-500">Geschätzte Arbeitszeit</h4>
+                <p className="text-2xl font-bold">
+                  {Math.floor(totalMinutes / 60) > 0 ? `${Math.floor(totalMinutes / 60)} Stunden ` : ''}
+                  {Math.round(totalMinutes % 60) > 0 ? `${Math.round(totalMinutes % 60)} Minuten` : ''}
+                </p>
               </div>
               <div>
                 <h4 className="text-sm font-medium text-gray-500">Geschätzte Gesamtkosten</h4>
-                <p className="text-2xl font-bold">{totalCost.toFixed(2)}€</p>
+                <p className="text-2xl font-bold">
+                  {(totalCost).toFixed(2)}€
+                </p>
               </div>
             </div>
           </div>
 
           <div className="mt-6 flex justify-end space-x-3">
             <button
-              onClick={() => onComplete({ totalHours, totalCost, ...calculationData })}
+              onClick={() => onComplete({ totalMinutes, totalCost, ...calculationData })}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               Weiter zum Angebot

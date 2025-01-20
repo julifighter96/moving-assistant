@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect  } from 'react';
-import { Home, ClipboardList, Settings, Check, Plus, MapPin } from 'lucide-react';
+import { Home, ClipboardList, Settings, Check, Plus, MapPin, Calculator, FileText, Truck } from 'lucide-react';
 import DealViewer from './components/DealViewer';
 import MoveInformationComponent from './components/MoveInformationComponent';
 import RoomSelector from './components/RoomSelector';
@@ -16,6 +16,7 @@ import { adminService } from './services/adminService';
 import AdminPanel from './components/AdminPanel';
 import InspectionOverview from './components/InspectionOverview';
 import MovingTruckSimulator, { TRUCK_DIMENSIONS, autoPackItems } from './components/MovingTruckSimulator';
+import CostCalculation from './components/CostCalculation';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -69,13 +70,13 @@ const DEFAULT_PACK_MATERIALS = [
 ];
 
 const STEPS = [
-  { label: 'Deal auswählen', status: 'pending' },
-  { label: 'Umzugsinformationen', status: 'pending' },
-  { label: 'Räume & Gegenstände', status: 'pending' },
-  { label: 'Zusätzliche Details', status: 'pending' },
-  { label: 'Angebot erstellen', status: 'pending' },
-  { label: 'Beladungssimulation', status: 'pending' },
-  { label: 'Administration', status: 'pending', id: 'admin' }
+  { id: 0, title: 'Deal auswählen', icon: Home },
+  { id: 1, title: 'Umzugsinformationen', icon: MapPin },
+  { id: 2, title: 'Räume & Inventar', icon: ClipboardList },
+  { id: 3, title: 'Zusätzliche Details', icon: Settings },
+  { id: 4, title: 'Angebot', icon: FileText },
+  { id: 5, title: 'Kostenkalkulation', icon: Calculator },
+  { id: 6, title: '3D Simulation', icon: Truck }
 ];
 
 const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsClick, onRouteClick  }) => {
@@ -234,6 +235,8 @@ function App() {
   const [items, setItems] = useState([]);
   const [volumeReductions, setVolumeReductions] = useState({});
   
+  const [costCalculation, setCostCalculation] = useState(null);
+
   useEffect(() => {
     const loadConfiguration = async () => {
       try {
@@ -387,6 +390,26 @@ function App() {
   }, []);
 
   const handleUpdateRoomData = useCallback((roomName, updatedRoomData) => {
+    // Wenn items aktualisiert werden, berechne das totalVolume neu
+    if (updatedRoomData.items) {
+      const newTotalVolume = updatedRoomData.items
+        .filter(item => item.quantity > 0)
+        .reduce((sum, item) => sum + (item.volume * item.quantity), 0);
+      
+      console.log('Neue Volumenberechnung:', {
+        roomName,
+        items: updatedRoomData.items.filter(item => item.quantity > 0).map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          volume: item.volume,
+          totalVolume: item.volume * item.quantity
+        })),
+        totalVolume: newTotalVolume / 1000000 // Konvertiere zu m³
+      });
+
+      updatedRoomData.totalVolume = newTotalVolume / 1000000; // Speichere als m³
+    }
+
     setRoomsData(prevData => ({
       ...prevData,
       [roomName]: {
@@ -555,6 +578,11 @@ function App() {
     }, 3000);
   };
 
+  const handleCostCalculationComplete = (calculationData) => {
+    setCostCalculation(calculationData);
+    setCurrentStep(4); // Zurück zu 4 (Angebot) statt 5 (Simulation)
+  };
+
   return (
     <LoginWrapper>
     <div className="min-h-screen bg-neutral-50">
@@ -574,7 +602,7 @@ function App() {
       const isCurrent = currentStep === step.id;
                 
                 return (
-                  <div key={step.label} className="flex flex-col items-center flex-1">
+                  <div key={step.title} className="flex flex-col items-center flex-1">
                     <div className="relative w-full">
                       {index !== 0 && (
                         <div 
@@ -605,7 +633,7 @@ function App() {
                     </div>
                     <span className={`mt-2 text-sm font-medium text-center
                       ${isCurrent ? 'text-primary' : 'text-gray-500'}`}>
-                      {step.label}
+                      {step.title}
                     </span>
                   </div>
                 );
@@ -627,7 +655,7 @@ function App() {
       {currentStep === 'admin' ? 'Administration' : `Schritt ${currentStep + 1} von ${STEPS.length - 1}`}
     </span>
     <span className="text-sm text-gray-500">
-      {STEPS.find(step => step.id === currentStep)?.label}
+      {STEPS.find(step => step.id === currentStep)?.title}
     </span>
   </div>
   <button 
@@ -764,17 +792,20 @@ function App() {
                   items: analysisData.items.map(item => ({
                     name: item.name,
                     quantity: 1,
-                    // Convert cm to m for internal storage
-                    width: Math.round(item.width) ,
-                    height: Math.round(item.height) ,
-                    length: Math.round(item.length) ,
-                    volume: (item.length * item.width * item.height), // cm³ to m³
+                    width: Math.round(item.width),
+                    height: Math.round(item.height),
+                    length: Math.round(item.length),
+                    volume: (Math.round(item.width) * Math.round(item.height) * Math.round(item.length)) / 1000000,
                     demontiert: false,
                     duebelarbeiten: false,
                     description: item.description
                   })),
-                  totalVolume: analysisData.totalVolume,
-                  estimatedWeight: analysisData.totalVolume * 200,
+                  totalVolume: analysisData.items.reduce((sum, item) => {
+                    return sum + ((Math.round(item.width) * Math.round(item.height) * Math.round(item.length)) / 1000000);
+                  }, 0),
+                  estimatedWeight: (analysisData.items.reduce((sum, item) => {
+                    return sum + ((Math.round(item.width) * Math.round(item.height) * Math.round(item.length)) / 1000000);
+                  }, 0)) * 200,
                   analysisNotes: analysisData.description
                 });
                               
@@ -804,18 +835,22 @@ function App() {
               
               {currentStep === 4 && (
                 <div className="bg-white rounded-lg shadow-sm">
-                  <div className="p-6 border-b border-gray-200">
-                    <h2 className="text-xl font-semibold">Angebot erstellen</h2>
-                    <p className="text-gray-500 mt-1">Überprüfen und finalisieren Sie das Angebot</p>
-                  </div>
                   <div className="p-6">
-                    <OfferComponent 
-                        inspectionData={{ rooms: roomsData, additionalInfo, moveInfo }}
-                        dealId={selectedDealId}
-                        onComplete={handleOfferComplete}
-                        setCurrentStep={setCurrentStep}
-                        volumeReductions={volumeReductions}
-                        onVolumeReductionChange={handleVolumeReductionChange}
+                    <CostCalculation 
+                      onComplete={handleCostCalculationComplete}
+                      volumeData={{
+                        totalVolume: Object.values(roomsData).reduce((sum, room) => {
+                          // Debug-Log für jedes Zimmer
+                          console.log('Room:', room.items.filter(item => item.quantity > 0).map(item => ({
+                            name: item.name,
+                            quantity: item.quantity,
+                            volume: item.volume,
+                            totalVolume: item.volume * item.quantity
+                          })));
+                          // Teile das Gesamtvolumen durch 1.000.000 um von cm³ zu m³ zu konvertieren
+                          return sum + (room.totalVolume / 1000000);
+                        }, 0)
+                      }}
                     />
                   </div>
                 </div>

@@ -16,11 +16,11 @@ console.log('ENV check:', {
 });
 
 const app = express();
+app.use(express.json({ limit: '50mb' }));
 app.use(cors({
   origin: 'http://localhost:3000',
   credentials: true
 }));
-app.use(express.json({ limit: '50mb' }));
 
 // SQLite Setup mit erweitertem Schema
 const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) => {
@@ -1302,6 +1302,29 @@ app.get('/moving-assistant/api/inspections', (req, res) => {
   });
 });
 
+// Route für die Routenplanung
+app.get('/moving-assistant/api/inspections/route', (req, res) => {
+  // Hole alle Inspektionen mit Adressen für die Routenplanung
+  db.all(`
+    SELECT 
+      id,
+      customer_name,
+      address,
+      moving_date,
+      status,
+      notes
+    FROM inspections 
+    WHERE moving_date IS NOT NULL 
+    ORDER BY moving_date ASC
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching route data:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
 // Neuer Endpunkt zum Synchronisieren der Pipedrive-Deals mit lokalen Inspektionen
 app.post('/moving-assistant/api/sync-deals', async (req, res) => {
   const { deals } = req.body;
@@ -1370,12 +1393,77 @@ app.delete('/moving-assistant/api/assignments/:id', (req, res) => {
   });
 });
 
-// Statische Dateien NACH den API-Routen
+// 2. API Routes (ALLE API-Routen müssen VOR den statischen Routen kommen)
+const apiRouter = express.Router();
+
+// Admin Routes
+apiRouter.get('/admin/rooms', (req, res) => {
+  db.all('SELECT * FROM admin_rooms ORDER BY name', [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching rooms:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+apiRouter.get('/admin/items/:room', (req, res) => {
+  const { room } = req.params;
+  db.all('SELECT * FROM admin_items WHERE room = ? ORDER BY name', [room], (err, rows) => {
+    if (err) {
+      console.error('Error fetching items:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Inspections Routes
+apiRouter.get('/inspections', (req, res) => {
+  db.all('SELECT * FROM inspections ORDER BY created_at DESC', [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching inspections:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+apiRouter.get('/inspections/route', (req, res) => {
+  db.all(`
+    SELECT 
+      id,
+      customer_name,
+      address,
+      moving_date,
+      status,
+      notes
+    FROM inspections 
+    WHERE moving_date IS NOT NULL 
+    ORDER BY moving_date ASC
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching route data:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Mount API Router mit Präfix
+app.use('/moving-assistant/api', apiRouter);
+
+// 3. Statische Dateien (NACH den API-Routen)
 app.use('/moving-assistant', express.static(path.join(__dirname, '..', 'build')));
 
-// Catch-all Route als LETZTES
-app.get('*', (req, res) => {
+// 4. Client-Route Handler (NACH den statischen Dateien)
+app.get('/moving-assistant/*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
+});
+
+// 5. Catch-all Route (GANZ AM ENDE)
+app.get('*', (req, res) => {
+  res.redirect('/moving-assistant');
 });
 
 // Start server

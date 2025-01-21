@@ -13,10 +13,11 @@ const MOVE_INFO_FIELDS = [
    { name: 'Etage(n) Entladestelle', apiKey: '9e4e07bce884e21671546529b564da98ceb4765a', type: 'number' },
 ];
 
-const MoveInformationComponent = ({ dealId, onComplete }) => {
+const MoveInformationComponent = ({ dealData, onComplete }) => {
  const [moveInfo, setMoveInfo] = useState({});
- const [isLoading, setIsLoading] = useState(true);
+ const [loading, setLoading] = useState(true);
  const [error, setError] = useState(null);
+ const [dealInfo, setDealInfo] = useState(null);
 
  useEffect(() => {
    // Load Google Maps Script
@@ -34,31 +35,27 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
 
  useEffect(() => {
    const fetchDealData = async () => {
-     setIsLoading(true);
-     setError(null);
      try {
-       const dealData = await getDeal(dealId);
-       const initialInfo = {};
-       MOVE_INFO_FIELDS.forEach(field => {
-         if (field.type === 'date' && dealData[field.apiKey]) {
-           initialInfo[field.apiKey] = new Date(dealData[field.apiKey]);
-         } else if (field.type === 'number' && dealData[field.apiKey]) {
-           initialInfo[field.apiKey] = parseInt(dealData[field.apiKey], 10);
-         } else {
-           initialInfo[field.apiKey] = dealData[field.apiKey] || '';
-         }
-       });
-       setMoveInfo(initialInfo);
-     } catch (err) {
-       console.error('Error fetching deal data:', err);
-       setError('Fehler beim Laden der Daten. Bitte versuchen Sie es erneut.');
+       // Nur laden wenn eine dealId vorhanden ist
+       if (!dealData?.id) {
+         console.log('No deal ID provided');
+         setLoading(false);
+         return;
+       }
+
+       console.log('Fetching deal data for ID:', dealData.id);
+       const data = await getDeal(dealData.id);
+       setDealInfo(data);
+     } catch (error) {
+       console.error('Error fetching deal data:', error);
+       setError('Fehler beim Laden der Deal-Informationen');
      } finally {
-       setIsLoading(false);
+       setLoading(false);
      }
    };
 
    fetchDealData();
- }, [dealId]);
+ }, [dealData]);
 
  const handleInputChange = (apiKey, value, type) => {
    setMoveInfo(prevInfo => ({
@@ -81,7 +78,7 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
      });
      
      console.log('Sending data to update:', dataToUpdate);
-     await updateDealDirectly(dealId, dataToUpdate);
+     await updateDealDirectly(dealData.id, dataToUpdate);
      onComplete(dataToUpdate);
    } catch (error) {
      console.error('Fehler beim Aktualisieren der Umzugsinformationen:', error);
@@ -89,7 +86,7 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
    }
  };
 
- if (isLoading) {
+ if (loading) {
    return <div className="text-center py-4">Lade Umzugsinformationen...</div>;
  }
 

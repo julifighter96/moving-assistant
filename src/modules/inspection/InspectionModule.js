@@ -237,11 +237,17 @@ const InspectionModule = () => {
   const handleRouteClick = () => {
     setCurrentStep('route-planner');
   };
-  const handleStartInspection = useCallback((deal) => {
-    setSelectedDealId(deal.id);
-    setDealData(deal);
+  const handleStartInspection = (selectedDeal) => {
+    console.log('Starting inspection with deal:', selectedDeal);
+    if (!selectedDeal?.id) {
+      console.error('No deal selected');
+      return;
+    }
+    
+    setDealData(selectedDeal);
+    setSelectedDealId(selectedDeal.id);
     setCurrentStep(1);
-  }, []);
+  };
 
   const calculateTotalVolume = (roomData) => {
     return roomData.items.reduce((itemSum, item) => {
@@ -504,29 +510,123 @@ useEffect(() => {
     navigate('/moving-assistant'); // Zurück zum Hauptportal
   };
 
+  // Navigation Handler
+  const handleNavigate = (path) => {
+    console.log('Navigating to:', path);
+    if (path === '/moving-assistant') {
+      // Zurück zum Portal - direkt zum moving-assistant Pfad navigieren
+      navigate('/moving-assistant');
+    } else if (path === '/moving-assistant/inspections/route') {
+      // Zur Routenplanung
+      navigate('/moving-assistant/inspections/route');
+    } else {
+      // Andere Navigationen
+      navigate(path);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
-      <TabletHeader 
-        logo={logo} 
-        version={APP_VERSION}
-        onBack={() => navigate('/moving-assistant')}
-      />
-      
-      {currentStep === 'admin' ? (
-        <AdminPanel onBack={() => setCurrentStep(0)} />
-      ) : (
-        <div className="container mx-auto px-4 py-8">
-          <StepNavigation 
-            currentStep={currentStep} 
-            totalSteps={STEPS.length} 
-            onStepChange={handleStepChange}
-          />
-          
-          <div className="mt-8">
-            {STEPS[currentStep]}
+      {/* Top Navigation Bar */}
+      <div className="bg-white shadow">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <img src={logo} alt="Logo" className="h-10 w-auto mr-4" />
+              <h1 className="text-2xl font-bold">Umzugsbesichtigung</h1>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => handleNavigate('/moving-assistant/inspections')}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Besichtigungen
+              </button>
+              <button
+                onClick={() => handleNavigate('/moving-assistant/inspections/route')}
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              >
+                Routenplanung
+              </button>
+              <button
+                onClick={() => setCurrentStep('admin')}
+                className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700"
+              >
+                Administration
+              </button>
+              <button
+                onClick={() => handleNavigate('/moving-assistant')}
+                className="bg-gray-500 hover:bg-gray-700 text-white px-4 py-2 rounded"
+              >
+                Zurück zum Portal
+              </button>
+            </div>
+          </div>
+          <div className="text-xs text-gray-500 text-right">
+            Version {APP_VERSION}
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-8">
+        {currentStep === 'admin' ? (
+          <AdminPanel onBack={() => setCurrentStep(0)} />
+        ) : (
+          <div>
+            <StepNavigation 
+              currentStep={currentStep} 
+              totalSteps={STEPS.length - 1}
+              onStepChange={handleStepChange}
+            />
+            
+            <div className="mt-8">
+              {currentStep === 0 && <DealViewer onStartInspection={handleStartInspection} />}
+              {currentStep === 1 && (
+                <MoveInformationComponent
+                  dealData={dealData}
+                  onComplete={handleMoveInfoComplete}
+                />
+              )}
+              {currentStep === 2 && (
+                <div>
+                  <RoomSelector
+                    rooms={rooms}
+                    currentRoom={currentRoom}
+                    onRoomChange={handleRoomChange}
+                    onAddRoom={handleAddRoom}
+                  />
+                  <RoomItemsSelector
+                    roomData={roomsData[currentRoom]}
+                    onUpdateRoom={(data) => handleUpdateRoomData(currentRoom, data)}
+                    onAddItem={handleAddItem}
+                  />
+                </div>
+              )}
+              {currentStep === 3 && (
+                <AdditionalInfoComponent
+                  onComplete={handleAdditionalInfoComplete}
+                />
+              )}
+              {currentStep === 4 && (
+                <OfferComponent
+                  moveInfo={moveInfo}
+                  roomsData={roomsData}
+                  additionalInfo={additionalInfo}
+                  onComplete={handleOfferComplete}
+                />
+              )}
+              {currentStep === 5 && (
+                <MovingTruckSimulator
+                  items={items}
+                  onAutoPack={handleAutoPack}
+                  onFinish={handleFinish}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {showPopup && (
         <SuccessPopup 

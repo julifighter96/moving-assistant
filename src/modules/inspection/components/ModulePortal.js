@@ -18,7 +18,7 @@ const ModulePortal = ({ onInspectionStart }) => {
       description: 'Umzugsbesichtigungen durchführen und Angebote erstellen',
       icon: ClipboardList,
       component: InspectionModule,
-      onClick: onInspectionStart
+      onClick: () => navigate('/inspections/module/deals')
     },
     {
       id: 'personnel',

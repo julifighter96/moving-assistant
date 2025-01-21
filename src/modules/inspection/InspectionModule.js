@@ -16,7 +16,7 @@ import InspectionOverview from './components/InspectionOverview';
 import MovingTruckSimulator, { TRUCK_DIMENSIONS, autoPackItems } from './components/MovingTruckSimulator';
 import { useAuth } from '../../context/AuthContext';
 import TabletHeader from '../shared/components/TabletHeader';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 
 // Simple icon components
 const IconWrapper = ({ children, className = "" }) => (
@@ -144,6 +144,7 @@ const StepNavigation = ({ currentStep, totalSteps, onStepChange }) => {
 
 const InspectionModule = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated } = useAuth();
   
   const [currentStep, setCurrentStep] = useState(0);
@@ -506,22 +507,59 @@ useEffect(() => {
     });
   }, [currentStep]);
 
-  const handleBack = () => {
-    navigate('/moving-assistant'); // Zurück zum Hauptportal
-  };
+  // Effekt zum Synchronisieren von Route und currentStep
+  useEffect(() => {
+    console.log('Route changed:', location.pathname);
+    if (location.pathname.includes('/module/deals')) {
+      setCurrentStep(0);
+    } else if (location.pathname.includes('/module/admin')) {
+      setCurrentStep('admin');
+    }
+  }, [location.pathname]);
 
   // Navigation Handler
   const handleNavigate = (path) => {
-    console.log('Navigating to:', path);
-    if (path === '/moving-assistant') {
-      // Zurück zum Portal - direkt zum moving-assistant Pfad navigieren
-      navigate('/moving-assistant');
-    } else if (path === '/moving-assistant/inspections/route') {
-      // Zur Routenplanung
-      navigate('/moving-assistant/inspections/route');
-    } else {
-      // Andere Navigationen
-      navigate(path);
+    console.log('Navigation requested to:', path);
+    
+    switch (path) {
+      case '/moving-assistant':
+        console.log('Attempting to navigate to portal...');
+        try {
+          navigate('/', { replace: true });
+          console.log('Navigation to portal completed');
+        } catch (error) {
+          console.error('Error navigating to portal:', error);
+        }
+        break;
+        
+      case '/moving-assistant/inspections':
+        console.log('Attempting to navigate to inspections overview...');
+        try {
+          navigate('/inspections', { replace: true });
+          console.log('Navigation to inspections completed');
+        } catch (error) {
+          console.error('Error navigating to inspections:', error);
+        }
+        break;
+        
+      case '/moving-assistant/inspections/route':
+        console.log('Attempting to navigate to route planner...');
+        try {
+          navigate('/inspections/route-planner', { replace: true });
+          console.log('Navigation to route planner completed');
+        } catch (error) {
+          console.error('Error navigating to route planner:', error);
+        }
+        break;
+        
+      default:
+        console.log('Default navigation to:', path);
+        try {
+          navigate(path, { replace: true });
+          console.log('Default navigation completed');
+        } catch (error) {
+          console.error('Error in default navigation:', error);
+        }
     }
   };
 
@@ -537,10 +575,10 @@ useEffect(() => {
             </div>
             <div className="flex gap-4">
               <button
-                onClick={() => handleNavigate('/moving-assistant/inspections')}
+                onClick={() => navigate('/inspections/module/deals', { replace: true })}
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
               >
-                Besichtigungen
+                Besichtigung
               </button>
               <button
                 onClick={() => handleNavigate('/moving-assistant/inspections/route')}
@@ -549,13 +587,20 @@ useEffect(() => {
                 Routenplanung
               </button>
               <button
-                onClick={() => setCurrentStep('admin')}
+                onClick={() => {
+                  // Route aktualisieren und zum Admin-Bereich wechseln
+                  navigate('/inspections/module/admin', { replace: true });
+                  setCurrentStep('admin');
+                }}
                 className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700"
               >
                 Administration
               </button>
               <button
-                onClick={() => handleNavigate('/moving-assistant')}
+                onClick={() => {
+                  console.log('Portal button clicked');
+                  handleNavigate('/moving-assistant');
+                }}
                 className="bg-gray-500 hover:bg-gray-700 text-white px-4 py-2 rounded"
               >
                 Zurück zum Portal
@@ -571,7 +616,13 @@ useEffect(() => {
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         {currentStep === 'admin' ? (
-          <AdminPanel onBack={() => setCurrentStep(0)} />
+          <AdminPanel 
+            onBack={() => {
+              // Zurück zu den Deals navigieren
+              navigate('/inspections/module/deals', { replace: true });
+              setCurrentStep(0);
+            }} 
+          />
         ) : (
           <div>
             <StepNavigation 

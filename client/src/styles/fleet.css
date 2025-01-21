@@ -1,0 +1,32 @@
+.fleet-calendar {
+  padding: 20px;
+}
+
+.status-badge {
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.status-available {
+  background-color: #28a745;
+  color: white;
+}
+
+.status-booked {
+  background-color: #ffc107;
+  color: black;
+}
+
+.status-maintenance {
+  background-color: #dc3545;
+  color: white;
+}
+
+.truck-details .card {
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.truck-details .badge {
+  margin-left: 10px;
+} 

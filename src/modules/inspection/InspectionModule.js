@@ -504,6 +504,83 @@ useEffect(() => {
     navigate('/moving-assistant'); // Zurück zum Hauptportal
   };
 
+  // Log für STEPS Array
+  useEffect(() => {
+    console.log('STEPS Array:', STEPS);
+    STEPS.forEach((step, index) => {
+      console.log(`Step ${index}:`, {
+        type: typeof step,
+        value: step,
+        isValidElement: React.isValidElement(step)
+      });
+    });
+  }, []);
+
+  // Log für currentStep
+  useEffect(() => {
+    console.log('Current Step:', {
+      step: currentStep,
+      stepContent: STEPS[currentStep],
+      type: typeof STEPS[currentStep]
+    });
+  }, [currentStep]);
+
+  // Funktion zum Rendern des aktuellen Schritts
+  const renderCurrentStep = () => {
+    switch (currentStep) {
+      case 0:
+        return <DealViewer onStartInspection={handleStartInspection} />;
+      case 1:
+        return (
+          <MoveInformationComponent
+            dealData={dealData}
+            onComplete={handleMoveInfoComplete}
+          />
+        );
+      case 2:
+        return (
+          <div>
+            <RoomSelector
+              rooms={rooms}
+              currentRoom={currentRoom}
+              onRoomChange={handleRoomChange}
+              onAddRoom={handleAddRoom}
+            />
+            <RoomItemsSelector
+              roomData={roomsData[currentRoom]}
+              onUpdateRoom={(data) => handleUpdateRoomData(currentRoom, data)}
+              onAddItem={handleAddItem}
+            />
+          </div>
+        );
+      case 3:
+        return (
+          <AdditionalInfoComponent
+            onComplete={handleAdditionalInfoComplete}
+          />
+        );
+      case 4:
+        return (
+          <OfferComponent
+            moveInfo={moveInfo}
+            roomsData={roomsData}
+            additionalInfo={additionalInfo}
+            onComplete={handleOfferComplete}
+          />
+        );
+      case 5:
+        return (
+          <MovingTruckSimulator
+            items={items}
+            onAutoPack={handleAutoPack}
+            onFinish={handleFinish}
+          />
+        );
+      default:
+        return <div>Unbekannter Schritt</div>;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <TabletHeader 
@@ -518,12 +595,12 @@ useEffect(() => {
         <div className="container mx-auto px-4 py-8">
           <StepNavigation 
             currentStep={currentStep} 
-            totalSteps={STEPS.length} 
+            totalSteps={STEPS.length - 1} // -1 weil admin nicht in der Navigation erscheint
             onStepChange={handleStepChange}
           />
           
           <div className="mt-8">
-            {STEPS[currentStep]}
+            {renderCurrentStep()}
           </div>
         </div>
       )}
@@ -539,3 +616,10 @@ useEffect(() => {
 };
 
 export default InspectionModule;
+
+// Zeige die Definition von STEPS
+console.log('STEPS Definition:', {
+  STEPS,
+  type: typeof STEPS,
+  isArray: Array.isArray(STEPS)
+});

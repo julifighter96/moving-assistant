@@ -16,13 +16,19 @@ console.log('ENV check:', {
 });
 
 const app = express();
+app.use(express.json({ limit: '50mb' }));
 app.use(cors({
   origin: 'http://localhost:3000',
   credentials: true
 }));
-app.use(express.json({ limit: '50mb' }));
 
-// SQLite Setup mit erweitertem Schema
+// Am Anfang der Datei nach den Imports
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+// SQLite Setup
 const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) => {
   if (err) {
     console.error('Database connection error:', err);
@@ -30,7 +36,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
     console.log('Connected to SQLite database');
     
     db.serialize(() => {
-
       db.run(`CREATE TABLE IF NOT EXISTS admin_rooms (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
@@ -344,9 +349,6 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
         last_name TEXT NOT NULL,
         email TEXT UNIQUE,
         phone TEXT,
-        address TEXT,
-        birth_date DATE,
-        hire_date DATE NOT NULL,
         status TEXT CHECK(status IN ('active', 'inactive')) DEFAULT 'active',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
@@ -486,106 +488,102 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
         }
       });
       
-    });
-    app.get('/api/admin/inspections', (req, res) => {
-      console.log('Fetching inspections from database');
-      
-      db.all('SELECT * FROM inspections', [], (err, rows) => {
+      // Nach der trucks Tabellenerstellung
+      db.run(`CREATE TABLE IF NOT EXISTS trucks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        license_plate TEXT NOT NULL UNIQUE,
+        type TEXT NOT NULL,
+        loading_capacity REAL NOT NULL,
+        length REAL NOT NULL,
+        width REAL NOT NULL,
+        height REAL NOT NULL,
+        max_weight REAL NOT NULL,
+        status TEXT CHECK(status IN ('available', 'booked', 'maintenance')) DEFAULT 'available',
+        current_order_id INTEGER,
+        current_order_start DATETIME,
+        current_order_end DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(current_order_id) REFERENCES inspections(id)
+      )`);
+
+      // Test-LKWs erstellen
+      db.get('SELECT COUNT(*) as count FROM trucks', [], (err, row) => {
         if (err) {
-          console.error('Database error:', err);
-          return res.status(500).json({ error: err.message });
+          console.error('Error checking trucks:', err);
+          return;
         }
         
-        // Always return an array, even if empty
-        console.log('Found inspections:', rows);
-        return res.json(rows || []);
+        if (row.count === 0) {
+          console.log('Inserting test trucks...');
+          const testTrucks = [
+            {
+              license_plate: 'B-MT-1234',
+              type: '7.5t Koffer',
+              loading_capacity: 7500,
+              length: 650,
+              width: 240,
+              height: 260,
+              max_weight: 7500
+            },
+            {
+              license_plate: 'B-MT-5678',
+              type: '12t Koffer',
+              loading_capacity: 12000,
+              length: 820,
+              width: 245,
+              height: 270,
+              max_weight: 12000
+            },
+            {
+              license_plate: 'B-MT-9012',
+              type: '3.5t Sprinter',
+              loading_capacity: 3500,
+              length: 430,
+              width: 180,
+              height: 200,
+              max_weight: 3500
+            }
+          ];
+
+          testTrucks.forEach(truck => {
+            db.run(`
+              INSERT INTO trucks (
+                license_plate, type, loading_capacity,
+                length, width, height, max_weight
+              ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [
+              truck.license_plate,
+              truck.type,
+              truck.loading_capacity,
+              truck.length,
+              truck.width,
+              truck.height,
+              truck.max_weight
+            ], function(err) {
+    if (err) {
+                console.error('Error inserting test truck:', err);
+              } else {
+                console.log('Successfully inserted test truck:', truck.license_plate);
+    }
+  });
+});
+        } else {
+          console.log('Trucks already exist, skipping test data insertion');
+        }
       });
+    
+      // Erstelle assignments Tabelle
+      db.run(`CREATE TABLE IF NOT EXISTS assignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        inspection_id INTEGER NOT NULL,
+        employee_id INTEGER NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(inspection_id) REFERENCES inspections(id),
+        FOREIGN KEY(employee_id) REFERENCES employees(id),
+        UNIQUE(inspection_id, employee_id)
+      )`);
+    
     });
-
-// In server.js bei den anderen API-Endpunkten
-app.get('/api/debug/tables', (req, res) => {
-  db.all(`
-    SELECT name 
-    FROM sqlite_master 
-    WHERE type='table'
-  `, [], (err, tables) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(tables);
-  });
-});
-
-// Zusätzlich für die Struktur der inspections Tabelle
-app.get('/moving-assistant/api/debug/inspections-schema', (req, res) => {
-  db.all(`
-    SELECT sql 
-    FROM sqlite_master 
-    WHERE type='table' 
-    AND name='inspections'
-  `, [], (err, schema) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(schema);
-  });
-});
-    
-    // POST-Endpunkt für neue Inspektion
-    app.post('/moving-assistant/api/inspections', async (req, res) => {
-      const {
-        dealId,
-        moveDate,
-        totalVolume,
-        totalRooms,
-        originAddress,
-        originFloor,
-        originHasElevator,
-        destinationAddress,
-        destinationFloor,
-        destinationHasElevator,
-        packingService,
-        unpackingService,
-        liftLoading,
-        liftUnloading,
-        furnitureCost,
-        materialsCost,
-        totalCost,
-        notes,
-        data
-      } = req.body;
-    
-      try {
-        const result = await db.run(`
-          INSERT INTO inspections (
-            deal_id, move_date, total_volume, total_rooms,
-            origin_address, origin_floor, origin_has_elevator,
-            destination_address, destination_floor, destination_has_elevator,
-            packing_service, unpacking_service,
-            lift_loading, lift_unloading,
-            furniture_cost, materials_cost, total_cost,
-            notes, data
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          dealId, moveDate, totalVolume, totalRooms,
-          originAddress, originFloor, originHasElevator,
-          destinationAddress, destinationFloor, destinationHasElevator,
-          packingService, unpackingService,
-          liftLoading, liftUnloading,
-          furnitureCost, materialsCost, totalCost,
-          notes, JSON.stringify(data)
-        ]);
-    
-        res.json({ id: result.lastID });
-      } catch (error) {
-        console.error('Error creating inspection:', error);
-        res.status(500).json({ error: error.message });
-      }
-    });
-    
-    
   }
 });
 
@@ -606,7 +604,6 @@ async function extractImageFeatures(imageData) {
   return {
     hash,
     features: {
-      // Hier könnten in Zukunft echte Bildmerkmale extrahiert werden
       colorHistogram: [],
       edges: [],
       shapes: []
@@ -614,702 +611,30 @@ async function extractImageFeatures(imageData) {
   };
 }
 
-async function findSimilarItems(imageFeatures, itemName, roomName) {
-  return new Promise((resolve, reject) => {
-    db.all(`
-      SELECT r.*, f.featureVector
-      FROM recognitions r
-      JOIN image_features f ON r.imageHash = f.imageHash
-      WHERE r.roomName = ? AND (r.originalName = ? OR r.correctedName = ?)
-      ORDER BY r.timestamp DESC
-      LIMIT 5
-    `, [roomName, itemName, itemName], (err, rows) => {
-      if (err) reject(err);
-      else {
-        const itemsWithScores = rows.map(row => ({
-          ...row,
-          similarityScore: calculateSimilarity(imageFeatures.features, 
-            JSON.parse(row.featureVector || '{}'))
-        }));
-        resolve(itemsWithScores);
-      }
-    });
-  });
-}
-
-function calculateSimilarity(features1, features2) {
-  // Vereinfachte Version - könnte durch ML-basierte Ähnlichkeitsberechnung ersetzt werden
-  return 0.85;
-}
-
-// Hauptendpunkte
-app.post(['/api/analyze', '/api/analyze/'], async (req, res) => {
-  console.log('Analyze endpoint hit', { body: req.body });
-  try {
-    const { images, roomName, customPrompt } = req.body;
-
-    if (!images || !Array.isArray(images) || images.length === 0) {
-      return res.status(400).json({ error: 'No images provided' });
-    }
-
-    console.log('Request data:', { 
-      roomName, 
-      imagesCount: images.length,
-      hasCustomPrompt: !!customPrompt  // Debug log
-    });
-
-    console.log(`Starting analysis for ${roomName} with ${images.length} images`);
-
-    // Initial Claude Analysis
-    const message = await client.messages.create({
-      model: "claude-3-sonnet-20240229",
-      max_tokens: 1500,
-      messages: [{
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: customPrompt || `Analysiere diese Bilder eines ${roomName}s und identifiziere alle Möbelstücke. 
-  Für jeden Gegenstand gib an:
-  1. Name auf Deutsch
-  2. Geschätzte Maße (L x B x H in cm)
-  3. Geschätztes Volumen in m³
-  4. Kurze Beschreibung (Material, Farbe, Zustand)
+// API Routen
+app.get('/api/admin/inspections', (req, res) => {
+  console.log('Fetching inspections from database');
   
-  Berechne auch das Gesamtvolumen aller Möbel.
-  Gib auch Umzugshinweise und Besonderheiten an.
-  
-  Format als JSON:
-  {
-    "items": [{
-      "name": string,
-      "dimensions": string,
-      "volume": number,
-      "description": string
-    }],
-    "totalVolume": number,
-    "summary": string,
-    "movingTips": string
-  }`
-          },
-          ...images.map(image => ({
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: "image/jpeg",
-              data: image.split(',')[1]
-            }
-          }))
-        ]
-      }]
-    });
-
-    // Parse und validiere Claude's Antwort
-    if (!message.content || !Array.isArray(message.content) || !message.content[0] || !message.content[0].text) {
-      throw new Error('Invalid response format from Claude');
-    }
-    console.log('Prompt:', customPrompt); // Prompt-Log
-    const textContent = message.content[0].text;
-    let initialResults;
-try {
-  // Versuche den JSON-Teil aus der Antwort zu extrahieren
-  const text = message.content[0].text;
-  console.log('Raw Claude response:', text); // Debug-Log
-  
-  const jsonMatch = text.match(/{[\s\S]*}/);
-  if (!jsonMatch) {
-    console.error('No JSON found in response');
-    throw new Error('No JSON found in response');
-  }
-  
-  initialResults = JSON.parse(jsonMatch[0]);
-  
-  if (!initialResults.items || !Array.isArray(initialResults.items)) {
-    throw new Error('Invalid JSON structure');
-  }
-
-  console.log('Parsed results:', initialResults); // Debug-Log
-} catch (parseError) {
-  console.error('Error parsing Claude response:', parseError);
-  throw new Error('Failed to parse AI response');
-}
-
-    // Verbessere mit gelernten Erkennungen
-    const imageFeatures = await Promise.all(
-      images.map(image => extractImageFeatures(image))
-    );
-
-    const improvedItems = await Promise.all(initialResults.items.map(async (item) => {
-      const similarItems = await findSimilarItems(imageFeatures[0], item.name, roomName);
-      
-      if (similarItems.length > 0) {
-        const bestMatch = similarItems.sort((a, b) => b.similarityScore - a.similarityScore)[0];
-        
-        if (bestMatch.similarityScore > 0.8) {
-          return {
-            ...item,
-            name: bestMatch.correctedName,
-            volume: bestMatch.correctedVolume,
-            dimensions: bestMatch.correctedDimensions,
-            confidence: bestMatch.similarityScore * 100,
-            matched: true
-          };
-        }
-      }
-      
-      return { ...item, confidence: 85 };
-    }));
-
-    // Berechne neues Gesamtvolumen
-    const totalVolume = improvedItems.reduce((sum, item) => 
-      sum + (item.volume * (item.count || 1)), 0
-    );
-
-    const finalResults = {
-      ...initialResults,
-      items: improvedItems,
-      totalVolume,
-      improved: true
-    };
-
-    res.json(finalResults);
-
-  } catch (error) {
-    console.error('Analysis error:', error);
-    res.status(500).json({ 
-      error: 'Error during image analysis',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined 
-    });
-  }
-});
-
-app.post('/api/recognition/feedback', async (req, res) => {
-  try {
-    const { 
-      originalItem, 
-      correctedItem, 
-      imageData,
-      roomName,
-      isMisrecognition 
-    } = req.body;
-
-    const imageFeatures = await extractImageFeatures(imageData);
-
-    if (isMisrecognition) {
-      // Speichere Fehlerkennungen für zukünftiges Lernen
-      db.run(
-        `INSERT INTO recognitions 
-         (roomName, originalName, correctedName, imageHash, confidence)
-         VALUES (?, ?, ?, ?, ?)`,
-        [roomName, originalItem.name, correctedItem.name, imageFeatures.hash, 0],
-        async (err) => {
-          if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({ error: 'Database error' });
-          }
-
-          // Speichere Bildmerkmale
-          await db.run(
-            `INSERT INTO image_features 
-             (imageHash, roomName, objectType, featureVector)
-             VALUES (?, ?, ?, ?)`,
-            [
-              imageFeatures.hash,
-              roomName,
-              correctedItem.name,
-              JSON.stringify(imageFeatures.features)
-            ]
-          );
-
-          res.json({ success: true, type: 'misrecognition' });
-        }
-      );
-    } else {
-      // Speichere erfolgreiche Korrekturen
-      db.run(
-        `INSERT INTO recognitions 
-         (roomName, originalName, correctedName, 
-          originalVolume, correctedVolume, originalDimensions, 
-          correctedDimensions, imageHash, confidence)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          roomName,
-          originalItem.name,
-          correctedItem.name,
-          originalItem.volume,
-          correctedItem.volume,
-          originalItem.dimensions,
-          correctedItem.dimensions,
-          imageFeatures.hash,
-          95
-        ],
-        async (err) => {
-          if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({ error: 'Database error' });
-          }
-
-          // Speichere Bildmerkmale
-          await db.run(
-            `INSERT INTO image_features 
-             (imageHash, roomName, objectType, featureVector)
-             VALUES (?, ?, ?, ?)`,
-            [
-              imageFeatures.hash,
-              roomName,
-              correctedItem.name,
-              JSON.stringify(imageFeatures.features)
-            ]
-          );
-
-          res.json({ success: true, type: 'correction' });
-        }
-      );
-    }
-  } catch (error) {
-    console.error('Feedback error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Admin Routes
-
-
-app.get('/moving-assistant/api/admin/rooms', (req, res) => {
-  db.all('SELECT * FROM admin_rooms ORDER BY name ASC', [], (err, rows) => {
+  db.all('SELECT * FROM inspections', [], (err, rows) => {
     if (err) {
-      console.error('Error fetching rooms:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows || []);
-  });
-});
-
-app.get('/moving-assistant/api/admin/items', (req, res) => {
-  const { room } = req.query;
-  console.log('GET /api/admin/items called with room:', room);
-
-  if (!room) {
-    console.log('No room parameter provided');
-    return res.status(400).json([]);
-  }
-
-  const query = 'SELECT * FROM admin_items WHERE room = ?';
-  console.log('Executing query:', query, 'with room:', room);
-
-  db.all(query, [room], (err, rows) => {
-    if (err) {
-      console.error('Database error fetching items:', err);
+      console.error('Database error:', err);
       return res.status(500).json({ error: err.message });
     }
     
-    console.log(`Found ${rows?.length || 0} items for room ${room}:`, rows);
-    res.json(rows || []);
+    // Always return an array, even if empty
+    console.log('Found inspections:', rows);
+    return res.json(rows || []);
   });
 });
 
-app.post('/moving-assistant/api/admin/items', async (req, res) => {
-  const { name, width, length, height, volume, room } = req.body;
-  
-  db.run(
-    'INSERT INTO admin_items (name, width, length, height, volume, room) VALUES (?, ?, ?, ?, ?, ?)',
-    [name, width, length, height, volume, room],
-    function(err) {
-      if (err) {
-        console.error('Error inserting item:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ 
-        id: this.lastID, 
-        name, 
-        width, 
-        length, 
-        height, 
-        volume, 
-        room 
-      });
-    }
-  );
-});
+// ... Ihre anderen API-Routen ...
 
-app.put('/moving-assistant/api/admin/items/:id', (req, res) => {
-  const { id } = req.params;
-  const { name, width, length, height, volume } = req.body;
-  
-  db.run(
-    'UPDATE admin_items SET name = ?, width = ?, length = ?, height = ?, volume = ? WHERE id = ?',
-    [name, width, length, height, volume, id],
-    function(err) {
-      if (err) {
-        console.error('Error updating item:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Item not found' });
-      }
-      res.json({ id: parseInt(id), name, width, length, height, volume });
-    }
-  );
-});
-
-app.get('/moving-assistant/api/admin/prices', (req, res) => {
-  db.all('SELECT * FROM admin_prices ORDER BY created_at ASC', [], (err, rows) => {
-    if (err) {
-      console.error('Error fetching prices:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
-  });
-});
-
-// Preis aktualisieren
-app.put('/moving-assistant/api/admin/prices/:id', (req, res) => {
-  const { id } = req.params;
-  const { price } = req.body;
-  
-  if (price === undefined) {
-    return res.status(400).json({ error: 'Price is required' });
-  }
-
-  db.run(
-    'UPDATE admin_prices SET price = ? WHERE id = ?',
-    [price, id],
-    function(err) {
-      if (err) {
-        console.error('Error updating price:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Price not found' });
-      }
-      res.json({ id: parseInt(id), price });
-    }
-  );
-});
-
-// Statistik-Endpoint (optional)
-app.get('/moving-assistant/api/stats', async (req, res) => {
-  try {
-    db.all(`
-      SELECT 
-        COUNT(*) as total_recognitions,
-        COUNT(DISTINCT roomName) as unique_rooms,
-        COUNT(DISTINCT originalName) as unique_items,
-        AVG(confidence) as avg_confidence
-      FROM recognitions
-    `, [], (err, stats) => {
-      if (err) throw err;
-      res.json(stats[0]);
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET Mitarbeiter
-app.get('/moving-assistant/api/employees', (req, res) => {
-  console.log('Fetching employees...');
-  db.all('SELECT * FROM employees ORDER BY last_name, first_name', [], (err, rows) => {
-    if (err) {
-      console.error('Error fetching employees:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log('Found employees:', rows);
-    res.json(rows || []);
-  });
-});
-
-// GET einzelner Mitarbeiter
-app.get('/moving-assistant/api/employees/:id', (req, res) => {
-  const { id } = req.params;
-  db.get('SELECT * FROM employees WHERE id = ?', [id], (err, row) => {
-    if (err) {
-      console.error('Error fetching employee:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (!row) {
-      return res.status(404).json({ error: 'Employee not found' });
-    }
-    res.json(row);
-  });
-});
-
-// POST neuer Mitarbeiter
-app.post('/moving-assistant/api/employees', (req, res) => {
-  const {
-    firstName,
-    lastName,
-    email,
-    phone,
-    address,
-    birthDate,
-    hireDate,
-    status = 'active'
-  } = req.body;
-
-  db.run(
-    `INSERT INTO employees (
-      first_name, last_name, email, phone, address, birth_date, hire_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [firstName, lastName, email, phone, address, birthDate, hireDate, status],
-    function(err) {
-      if (err) {
-        console.error('Error creating employee:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      res.status(201).json({ 
-        id: this.lastID,
-        first_name: firstName,
-        last_name: lastName,
-        email,
-        phone,
-        address,
-        birth_date: birthDate,
-        hire_date: hireDate,
-        status
-      });
-    }
-  );
-});
-
-// PUT Mitarbeiter aktualisieren
-app.put('/moving-assistant/api/employees/:id', (req, res) => {
-  const { id } = req.params;
-  const {
-    firstName,
-    lastName,
-    email,
-    phone,
-    address,
-    birthDate,
-    hireDate,
-    status
-  } = req.body;
-
-  db.run(
-    `UPDATE employees SET 
-      first_name = ?, 
-      last_name = ?, 
-      email = ?, 
-      phone = ?, 
-      address = ?, 
-      birth_date = ?, 
-      hire_date = ?, 
-      status = ?
-    WHERE id = ?`,
-    [firstName, lastName, email, phone, address, birthDate, hireDate, status, id],
-    function(err) {
-      if (err) {
-        console.error('Error updating employee:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Employee not found' });
-      }
-      res.json({ 
-        id: parseInt(id),
-        first_name: firstName,
-        last_name: lastName,
-        email,
-        phone,
-        address,
-        birth_date: birthDate,
-        hire_date: hireDate,
-        status
-      });
-    }
-  );
-});
-
-// Qualifikationen abrufen
-app.get('/moving-assistant/api/qualifications', (req, res) => {
-  db.all('SELECT * FROM qualifications ORDER BY name', [], (err, rows) => {
-    if (err) {
-      console.error('Error fetching qualifications:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows || []);
-  });
-});
-
-// Mitarbeiter-Qualifikationen abrufen
-app.get('/moving-assistant/api/employee-qualifications/:id', (req, res) => {
-  const { id } = req.params;
-  db.all(`
-    SELECT 
-      eq.*,
-      q.name,
-      q.description
-    FROM employee_qualifications eq
-    JOIN qualifications q ON eq.qualification_id = q.id
-    WHERE eq.employee_id = ?
-    ORDER BY eq.acquired_date DESC
-  `, [id], (err, rows) => {
-    if (err) {
-      console.error('Error fetching employee qualifications:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows || []);
-  });
-});
-
-// Neue Qualifikation hinzufügen
-app.post('/moving-assistant/api/employee-qualifications', (req, res) => {
-  const { employeeId, qualificationId, acquiredDate, expiryDate, notes } = req.body;
-
-  db.run(`
-    INSERT INTO employee_qualifications (
-      employee_id, qualification_id, acquired_date, expiry_date, notes
-    ) VALUES (?, ?, ?, ?, ?)
-  `, [employeeId, qualificationId, acquiredDate, expiryDate, notes], function(err) {
-    if (err) {
-      console.error('Error adding qualification:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(201).json({ 
-      id: this.lastID,
-      employee_id: employeeId,
-      qualification_id: qualificationId,
-      acquired_date: acquiredDate,
-      expiry_date: expiryDate,
-      notes
-    });
-  });
-});
-
-// Teams abrufen
-app.get('/moving-assistant/api/teams', (req, res) => {
-  db.all('SELECT * FROM teams ORDER BY name', [], (err, rows) => {
-    if (err) {
-      console.error('Error fetching teams:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows || []);
-  });
-});
-
-// Einsätze abrufen
-app.get('/moving-assistant/api/assignments', (req, res) => {
-  db.all(`
-    SELECT 
-      a.*,
-      e.first_name,
-      e.last_name,
-      i.customer_name,
-      i.address
-    FROM assignments a
-    LEFT JOIN employees e ON a.employee_id = e.id
-    LEFT JOIN inspections i ON a.inspection_id = i.id
-    ORDER BY a.start_datetime
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Error fetching assignments:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows || []);
-  });
-});
-
-// Einsatz erstellen
-app.post('/moving-assistant/api/assignments', (req, res) => {
-  const {
-    employeeId,
-    inspectionId,
-    startDate,
-    endDate
-  } = req.body;
-
-  // Prüfe zuerst, ob der Mitarbeiter bereits einen Einsatz in diesem Zeitraum hat
-  db.all(`
-    SELECT * FROM assignments 
-    WHERE employee_id = ? 
-    AND (
-      (start_datetime <= ? AND end_datetime >= ?) OR
-      (start_datetime <= ? AND end_datetime >= ?) OR
-      (start_datetime >= ? AND end_datetime <= ?)
-    )
-  `, [
-    employeeId,
-    startDate, startDate,
-    endDate, endDate,
-    startDate, endDate
-  ], (err, existingAssignments) => {
-    if (err) {
-      console.error('Error checking existing assignments:', err);
-      return res.status(500).json({ error: err.message });
-    }
-
-    if (existingAssignments.length > 0) {
-      return res.status(409).json({ 
-        error: 'Mitarbeiter ist in diesem Zeitraum bereits einem anderen Umzug zugewiesen' 
-      });
-    }
-
-    // Wenn keine Konflikte gefunden wurden, erstelle den neuen Einsatz
-    db.run(`
-      INSERT INTO assignments (
-        employee_id,
-        inspection_id,
-        start_datetime,
-        end_datetime,
-        status
-      ) VALUES (?, ?, ?, ?, 'planned')
-    `, [employeeId, inspectionId, startDate, endDate], function(err) {
-      if (err) {
-        console.error('Error creating assignment:', err);
-        return res.status(500).json({ error: err.message });
-      }
-
-      res.status(201).json({
-        id: this.lastID,
-        employee_id: employeeId,
-        inspection_id: inspectionId,
-        start_datetime: startDate,
-        end_datetime: endDate,
-        status: 'planned'
-      });
-    });
-  });
-});
-
-// Mitarbeiter aus Einsatz entfernen
-app.delete('/moving-assistant/api/assignments/:assignmentId/employees/:employeeId', (req, res) => {
-  const { assignmentId, employeeId } = req.params;
-
-  db.run(`
-    DELETE FROM team_members
-    WHERE team_id IN (
-      SELECT team_id FROM assignments WHERE id = ?
-    )
-    AND employee_id = ?
-  `, [assignmentId, employeeId], (err) => {
-    if (err) {
-      console.error('Error removing team member:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(204).send();
-  });
-});
-
-// Inspektionen abrufen
-app.get('/moving-assistant/api/inspections', (req, res) => {
-  db.all('SELECT * FROM inspections ORDER BY created_at DESC', [], (err, rows) => {
-    if (err) {
-      console.error('Error fetching inspections:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows || []);
-  });
-});
-
-// Neuer Endpunkt zum Synchronisieren der Pipedrive-Deals mit lokalen Inspektionen
+// Neuer Endpunkt zum Synchronisieren der Pipedrive-Deals
 app.post('/moving-assistant/api/sync-deals', async (req, res) => {
   const { deals } = req.body;
   
   try {
-    // Für jeden Deal
     for (const deal of deals) {
-      // Prüfe ob bereits eine Inspektion für diesen Deal existiert
       const existingInspection = await new Promise((resolve, reject) => {
         db.get('SELECT * FROM inspections WHERE deal_id = ?', [deal.id], (err, row) => {
           if (err) reject(err);
@@ -1318,22 +643,16 @@ app.post('/moving-assistant/api/sync-deals', async (req, res) => {
       });
 
       if (!existingInspection) {
-        // Erstelle neue Inspektion
         await new Promise((resolve, reject) => {
           db.run(`
             INSERT INTO inspections (
-              deal_id,
-              customer_name,
-              address,
-              moving_date,
-              status,
-              notes
+              deal_id, customer_name, address, moving_date, status, notes
             ) VALUES (?, ?, ?, ?, ?, ?)
           `, [
             deal.id,
             deal.title,
-            deal['07c3da8804f7b96210e45474fba35b8691211ddd'], // originAddress
-            deal['949696aa9d99044db90383a758a74675587ed893'], // moveDate
+            deal['07c3da8804f7b96210e45474fba35b8691211ddd'],
+            deal['949696aa9d99044db90383a758a74675587ed893'],
             'pending',
             `Umzug von ${deal['07c3da8804f7b96210e45474fba35b8691211ddd']} nach ${deal['9cb4de1018ec8404feeaaaf7ee9b293c78c44281']}`
           ], function(err) {
@@ -1351,34 +670,410 @@ app.post('/moving-assistant/api/sync-deals', async (req, res) => {
   }
 });
 
-// Assignment löschen
-app.delete('/moving-assistant/api/assignments/:id', (req, res) => {
-  const { id } = req.params;
+// Verfügbare LKWs für einen bestimmten Zeitraum abrufen
+app.get('/moving-assistant/api/trucks/available', async (req, res) => {
+  const { date } = req.query;
+  console.log('Fetching available trucks for date:', date);
 
-  console.log('Deleting assignment:', id); // Debug-Log
+  try {
+    const trucks = await new Promise((resolve, reject) => {
+      db.all(`
+        SELECT * FROM trucks 
+        WHERE status = 'available'
+        AND id NOT IN (
+          SELECT t.id 
+          FROM trucks t
+          JOIN inspections i ON t.current_order_id = i.id
+          WHERE i.moving_date = ?
+        )
+        ORDER BY loading_capacity ASC
+      `, [date], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
 
-  db.run('DELETE FROM assignments WHERE id = ?', [id], function(err) {
+    console.log('Available trucks:', trucks);
+    res.json(trucks || []);
+  } catch (error) {
+    console.error('Error fetching available trucks:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// LKW einem Umzug zuweisen
+app.post('/moving-assistant/api/trucks/:truckId/assign', async (req, res) => {
+  const { truckId } = req.params;
+  const { inspectionId } = req.body;
+  console.log('Assigning truck:', { truckId, inspectionId });
+
+  try {
+    // Hole das Umzugsdatum
+    const inspection = await new Promise((resolve, reject) => {
+      db.get('SELECT moving_date FROM inspections WHERE id = ?', [inspectionId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!inspection) {
+      return res.status(404).json({ error: 'Umzug nicht gefunden' });
+    }
+
+    // Aktualisiere den LKW-Status
+    await new Promise((resolve, reject) => {
+      db.run(`
+        UPDATE trucks 
+        SET status = 'booked',
+            current_order_id = ?
+        WHERE id = ?
+      `, [inspectionId, truckId], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error assigning truck:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// LKW-Routen
+app.get('/moving-assistant/api/trucks', (req, res) => {
+  console.log('Fetching trucks...');
+  db.all('SELECT * FROM trucks ORDER BY license_plate', [], (err, rows) => {
     if (err) {
-      console.error('Error deleting assignment:', err);
+      console.error('Error fetching trucks:', err);
       return res.status(500).json({ error: err.message });
     }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Assignment not found' });
-    }
-    console.log('Successfully deleted assignment:', id); // Debug-Log
-    res.status(204).send();
+    console.log('Found trucks:', rows);
+    res.json(rows || []);
   });
 });
 
-// Statische Dateien NACH den API-Routen
-app.use('/moving-assistant', express.static(path.join(__dirname, '..', 'build')));
+// GET einzelner LKW
+app.get('/moving-assistant/api/trucks/:id', (req, res) => {
+  const { id } = req.params;
+  console.log('Fetching truck details for ID:', id);
+  
+  db.get('SELECT * FROM trucks WHERE id = ?', [id], (err, truck) => {
+    if (err) {
+      console.error('Error fetching truck:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!truck) {
+      return res.status(404).json({ error: 'Truck not found' });
+    }
+    
+    // Hole auch die Buchungshistorie
+    db.all(`
+      SELECT i.moving_date, i.customer_name, i.address
+      FROM trucks t
+      JOIN inspections i ON t.current_order_id = i.id
+      WHERE t.id = ?
+      ORDER BY i.moving_date DESC
+    `, [id], (err, bookings) => {
+      if (err) {
+        console.error('Error fetching bookings:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      
+      res.json({ 
+        ...truck,
+        bookingHistory: bookings || []
+      });
+    });
+  });
+});
 
-// Catch-all Route als LETZTES
+// PUT LKW Status ändern
+app.put('/moving-assistant/api/trucks/:id/status', (req, res) => {
+  const { id } = req.params;
+  const { status, orderId, startDate, endDate } = req.body;
+
+  db.run(`
+    UPDATE trucks 
+    SET status = ?,
+        current_order_id = ?,
+        current_order_start = ?,
+        current_order_end = ?
+    WHERE id = ?
+  `, [status, orderId, startDate, endDate, id], function(err) {
+      if (err) {
+      console.error('Error updating truck status:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+      return res.status(404).json({ error: 'Truck not found' });
+    }
+    res.json({
+      id: parseInt(id),
+      status,
+      current_order_id: orderId,
+      current_order_start: startDate,
+      current_order_end: endDate
+    });
+  });
+});
+
+// LKW von einem Umzug entfernen
+app.post('/moving-assistant/api/trucks/:truckId/unassign', async (req, res) => {
+  const { truckId } = req.params;
+
+  try {
+    await new Promise((resolve, reject) => {
+      db.run(`
+        UPDATE trucks 
+        SET status = 'available',
+            current_order_id = NULL,
+            current_order_start = NULL,
+            current_order_end = NULL
+        WHERE id = ?
+      `, [truckId], function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      });
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error unassigning truck:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// In server.js - Fügen Sie diese Route hinzu oder aktualisieren Sie sie
+app.get('/moving-assistant/api/admin/inspections', (req, res) => {
+  console.log('Fetching inspections from database');
+  
+  db.all(`
+    SELECT * FROM inspections 
+    WHERE moving_date IS NOT NULL 
+    ORDER BY moving_date ASC
+  `, [], (err, rows) => {
+      if (err) {
+      console.error('Database error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+    
+    // Konvertiere das Datum in ein ISO-Format
+    const formattedRows = rows.map(row => ({
+      ...row,
+      moving_date: new Date(row.moving_date).toISOString().split('T')[0]
+    }));
+    
+    console.log('Found inspections:', formattedRows);
+    return res.json(formattedRows || []);
+  });
+});
+
+// Mitarbeiter-Routen
+app.get('/moving-assistant/api/employees', (req, res) => {
+  console.log('Fetching employees...');
+  
+  db.all(`
+    SELECT * FROM employees 
+    ORDER BY last_name, first_name
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching employees:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('Found employees:', rows);
+    res.json(rows || []);
+  });
+});
+
+// Stelle sicher, dass die employees Tabelle existiert
+db.serialize(() => {
+  // ... andere Tabellen ...
+
+  db.run(`CREATE TABLE IF NOT EXISTS employees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT UNIQUE,
+    phone TEXT,
+    status TEXT CHECK(status IN ('active', 'inactive')) DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Füge Test-Mitarbeiter hinzu, wenn die Tabelle leer ist
+  db.get('SELECT COUNT(*) as count FROM employees', [], (err, row) => {
+      if (err) {
+      console.error('Error checking employees:', err);
+      return;
+    }
+    
+    if (row.count === 0) {
+      console.log('Inserting test employees...');
+      const testEmployees = [
+        {
+          first_name: 'Max',
+          last_name: 'Mustermann',
+          email: 'max.mustermann@example.com',
+          phone: '+49 123 456789',
+          status: 'active'
+        },
+        {
+          first_name: 'Anna',
+          last_name: 'Schmidt',
+          email: 'anna.schmidt@example.com',
+          phone: '+49 987 654321',
+          status: 'active'
+        }
+      ];
+
+      testEmployees.forEach(employee => {
+        db.run(`
+          INSERT INTO employees (
+            first_name, last_name, email, phone, status
+          ) VALUES (?, ?, ?, ?, ?)
+        `, [
+          employee.first_name,
+          employee.last_name,
+          employee.email,
+          employee.phone,
+          employee.status
+        ], function(err) {
+      if (err) {
+            console.error('Error inserting test employee:', err);
+          } else {
+            console.log('Successfully inserted test employee:', employee.first_name);
+          }
+        });
+      });
+    }
+  });
+});
+
+// 2. API Router Setup
+const apiRouter = express.Router();
+
+// Moves API
+apiRouter.get('/moves/schedule', (req, res) => {
+  console.log('[Moves API] Fetching move schedule...');
+  
+  db.all(`
+    SELECT 
+      i.id,
+      i.customer_name,
+      i.address,
+      i.moving_date,
+      i.status,
+      GROUP_CONCAT(e.first_name || ' ' || e.last_name) as assigned_employees
+    FROM inspections i
+    LEFT JOIN assignments a ON i.id = a.inspection_id
+    LEFT JOIN employees e ON a.employee_id = e.id
+    WHERE i.moving_date IS NOT NULL
+    GROUP BY i.id
+    ORDER BY i.moving_date ASC
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('[Moves API] Database error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    
+    const formattedRows = rows.map(row => ({
+      ...row,
+      moving_date: new Date(row.moving_date).toISOString().split('T')[0],
+      assigned_employees: row.assigned_employees ? row.assigned_employees.split(',') : []
+    }));
+    
+    res.json(formattedRows || []);
+  });
+});
+
+// Assignments API
+apiRouter.get('/assignments', (req, res) => {
+  console.log('[Assignments API] Fetching assignments...');
+  
+  db.all(`
+    SELECT 
+      a.*,
+      e.first_name,
+      e.last_name,
+      i.moving_date,
+      i.customer_name
+    FROM assignments a
+    JOIN employees e ON a.employee_id = e.id
+    JOIN inspections i ON a.inspection_id = i.id
+    ORDER BY i.moving_date ASC
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('[Assignments API] Database error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Employees API
+apiRouter.get('/employees', (req, res) => {
+  console.log('[Employees API] Fetching employees...');
+  
+  db.all(`
+    SELECT * FROM employees 
+    ORDER BY last_name, first_name
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('[Employees API] Database error:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Assignment Management
+apiRouter.post('/moves/:moveId/assign', async (req, res) => {
+  const { moveId } = req.params;
+  const { employeeIds } = req.body;
+
+  try {
+    await new Promise((resolve, reject) => {
+      db.run('DELETE FROM assignments WHERE inspection_id = ?', [moveId], (err) => {
+          if (err) reject(err);
+        else resolve();
+        });
+      });
+
+    for (const employeeId of employeeIds) {
+        await new Promise((resolve, reject) => {
+          db.run(`
+          INSERT INTO assignments (inspection_id, employee_id)
+          VALUES (?, ?)
+        `, [moveId, employeeId], (err) => {
+            if (err) reject(err);
+          else resolve();
+          });
+        });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Assignment API] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Mount API Router (BEFORE static files)
+app.use('/moving-assistant/api', apiRouter);
+
+// 4. Static Files (AFTER API routes)
+app.use('/moving-assistant', (req, res, next) => {
+  console.log('[Static] Serving static file:', req.url);
+  next();
+}, express.static(path.join(__dirname, '..', 'build')));
+
+// 5. Catch-all Route (LAST)
 app.get('*', (req, res) => {
+  console.log('[Catch-all] Request URL:', req.url);
   res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
 });
 
-// Start server
+// Server starten
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);

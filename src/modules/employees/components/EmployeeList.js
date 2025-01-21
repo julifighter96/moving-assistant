@@ -25,11 +25,12 @@ const EmployeeList = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log('Received employees:', data); // Debug log
-      setEmployees(data);
+      console.log('Received employees:', data);
+      setEmployees(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching employees:', error);
       setError('Fehler beim Laden der Mitarbeiterdaten');
+      setEmployees([]);
     } finally {
       setLoading(false);
     }

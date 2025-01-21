@@ -7,6 +7,11 @@ import InspectionModule from './modules/inspection/InspectionModule';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import EmployeeModule from './modules/employees/EmployeeModule';
 import InspectionRoutes from './modules/inspection/routes/InspectionRoutes';
+import FleetCalendar from './modules/fleet/components/FleetCalendar';
+import FleetOverview from './modules/fleet/components/FleetOverview';
+import TruckDetails from './modules/fleet/components/TruckDetails';
+import TruckForm from './modules/fleet/components/TruckForm';
+import FleetModule from './modules/fleet/FleetModule';
 
 const App = () => {
   const { isAuthenticated } = useAuth();
@@ -37,6 +42,10 @@ const App = () => {
             } />
             <Route path="/employees/*" element={<EmployeeModule />} />
             <Route path="/inspections/*" element={<InspectionRoutes />} />
+            {/* Fuhrpark Routen */}
+            <Route path="/fleet/*" element={<FleetModule />} />
+            <Route path="/fleet/new" element={<TruckForm />} />
+            <Route path="/fleet/:id" element={<TruckDetails />} />
             {/* Redirect any unknown routes to home */}
             <Route path="*" element={<Navigate to="/" />} />
           </>

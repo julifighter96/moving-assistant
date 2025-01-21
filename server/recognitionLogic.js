@@ -174,4 +174,67 @@ class RecognitionImprover {
     }
   }
   
+  class Truck {
+    constructor(licensePlate, type, loadingCapacity, dimensions, maxWeight) {
+        this.licensePlate = licensePlate;
+        this.type = type;
+        this.loadingCapacity = loadingCapacity;
+        this.dimensions = dimensions;
+        this.maxWeight = maxWeight;
+        this.status = 'available'; // available, booked, maintenance
+        this.currentOrder = null;
+    }
+
+    book(movingOrder) {
+        if (this.status !== 'available') {
+            throw new Error('LKW ist nicht verfügbar');
+        }
+        this.status = 'booked';
+        this.currentOrder = movingOrder;
+    }
+
+    complete() {
+        this.status = 'available';
+        this.currentOrder = null;
+    }
+
+    setMaintenance() {
+        if (this.status === 'booked') {
+            throw new Error('LKW kann nicht in Wartung gehen, da er gebucht ist');
+        }
+        this.status = 'maintenance';
+    }
+  }
+
+  class TruckFleet {
+    constructor() {
+        this.trucks = new Map();
+    }
+
+    addTruck(truck) {
+        if (this.trucks.has(truck.licensePlate)) {
+            throw new Error('LKW mit diesem Kennzeichen existiert bereits');
+        }
+        this.trucks.set(truck.licensePlate, truck);
+    }
+
+    findAvailableTruck(requiredCapacity) {
+        for (let truck of this.trucks.values()) {
+            if (truck.status === 'available' && truck.loadingCapacity >= requiredCapacity) {
+                return truck;
+            }
+        }
+        return null;
+    }
+
+    getTruckByLicensePlate(licensePlate) {
+        return this.trucks.get(licensePlate);
+    }
+
+    getAvailableTrucks() {
+        return Array.from(this.trucks.values())
+            .filter(truck => truck.status === 'available');
+    }
+  }
+  
   module.exports = RecognitionImprover;

@@ -33,7 +33,8 @@ const ModulePortal = ({ onInspectionStart }) => {
       name: 'Fuhrpark',
       description: 'Fahrzeugverwaltung und Routenplanung',
       icon: Truck,
-      component: null
+      component: null,
+      onClick: () => navigate('/fleet')
     },
     {
       id: 'inventory',

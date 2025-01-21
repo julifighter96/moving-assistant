@@ -1,5 +1,5 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useCallback, useEffect  } from 'react';
-import { Home, ClipboardList, Settings, Check, Plus, MapPin } from 'lucide-react';
 import DealViewer from './components/DealViewer';
 import MoveInformationComponent from './components/MoveInformationComponent';
 import RoomSelector from './components/RoomSelector';
@@ -16,6 +16,19 @@ import InspectionOverview from './components/InspectionOverview';
 import MovingTruckSimulator, { TRUCK_DIMENSIONS, autoPackItems } from './components/MovingTruckSimulator';
 import { useAuth } from '../../context/AuthContext';
 import TabletHeader from '../shared/components/TabletHeader';
+import { Routes, Route, useNavigate } from 'react-router-dom';
+
+// Simple icon components
+const IconWrapper = ({ children, className = "" }) => (
+  <div className={`w-5 h-5 ${className}`}>{children}</div>
+);
+
+const Home = () => <IconWrapper>🏠</IconWrapper>;
+const ClipboardList = () => <IconWrapper>📋</IconWrapper>;
+const Settings = () => <IconWrapper>⚙️</IconWrapper>;
+const Check = () => <IconWrapper>✓</IconWrapper>;
+const Plus = () => <IconWrapper>+</IconWrapper>;
+const MapPin = () => <IconWrapper>📍</IconWrapper>;
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -129,7 +142,8 @@ const StepNavigation = ({ currentStep, totalSteps, onStepChange }) => {
   );
 };
 
-const InspectionModule = ({ onBack }) => {
+const InspectionModule = () => {
+  const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   
   const [currentStep, setCurrentStep] = useState(0);
@@ -486,300 +500,42 @@ useEffect(() => {
     });
   }, [currentStep]);
 
+  const handleBack = () => {
+    navigate('/moving-assistant'); // Zurück zum Hauptportal
+  };
+
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="min-h-screen bg-gray-100">
       <TabletHeader 
-        currentDeal={dealData}
-        onAdminClick={() => setCurrentStep('admin')}
-        onHomeClick={() => setCurrentStep(0)}
-        onInspectionsClick={() => setCurrentStep('inspections')}
-        onRouteClick={handleRouteClick}
-        onBack={onBack}
+        logo={logo} 
+        version={APP_VERSION}
+        onBack={() => navigate('/moving-assistant')}
       />
-      <main className="pt-20 px-6 pb-6">
-        <div className="max-w-none mx-auto">
-          {/* Step Progress */}
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <div className="flex justify-between">
-              {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
-                const isCompleted = typeof currentStep === 'number' && index < currentStep;
-                const isCurrent = currentStep === step.id;
-                
-                return (
-                  <div key={step.label} className="flex flex-col items-center flex-1">
-                    <div className="relative w-full">
-                      {index !== 0 && (
-                        <div 
-                          className={`absolute left-0 right-1/2 top-4 h-1 -z-10 
-                          ${isCompleted ? 'bg-primary' : 'bg-gray-200'}`}
-                        />
-                      )}
-                      {index !== STEPS.length - 1 && (
-                        <div 
-                          className={`absolute left-1/2 right-0 top-4 h-1 -z-10 
-                          ${index < currentStep ? 'bg-primary' : 'bg-gray-200'}`}
-                        />
-                      )}
-                      <div className="flex justify-center">
-                        <div 
-                          className={`w-8 h-8 rounded-full flex items-center justify-center 
-                          ${isCompleted ? 'bg-primary text-white' : 
-                            isCurrent ? 'bg-primary-light border-2 border-primary' : 
-                            'bg-gray-200'}`}
-                        >
-                          {isCompleted ? (
-                            <Check className="h-5 w-5" />
-                          ) : (
-                            <span>{index + 1}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <span className={`mt-2 text-sm font-medium text-center
-                      ${isCurrent ? 'text-primary' : 'text-gray-500'}`}>
-                      {step.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+      
+      {currentStep === 'admin' ? (
+        <AdminPanel onBack={() => setCurrentStep(0)} />
+      ) : (
+        <div className="container mx-auto px-4 py-8">
+          <StepNavigation 
+            currentStep={currentStep} 
+            totalSteps={STEPS.length} 
+            onStepChange={handleStepChange}
+          />
+          
+          <div className="mt-8">
+            {STEPS[currentStep]}
           </div>
-
-          {/* Main Content Area */}
-          <div className="space-y-6">
-            {currentStep === 0 && (
-              <div className="bg-white rounded-lg shadow-sm">
-                <div className="p-6 border-b border-gray-200">
-                  <h2 className="text-xl font-semibold">Deal auswählen</h2>
-                  <p className="text-gray-500 mt-1">Wählen Sie einen Deal aus oder suchen Sie nach einem bestimmten Deal</p>
-                </div>
-                <div className="p-6">
-                  <DealViewer onStartInspection={handleStartInspection} />
-                </div>
-              </div>
-            )}
-              
-              {currentStep === 1 && (
-                <div className="bg-white rounded-lg shadow-sm">
-                  <div className="p-6 border-b border-gray-200">
-                    <h2 className="text-xl font-semibold">Umzugsinformationen</h2>
-                    <p className="text-gray-500 mt-1">Geben Sie die grundlegenden Informationen zum Umzug ein</p>
-                  </div>
-                  <div className="p-6">
-                    <MoveInformationComponent 
-                      dealId={selectedDealId} 
-                      onComplete={handleMoveInfoComplete} 
-                    />
-                  </div>
-                </div>
-              )}
-              
-              {currentStep === 2 && (
-  <div className="grid grid-cols-12 gap-6">
-    {/* Left Sidebar */}
-    <div className="col-span-4">
-      <div className="bg-white rounded-lg shadow-sm p-6 sticky top-24">
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold">Räume</h2>
-          <p className="text-gray-500 mt-1">Wählen Sie einen Raum aus oder fügen Sie einen neuen hinzu</p>
         </div>
-        <RoomSelector
-          rooms={rooms}
-          currentRoom={currentRoom}
-          onRoomChange={handleRoomChange}
-          onAddRoom={handleAddRoom}
+      )}
+
+      {showPopup && (
+        <SuccessPopup 
+          message={popupMessage} 
+          onClose={handleClosePopup}
         />
-        
-        <div className="mt-6 pt-6 border-t border-gray-200">
-        <h3 className="text-lg font-medium mb-2">Zusammenfassung</h3>
-        <div className="space-y-2 text-sm text-gray-600">
-          <div className="flex justify-between">
-            <span>Gesamtvolumen:</span>
-            <span className="font-medium">
-              {Object.values(roomsData || {}).reduce((sum, room) => {
-                return sum + calculateTotalVolume(room);
-              }, 0).toFixed(2)} m³
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>Räume:</span>
-            <span className="font-medium">{rooms.length}</span>
-          </div>
-        </div>
-      </div>
-      </div>
-    </div>
-    
-    {/* Main Content Area */}
-    <div className="col-span-8">
-      <div className="bg-white rounded-lg shadow-sm">
-        <div className="border-b border-gray-200">
-          <div className="flex items-center justify-between p-6">
-            <div>
-              <h2 className="text-xl font-semibold">{currentRoom}</h2>
-              <p className="text-gray-500 mt-1">Inventar und Fotos für diesen Raum</p>
-            </div>
-          </div>
-          <div className="px-6">
-            <div className="flex border-b">
-              <button
-                onClick={() => setActiveTab('standard')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'standard'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Standard
-              </button>
-              <button
-                onClick={() => setActiveTab('ai')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors flex items-center ${
-                  activeTab === 'ai'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                KI-Analyse
-                <span className="ml-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                  Beta
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <div className="p-6">
-          {activeTab === 'standard' ? (
-            <RoomItemsSelector
-              key={`${currentRoom}-standard`}
-              roomName={currentRoom}
-              onUpdateRoom={handleUpdateRoomData}
-              initialData={roomsData[currentRoom]}
-              onAddItem={handleAddItem}
-            />
-          ) : (
-            <AIAnalysisTab
-              key={`${currentRoom}-ai`}
-              roomName={currentRoom}
-              onAnalysisComplete={(analysisData) => {
-                handleUpdateRoomData(currentRoom, {
-                  items: analysisData.items.map(item => ({
-                    name: item.name,
-                    quantity: 1,
-                    // Convert cm to m for internal storage
-                    width: Math.round(item.width) ,
-                    height: Math.round(item.height) ,
-                    length: Math.round(item.length) ,
-                    volume: (item.length * item.width * item.height), // cm³ to m³
-                    demontiert: false,
-                    duebelarbeiten: false,
-                    description: item.description
-                  })),
-                  totalVolume: analysisData.totalVolume,
-                  estimatedWeight: analysisData.totalVolume * 200,
-                  analysisNotes: analysisData.description
-                });
-                              
-                setActiveTab('standard');
-                setShowPopup(true);
-                setPopupMessage('KI-Analyse erfolgreich abgeschlossen!');
-              }}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-              
-              {currentStep === 3 && (
-                <div className="bg-white rounded-lg shadow-sm">
-                  <div className="p-6 border-b border-gray-200">
-                    <h2 className="text-xl font-semibold">Zusätzliche Details</h2>
-                    <p className="text-gray-500 mt-1">Ergänzende Informationen zum Umzug</p>
-                  </div>
-                  <div className="p-6">
-                    <AdditionalInfoComponent onComplete={handleAdditionalInfoComplete} />
-                  </div>
-                </div>
-              )}
-              
-              {currentStep === 4 && (
-                <div className="bg-white rounded-lg shadow-sm">
-                  <div className="p-6 border-b border-gray-200">
-                    <h2 className="text-xl font-semibold">Angebot erstellen</h2>
-                    <p className="text-gray-500 mt-1">Überprüfen und finalisieren Sie das Angebot</p>
-                  </div>
-                  <div className="p-6">
-                    <OfferComponent 
-                        inspectionData={{ rooms: roomsData, additionalInfo, moveInfo }}
-                        dealId={selectedDealId}
-                        onComplete={handleOfferComplete}
-                        setCurrentStep={setCurrentStep}
-                    />
-                  </div>
-                </div>
-              )}
-{currentStep === 5 && (
-  <div className="bg-white rounded-lg shadow-sm">
-    <div className="p-6 border-b border-gray-200">
-      <h2 className="text-xl font-semibold">3D Beladungssimulation</h2>
-      <p className="text-gray-500 mt-1">
-        Planen Sie die optimale Beladung des Umzugswagens
-      </p>
-    </div>
-    <div className="p-6">
-      
-      <div className="h-[calc(100vh-250px)]">
-        <MovingTruckSimulator items={items} 
-      setItems={setItems}/>
-      </div>
-    </div>
-  </div>
-)}
-              {currentStep === 'admin' && (
-  <div className="bg-white rounded-lg shadow-sm">
-    <div className="p-6 border-b border-gray-200">
-      <h2 className="text-xl font-semibold">Administration</h2>
-      <p className="text-gray-500 mt-1">Verwalten Sie Räume und Gegenstände</p>
-    </div>
-    <div className="p-6">
-      <AdminPanel 
-        currentStep={currentStep}
-        onUpdateRooms={setRooms} 
-        onUpdateItems={(items) => setRoomsData(prev => ({
-          ...prev,
-          [currentRoom]: {
-            ...prev[currentRoom],
-            items
-          }
-        }))}
-      />
-    </div>
-  </div>
-)}
-
-{currentStep === 'route-planner' && <DailyRoutePlanner />}
-
-{currentStep === 'inspections' && (
-  <InspectionOverview />
-)}
-          </div>
-        </div>
-      </main>
-      
-      <SuccessPopup 
-        isVisible={showPopup}
-        onClose={handleClosePopup}
-        message={popupMessage}
-      />
-      
-      <div className="fixed bottom-2 right-2 text-xs text-gray-500">
-        {APP_VERSION}
-      </div>
+      )}
     </div>
   );
-}
+};
 
 export default InspectionModule;

@@ -80,7 +80,15 @@ const DailyRoutePlanner = () => {
         console.log(`Deal ID ${deal.id} - ${deal.title}: Move date = ${deal['949696aa9d99044db90383a758a74675587ed893']}`);
       });
   
-      // Use allDeals instead of response.data.data for the rest of your logic
+      // Synchronisiere Deals mit lokaler Datenbank
+      await fetch('/moving-assistant/api/sync-deals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ deals: allDeals })
+      });
+  
       const filteredDeals = allDeals
         .filter(deal => {
           const moveDate = deal['949696aa9d99044db90383a758a74675587ed893'];

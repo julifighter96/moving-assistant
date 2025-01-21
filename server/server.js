@@ -16,7 +16,10 @@ console.log('ENV check:', {
 });
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 
 // SQLite Setup mit erweitertem Schema
@@ -63,36 +66,25 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
+      // Erst alle abhängigen Tabellen löschen
+      db.run('DROP TABLE IF EXISTS assignments');
+      db.run('DROP TABLE IF EXISTS inspection_photos');
+      db.run('DROP TABLE IF EXISTS inspections');
+
+      // Dann die Haupttabelle erstellen
       db.run(`CREATE TABLE IF NOT EXISTS inspections (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        deal_id TEXT NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        status TEXT CHECK(status IN ('draft', 'completed')) DEFAULT 'draft',
-        move_date DATE,
-        total_volume REAL,
-        total_rooms INTEGER,
-        
-        origin_address TEXT,
-        origin_floor INTEGER,
-        origin_has_elevator BOOLEAN,
-        
-        destination_address TEXT,
-        destination_floor INTEGER,
-        destination_has_elevator BOOLEAN,
-        
-        packing_service BOOLEAN DEFAULT FALSE,
-        unpacking_service BOOLEAN DEFAULT FALSE,
-        lift_loading BOOLEAN DEFAULT FALSE,
-        lift_unloading BOOLEAN DEFAULT FALSE,
-        
-        furniture_cost REAL,
-        materials_cost REAL,
-        total_cost REAL,
-        
+        deal_id TEXT UNIQUE,
+        customer_name TEXT,
+        address TEXT,
+        moving_date DATE,
+        status TEXT CHECK(status IN ('pending', 'completed', 'cancelled')) DEFAULT 'pending',
         notes TEXT,
-        data JSON
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
-    
+
+      // Dann die abhängigen Tabellen erstellen
       db.run(`CREATE TABLE IF NOT EXISTS inspection_photos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         inspection_id INTEGER,
@@ -101,13 +93,124 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(inspection_id) REFERENCES inspections(id)
       )`);
-    
-      // Indizes für bessere Performance
-      db.run('CREATE INDEX IF NOT EXISTS idx_inspections_deal ON inspections(deal_id)');
-      db.run('CREATE INDEX IF NOT EXISTS idx_inspection_photos ON inspection_photos(inspection_id)');
 
-      
-      // Bildmerkmale-Tabelle
+      // Assignments-Tabelle mit employee_id
+      db.run(`CREATE TABLE IF NOT EXISTS assignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        inspection_id INTEGER NOT NULL,
+        start_datetime DATETIME NOT NULL,
+        end_datetime DATETIME NOT NULL,
+        status TEXT CHECK(status IN ('planned', 'in_progress', 'completed', 'cancelled')) DEFAULT 'planned',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (inspection_id) REFERENCES inspections(id),
+        FOREIGN KEY (employee_id) REFERENCES employees(id)
+      )`);
+
+      // Test-Daten einfügen
+      db.get('SELECT COUNT(*) as count FROM inspections', [], (err, row) => {
+        if (err) {
+          console.error('Error checking inspections:', err);
+          return;
+        }
+        
+        if (row.count === 0) {
+          console.log('Inserting test inspections...');
+          const testInspections = [
+            {
+              deal_id: 'DEAL001',
+              customer_name: 'Max Mustermann',
+              address: 'Musterstraße 1, 12345 Berlin',
+              moving_date: '2024-04-01',
+              status: 'pending',
+              notes: 'Großer Umzug mit vielen Möbeln'
+            },
+            {
+              deal_id: 'DEAL002',
+              customer_name: 'Erika Musterfrau',
+              address: 'Beispielweg 2, 12345 Berlin',
+              moving_date: '2024-04-15',
+              status: 'pending',
+              notes: 'Kleiner Umzug, hauptsächlich Kartons'
+            }
+          ];
+
+          testInspections.forEach(inspection => {
+            db.run(`
+              INSERT INTO inspections (
+                deal_id, customer_name, address, moving_date, status, notes
+              ) VALUES (?, ?, ?, ?, ?, ?)
+            `, [
+              inspection.deal_id,
+              inspection.customer_name,
+              inspection.address,
+              inspection.moving_date,
+              inspection.status,
+              inspection.notes
+            ], (err) => {
+              if (err) {
+                console.error('Error inserting test inspection:', err);
+              } else {
+                console.log('Successfully inserted test inspection:', inspection.deal_id);
+              }
+            });
+          });
+        } else {
+          console.log('Inspections already exist, skipping test data insertion');
+        }
+      });
+    
+      // Demo-Daten für den 27. Januar 2025
+      const demo_inspections = [
+        {
+          deal_id: 'DEAL003',
+          customer_name: 'Familie Schmidt',
+          address: 'Karlstraße 123, 76133 Karlsruhe',
+          moving_date: '2025-01-27',
+          status: 'pending',
+          notes: '4-Zimmer Wohnung, 2. Stock mit Aufzug'
+        },
+        {
+          deal_id: 'DEAL004',
+          customer_name: 'Peter Wagner',
+          address: 'Sophienstraße 45, 76135 Karlsruhe',
+          moving_date: '2025-01-27',
+          status: 'pending',
+          notes: '3-Zimmer Wohnung, Erdgeschoss'
+        },
+        {
+          deal_id: 'DEAL005',
+          customer_name: 'Maria Becker',
+          address: 'Waldstraße 78, 76137 Karlsruhe',
+          moving_date: '2025-01-27',
+          status: 'pending',
+          notes: '2-Zimmer Wohnung, 3. Stock ohne Aufzug'
+        }
+      ];
+
+      // Füge die Demo-Daten ein
+      demo_inspections.forEach(inspection => {
+        db.run(`
+          INSERT OR REPLACE INTO inspections (
+            deal_id, customer_name, address, moving_date, status, notes
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `, [
+          inspection.deal_id,
+          inspection.customer_name,
+          inspection.address,
+          inspection.moving_date,
+          inspection.status,
+          inspection.notes
+        ], (err) => {
+          if (err) {
+            console.error('Error inserting demo inspection:', err);
+          } else {
+            console.log('Successfully inserted demo inspection:', inspection.deal_id);
+          }
+        });
+      });
+    
       db.run(`CREATE TABLE IF NOT EXISTS image_features (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         imageHash TEXT NOT NULL,
@@ -234,6 +337,154 @@ const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) =>
         }
       });
   
+      // Mitarbeiter-Tabelle
+      db.run(`CREATE TABLE IF NOT EXISTS employees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        email TEXT UNIQUE,
+        phone TEXT,
+        address TEXT,
+        birth_date DATE,
+        hire_date DATE NOT NULL,
+        status TEXT CHECK(status IN ('active', 'inactive')) DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      // Qualifikationen-Tabelle
+      db.run(`CREATE TABLE IF NOT EXISTS qualifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      // Mitarbeiter-Qualifikationen (Verknüpfungstabelle)
+      db.run(`CREATE TABLE IF NOT EXISTS employee_qualifications (
+        employee_id INTEGER,
+        qualification_id INTEGER,
+        acquired_date DATE NOT NULL,
+        expiry_date DATE,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (employee_id, qualification_id),
+        FOREIGN KEY (employee_id) REFERENCES employees(id),
+        FOREIGN KEY (qualification_id) REFERENCES qualifications(id)
+      )`);
+
+      // Verfügbarkeiten-Tabelle
+      db.run(`CREATE TABLE IF NOT EXISTS availability (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        type TEXT CHECK(type IN ('work', 'vacation', 'sick', 'other')) NOT NULL,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees(id)
+      )`);
+
+      // Teams-Tabelle
+      db.run(`CREATE TABLE IF NOT EXISTS teams (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      // Team-Mitglieder (Verknüpfungstabelle)
+      db.run(`CREATE TABLE IF NOT EXISTS team_members (
+        team_id INTEGER,
+        employee_id INTEGER,
+        role TEXT CHECK(role IN ('leader', 'member')) DEFAULT 'member',
+        start_date DATE NOT NULL,
+        end_date DATE,
+        PRIMARY KEY (team_id, employee_id),
+        FOREIGN KEY (team_id) REFERENCES teams(id),
+        FOREIGN KEY (employee_id) REFERENCES employees(id)
+      )`);
+
+      // Test-Teams erstellen
+      db.get('SELECT COUNT(*) as count FROM teams', [], (err, row) => {
+        if (err) {
+          console.error('Error checking teams:', err);
+          return;
+        }
+        
+        if (row.count === 0) {
+          console.log('Inserting test teams...');
+          const testTeams = [
+            {
+              name: 'Team A',
+              description: 'Hauptteam für große Umzüge'
+            },
+            {
+              name: 'Team B',
+              description: 'Team für mittlere Umzüge'
+            },
+            {
+              name: 'Team C',
+              description: 'Team für kleine Umzüge'
+            }
+          ];
+
+          testTeams.forEach(team => {
+            db.run(`
+              INSERT INTO teams (name, description)
+              VALUES (?, ?)
+            `, [team.name, team.description], function(err) {
+              if (err) {
+                console.error('Error inserting test team:', err);
+              } else {
+                console.log('Successfully inserted test team:', team.name);
+                
+                // Erstelle Assignments für die Demo-Inspektionen
+                if (team.name === 'Team A') {
+                  db.get('SELECT id FROM inspections WHERE deal_id = ?', ['DEAL003'], (err, inspection) => {
+                    if (err || !inspection) return;
+                    db.run(`
+                      INSERT INTO assignments (
+                        employee_id,
+                        inspection_id,
+                        start_datetime,
+                        end_datetime,
+                        status
+                      ) VALUES (?, ?, ?, ?, 'planned')
+                    `, [
+                      inspection.id,
+                      inspection.id,
+                      '2025-01-27 08:00:00',
+                      '2025-01-27 16:00:00',
+                      'planned'
+                    ]);
+                  });
+                } else if (team.name === 'Team B') {
+                  db.get('SELECT id FROM inspections WHERE deal_id = ?', ['DEAL004'], (err, inspection) => {
+                    if (err || !inspection) return;
+                    db.run(`
+                      INSERT INTO assignments (
+                        employee_id,
+                        inspection_id,
+                        start_datetime,
+                        end_datetime,
+                        status
+                      ) VALUES (?, ?, ?, ?, 'planned')
+                    `, [
+                      inspection.id,
+                      inspection.id,
+                      '2025-01-27 09:00:00',
+                      '2025-01-27 15:00:00',
+                      'planned'
+                    ]);
+                  });
+                }
+              }
+            });
+          });
+        } else {
+          console.log('Teams already exist, skipping test data insertion');
+        }
+      });
       
     });
     app.get('/api/admin/inspections', (req, res) => {
@@ -624,18 +875,17 @@ app.post('/api/recognition/feedback', async (req, res) => {
 // Admin Routes
 
 
-app.get('/api/admin/rooms', (req, res) => {
+app.get('/moving-assistant/api/admin/rooms', (req, res) => {
   db.all('SELECT * FROM admin_rooms ORDER BY name ASC', [], (err, rows) => {
     if (err) {
       console.error('Error fetching rooms:', err);
       return res.status(500).json({ error: err.message });
     }
-    // Ensure we always return an array
     res.json(rows || []);
   });
 });
 
-app.get('/api/admin/items', (req, res) => {
+app.get('/moving-assistant/api/admin/items', (req, res) => {
   const { room } = req.query;
   console.log('GET /api/admin/items called with room:', room);
 
@@ -658,7 +908,7 @@ app.get('/api/admin/items', (req, res) => {
   });
 });
 
-app.post('/api/admin/items', async (req, res) => {
+app.post('/moving-assistant/api/admin/items', async (req, res) => {
   const { name, width, length, height, volume, room } = req.body;
   
   db.run(
@@ -682,7 +932,7 @@ app.post('/api/admin/items', async (req, res) => {
   );
 });
 
-app.put('/api/admin/items/:id', (req, res) => {
+app.put('/moving-assistant/api/admin/items/:id', (req, res) => {
   const { id } = req.params;
   const { name, width, length, height, volume } = req.body;
   
@@ -702,7 +952,7 @@ app.put('/api/admin/items/:id', (req, res) => {
   );
 });
 
-app.get('/api/admin/prices', (req, res) => {
+app.get('/moving-assistant/api/admin/prices', (req, res) => {
   db.all('SELECT * FROM admin_prices ORDER BY created_at ASC', [], (err, rows) => {
     if (err) {
       console.error('Error fetching prices:', err);
@@ -713,7 +963,7 @@ app.get('/api/admin/prices', (req, res) => {
 });
 
 // Preis aktualisieren
-app.put('/api/admin/prices/:id', (req, res) => {
+app.put('/moving-assistant/api/admin/prices/:id', (req, res) => {
   const { id } = req.params;
   const { price } = req.body;
   
@@ -738,7 +988,7 @@ app.put('/api/admin/prices/:id', (req, res) => {
 });
 
 // Statistik-Endpoint (optional)
-app.get('/api/stats', async (req, res) => {
+app.get('/moving-assistant/api/stats', async (req, res) => {
   try {
     db.all(`
       SELECT 
@@ -756,10 +1006,374 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-// Serve static files
+// GET Mitarbeiter
+app.get('/moving-assistant/api/employees', (req, res) => {
+  console.log('Fetching employees...');
+  db.all('SELECT * FROM employees ORDER BY last_name, first_name', [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching employees:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log('Found employees:', rows);
+    res.json(rows || []);
+  });
+});
+
+// GET einzelner Mitarbeiter
+app.get('/moving-assistant/api/employees/:id', (req, res) => {
+  const { id } = req.params;
+  db.get('SELECT * FROM employees WHERE id = ?', [id], (err, row) => {
+    if (err) {
+      console.error('Error fetching employee:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (!row) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    res.json(row);
+  });
+});
+
+// POST neuer Mitarbeiter
+app.post('/moving-assistant/api/employees', (req, res) => {
+  const {
+    firstName,
+    lastName,
+    email,
+    phone,
+    address,
+    birthDate,
+    hireDate,
+    status = 'active'
+  } = req.body;
+
+  db.run(
+    `INSERT INTO employees (
+      first_name, last_name, email, phone, address, birth_date, hire_date, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [firstName, lastName, email, phone, address, birthDate, hireDate, status],
+    function(err) {
+      if (err) {
+        console.error('Error creating employee:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      res.status(201).json({ 
+        id: this.lastID,
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone,
+        address,
+        birth_date: birthDate,
+        hire_date: hireDate,
+        status
+      });
+    }
+  );
+});
+
+// PUT Mitarbeiter aktualisieren
+app.put('/moving-assistant/api/employees/:id', (req, res) => {
+  const { id } = req.params;
+  const {
+    firstName,
+    lastName,
+    email,
+    phone,
+    address,
+    birthDate,
+    hireDate,
+    status
+  } = req.body;
+
+  db.run(
+    `UPDATE employees SET 
+      first_name = ?, 
+      last_name = ?, 
+      email = ?, 
+      phone = ?, 
+      address = ?, 
+      birth_date = ?, 
+      hire_date = ?, 
+      status = ?
+    WHERE id = ?`,
+    [firstName, lastName, email, phone, address, birthDate, hireDate, status, id],
+    function(err) {
+      if (err) {
+        console.error('Error updating employee:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Employee not found' });
+      }
+      res.json({ 
+        id: parseInt(id),
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone,
+        address,
+        birth_date: birthDate,
+        hire_date: hireDate,
+        status
+      });
+    }
+  );
+});
+
+// Qualifikationen abrufen
+app.get('/moving-assistant/api/qualifications', (req, res) => {
+  db.all('SELECT * FROM qualifications ORDER BY name', [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching qualifications:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Mitarbeiter-Qualifikationen abrufen
+app.get('/moving-assistant/api/employee-qualifications/:id', (req, res) => {
+  const { id } = req.params;
+  db.all(`
+    SELECT 
+      eq.*,
+      q.name,
+      q.description
+    FROM employee_qualifications eq
+    JOIN qualifications q ON eq.qualification_id = q.id
+    WHERE eq.employee_id = ?
+    ORDER BY eq.acquired_date DESC
+  `, [id], (err, rows) => {
+    if (err) {
+      console.error('Error fetching employee qualifications:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Neue Qualifikation hinzufügen
+app.post('/moving-assistant/api/employee-qualifications', (req, res) => {
+  const { employeeId, qualificationId, acquiredDate, expiryDate, notes } = req.body;
+
+  db.run(`
+    INSERT INTO employee_qualifications (
+      employee_id, qualification_id, acquired_date, expiry_date, notes
+    ) VALUES (?, ?, ?, ?, ?)
+  `, [employeeId, qualificationId, acquiredDate, expiryDate, notes], function(err) {
+    if (err) {
+      console.error('Error adding qualification:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.status(201).json({ 
+      id: this.lastID,
+      employee_id: employeeId,
+      qualification_id: qualificationId,
+      acquired_date: acquiredDate,
+      expiry_date: expiryDate,
+      notes
+    });
+  });
+});
+
+// Teams abrufen
+app.get('/moving-assistant/api/teams', (req, res) => {
+  db.all('SELECT * FROM teams ORDER BY name', [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching teams:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Einsätze abrufen
+app.get('/moving-assistant/api/assignments', (req, res) => {
+  db.all(`
+    SELECT 
+      a.*,
+      e.first_name,
+      e.last_name,
+      i.customer_name,
+      i.address
+    FROM assignments a
+    LEFT JOIN employees e ON a.employee_id = e.id
+    LEFT JOIN inspections i ON a.inspection_id = i.id
+    ORDER BY a.start_datetime
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching assignments:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Einsatz erstellen
+app.post('/moving-assistant/api/assignments', (req, res) => {
+  const {
+    employeeId,
+    inspectionId,
+    startDate,
+    endDate
+  } = req.body;
+
+  // Prüfe zuerst, ob der Mitarbeiter bereits einen Einsatz in diesem Zeitraum hat
+  db.all(`
+    SELECT * FROM assignments 
+    WHERE employee_id = ? 
+    AND (
+      (start_datetime <= ? AND end_datetime >= ?) OR
+      (start_datetime <= ? AND end_datetime >= ?) OR
+      (start_datetime >= ? AND end_datetime <= ?)
+    )
+  `, [
+    employeeId,
+    startDate, startDate,
+    endDate, endDate,
+    startDate, endDate
+  ], (err, existingAssignments) => {
+    if (err) {
+      console.error('Error checking existing assignments:', err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (existingAssignments.length > 0) {
+      return res.status(409).json({ 
+        error: 'Mitarbeiter ist in diesem Zeitraum bereits einem anderen Umzug zugewiesen' 
+      });
+    }
+
+    // Wenn keine Konflikte gefunden wurden, erstelle den neuen Einsatz
+    db.run(`
+      INSERT INTO assignments (
+        employee_id,
+        inspection_id,
+        start_datetime,
+        end_datetime,
+        status
+      ) VALUES (?, ?, ?, ?, 'planned')
+    `, [employeeId, inspectionId, startDate, endDate], function(err) {
+      if (err) {
+        console.error('Error creating assignment:', err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      res.status(201).json({
+        id: this.lastID,
+        employee_id: employeeId,
+        inspection_id: inspectionId,
+        start_datetime: startDate,
+        end_datetime: endDate,
+        status: 'planned'
+      });
+    });
+  });
+});
+
+// Mitarbeiter aus Einsatz entfernen
+app.delete('/moving-assistant/api/assignments/:assignmentId/employees/:employeeId', (req, res) => {
+  const { assignmentId, employeeId } = req.params;
+
+  db.run(`
+    DELETE FROM team_members
+    WHERE team_id IN (
+      SELECT team_id FROM assignments WHERE id = ?
+    )
+    AND employee_id = ?
+  `, [assignmentId, employeeId], (err) => {
+    if (err) {
+      console.error('Error removing team member:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.status(204).send();
+  });
+});
+
+// Inspektionen abrufen
+app.get('/moving-assistant/api/inspections', (req, res) => {
+  db.all('SELECT * FROM inspections ORDER BY created_at DESC', [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching inspections:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Neuer Endpunkt zum Synchronisieren der Pipedrive-Deals mit lokalen Inspektionen
+app.post('/moving-assistant/api/sync-deals', async (req, res) => {
+  const { deals } = req.body;
+  
+  try {
+    // Für jeden Deal
+    for (const deal of deals) {
+      // Prüfe ob bereits eine Inspektion für diesen Deal existiert
+      const existingInspection = await new Promise((resolve, reject) => {
+        db.get('SELECT * FROM inspections WHERE deal_id = ?', [deal.id], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+
+      if (!existingInspection) {
+        // Erstelle neue Inspektion
+        await new Promise((resolve, reject) => {
+          db.run(`
+            INSERT INTO inspections (
+              deal_id,
+              customer_name,
+              address,
+              moving_date,
+              status,
+              notes
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `, [
+            deal.id,
+            deal.title,
+            deal['07c3da8804f7b96210e45474fba35b8691211ddd'], // originAddress
+            deal['949696aa9d99044db90383a758a74675587ed893'], // moveDate
+            'pending',
+            `Umzug von ${deal['07c3da8804f7b96210e45474fba35b8691211ddd']} nach ${deal['9cb4de1018ec8404feeaaaf7ee9b293c78c44281']}`
+          ], function(err) {
+            if (err) reject(err);
+            else resolve(this.lastID);
+          });
+        });
+      }
+    }
+    
+    res.json({ success: true, message: 'Deals synchronized successfully' });
+  } catch (error) {
+    console.error('Error syncing deals:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Assignment löschen
+app.delete('/moving-assistant/api/assignments/:id', (req, res) => {
+  const { id } = req.params;
+
+  console.log('Deleting assignment:', id); // Debug-Log
+
+  db.run('DELETE FROM assignments WHERE id = ?', [id], function(err) {
+    if (err) {
+      console.error('Error deleting assignment:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+    console.log('Successfully deleted assignment:', id); // Debug-Log
+    res.status(204).send();
+  });
+});
+
+// Statische Dateien NACH den API-Routen
 app.use('/moving-assistant', express.static(path.join(__dirname, '..', 'build')));
 
-// Catch-all handler
+// Catch-all Route als LETZTES
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
 });

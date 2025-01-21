@@ -9,6 +9,7 @@ import logo from '../../shared/assets/images/Riedlin-Logo-512px_Neu.webp';
 const ModulePortal = ({ onInspectionStart }) => {
   const [activeModule, setActiveModule] = useState(null);
   const { isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
 
   const modules = [
     {
@@ -16,14 +17,16 @@ const ModulePortal = ({ onInspectionStart }) => {
       name: 'Besichtigungen & Planung',
       description: 'Umzugsbesichtigungen durchführen und Angebote erstellen',
       icon: ClipboardList,
-      component: InspectionModule
+      component: InspectionModule,
+      onClick: onInspectionStart
     },
     {
       id: 'personnel',
       name: 'Personalmanagement',
       description: 'Mitarbeiter- und Teameinsatzplanung',
       icon: Users,
-      component: null
+      component: null,
+      onClick: () => navigate('/employees')
     },
     {
       id: 'fleet',
@@ -86,15 +89,10 @@ const ModulePortal = ({ onInspectionStart }) => {
         </div>
       </header>
 
-      <div className="min-h-screen bg-gray-50 p-8">
+      <div className="min-h-screen bg-gray-50 p-8 pt-24">
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center mb-8">
             <div className="flex items-center">
-              <img 
-                src="/moving-assistant/assets/images/Riedlin-Logo-512px_Neu.webp"
-                alt="Riedlin Logo" 
-                className="h-16 w-auto"
-              />
               <div className="ml-4">
                 <h1 className="text-2xl font-bold text-gray-900">Umzugsmanager</h1>
                 <p className="text-gray-500">Wählen Sie ein Modul aus</p>
@@ -108,12 +106,12 @@ const ModulePortal = ({ onInspectionStart }) => {
               return (
                 <button
                   key={module.id}
-                  onClick={() => setActiveModule(module.id)}
-                  disabled={!module.component}
+                  onClick={module.onClick || (() => setActiveModule(module.id))}
+                  disabled={!module.component && !module.onClick}
                   className={`p-6 bg-white rounded-xl shadow-sm border border-gray-200 
                              hover:border-primary hover:shadow-md transition-all duration-200
                              flex flex-col items-center text-center
-                             ${!module.component ? 'opacity-50 cursor-not-allowed' : ''}
+                             ${!module.component && !module.onClick ? 'opacity-50 cursor-not-allowed' : ''}
                             `}
                 >
                   <Icon className="w-12 h-12 mb-4 text-primary" />
@@ -123,7 +121,7 @@ const ModulePortal = ({ onInspectionStart }) => {
                   <p className="text-gray-500 text-sm">
                     {module.description}
                   </p>
-                  {!module.component && (
+                  {!module.component && !module.onClick && (
                     <span className="mt-2 text-xs text-gray-400">
                       Demnächst verfügbar
                     </span>

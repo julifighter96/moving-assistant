@@ -4,6 +4,8 @@ import { getDeal } from '../services/pipedriveService';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { de } from 'date-fns/locale';
+import { Truck } from 'lucide-react';
+import MovingPriceCalculator from './MovingPriceCalculator';
 
 const MOVE_INFO_FIELDS = [
    { name: 'Wunschdatum', apiKey: 'b9d01d5dcd86c878a57cb0febd336e4d390af900', type: 'date' },
@@ -17,6 +19,8 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
  const [moveInfo, setMoveInfo] = useState({});
  const [isLoading, setIsLoading] = useState(true);
  const [error, setError] = useState(null);
+ const [showPriceCalculator, setShowPriceCalculator] = useState(false);
+ const [transportCost, setTransportCost] = useState(0);
 
  useEffect(() => {
    // Load Google Maps Script
@@ -79,6 +83,9 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
          dataToUpdate[field.apiKey] = moveInfo[field.apiKey] || '';
        }
      });
+     
+     // Add transport cost to the data
+     dataToUpdate.transportCost = transportCost;
      
      console.log('Sending data to update:', dataToUpdate);
      await updateDealDirectly(dealId, dataToUpdate);
@@ -148,7 +155,35 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
          )}
        </div>
      ))}
-     <div className="flex items-center justify-between">
+
+     {/* Route Calculation Section */}
+     <div className="mt-6 bg-gray-50 rounded-xl p-6">
+       <div className="flex items-center justify-between mb-4">
+         <div className="flex items-center gap-3">
+           <Truck className="w-5 h-5 text-gray-600" />
+           <h3 className="text-lg font-semibold text-gray-900">Streckenberechnung</h3>
+         </div>
+         <button
+           onClick={() => setShowPriceCalculator(!showPriceCalculator)}
+           className="text-sm text-primary hover:text-primary-dark"
+         >
+           {showPriceCalculator ? 'Ausblenden' : 'Anzeigen'}
+         </button>
+       </div>
+       
+       {showPriceCalculator && (
+         <MovingPriceCalculator 
+           defaultOrigin={moveInfo['07c3da8804f7b96210e45474fba35b8691211ddd']}
+           defaultDestination={moveInfo['9cb4de1018ec8404feeaaaf7ee9b293c78c44281']}
+           onPriceCalculated={(calculatedPrice) => {
+             setTransportCost(parseFloat(calculatedPrice));
+           }}
+         />
+       )}
+     </div>
+
+     {/* Submit button */}
+     <div className="flex items-center justify-between mt-6">
        <button
          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
          type="button"

@@ -5,6 +5,7 @@ import InspectionModule from '../InspectionModule';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
 import logo from '../../shared/assets/images/Riedlin-Logo-512px_Neu.webp';
+import VehicleManagement from '../../../components/VehicleManagement/VehicleManagement';
 
 const ModulePortal = ({ onInspectionStart }) => {
   const [activeModule, setActiveModule] = useState(null);
@@ -33,7 +34,8 @@ const ModulePortal = ({ onInspectionStart }) => {
       name: 'Fuhrpark',
       description: 'Fahrzeugverwaltung und Routenplanung',
       icon: Truck,
-      component: null
+      component: VehicleManagement,
+      onClick: () => navigate('/vehicles')
     },
     {
       id: 'inventory',

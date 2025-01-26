@@ -1,8 +1,8 @@
 // src/modules/inspection/components/ModulePortal.js
 import React, { useState } from 'react';
-import { ClipboardList, Users, Truck, Package, BarChart3, Calendar, MapPin, Settings } from 'lucide-react';
+import { ClipboardList, Users, Truck, Package, BarChart3, Calendar, MapPin, Settings, RefreshCw } from 'lucide-react';
 import InspectionModule from '../InspectionModule';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
 import logo from '../../shared/assets/images/Riedlin-Logo-512px_Neu.webp';
 import VehicleManagement from '../../../components/VehicleManagement/VehicleManagement';
@@ -57,6 +57,14 @@ const ModulePortal = ({ onInspectionStart }) => {
       description: 'Unternehmenskennzahlen und Auswertungen',
       icon: BarChart3,
       component: null
+    },
+    {
+      id: 'sync-moves',
+      name: 'Umzüge synchronisieren',
+      description: 'Umzüge mit der Datenbank synchronisieren',
+      icon: RefreshCw,
+      component: null,
+      onClick: () => navigate('/sync-moves')
     }
   ];
 

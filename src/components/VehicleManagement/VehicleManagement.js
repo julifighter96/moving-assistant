@@ -19,9 +19,22 @@ const VehicleManagement = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [moves, setMoves] = useState([]);
 
   useEffect(() => {
     loadVehicles();
+    const fetchMoves = async () => {
+      try {
+        const response = await fetch('/moving-assistant/api/deals');
+        if (!response.ok) throw new Error('Fehler beim Laden der Umzüge');
+        const data = await response.json();
+        setMoves(data);
+      } catch (error) {
+        console.error('Fehler beim Laden der Umzüge:', error);
+      }
+    };
+
+    fetchMoves();
   }, []);
 
   const loadVehicles = async () => {
@@ -162,6 +175,7 @@ const VehicleManagement = () => {
           {view === 'calendar' && (
             <VehicleCalendar 
               vehicles={filteredVehicles}
+              moves={moves}
               onVehicleSelect={setSelectedVehicle}
             />
           )}

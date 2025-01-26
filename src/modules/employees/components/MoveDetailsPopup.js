@@ -1,156 +1,92 @@
 import React from 'react';
-import { format, isWithinInterval, parseISO } from 'date-fns';
-import { de } from 'date-fns/locale';
 
-const MoveDetailsPopup = ({ inspection, onClose, employees, assignments, onAssignEmployee, onRemoveEmployee }) => {
-  // Sicherstellen, dass assignments ein Array ist
-  const assignmentsArray = Array.isArray(assignments) ? assignments : [];
+const MoveDetailsPopup = ({ 
+  move, 
+  onClose, 
+  employees, 
+  assignments, 
+  onAssignEmployee, 
+  onRemoveEmployee 
+}) => {
+  // Get assignments for this move
+  const moveAssignments = assignments.filter(a => a.deal_id === move.id);
   
-  // Filtere verfügbare Mitarbeiter (die noch nicht zugewiesen sind)
-  const assignedEmployeeIds = assignmentsArray
-    .filter(a => a.inspection_id === inspection.id)
-    .map(a => a.employee_id);
-    
-  // Prüfe ob ein Mitarbeiter zu einer bestimmten Zeit verfügbar ist
-  const isEmployeeAvailable = (employeeId, date) => {
-    const startTime = new Date(`${date}T08:00:00`);
-    const endTime = new Date(`${date}T17:00:00`);
+  // Get assigned employees
+  const assignedEmployees = moveAssignments.map(assignment => {
+    const employee = employees.find(e => e.id === assignment.employee_id);
+    return {
+      ...employee,
+      assignmentId: assignment.id,
+      startTime: assignment.start_datetime,
+      endTime: assignment.end_datetime
+    };
+  }).filter(Boolean);
 
-    // Prüfe alle bestehenden Assignments
-    const hasConflict = assignmentsArray.some(assignment => {
-      if (assignment.employee_id !== employeeId) return false;
+  const handleAssign = (employeeId) => {
+    const moveDate = new Date(move.move_date);
+    const startTime = new Date(moveDate);
+    startTime.setHours(8, 0, 0);
+    const endTime = new Date(moveDate);
+    endTime.setHours(17, 0, 0);
 
-      const assignmentStart = parseISO(assignment.start_datetime);
-      const assignmentEnd = parseISO(assignment.end_datetime);
-
-      // Prüfe ob sich die Zeiträume überschneiden
-      return isWithinInterval(startTime, { start: assignmentStart, end: assignmentEnd }) ||
-             isWithinInterval(endTime, { start: assignmentStart, end: assignmentEnd }) ||
-             isWithinInterval(assignmentStart, { start: startTime, end: endTime });
-    });
-
-    return !hasConflict;
-  };
-
-  // Filtere verfügbare Mitarbeiter (die noch nicht zugewiesen sind und keine Zeitkonflikte haben)
-  const availableEmployees = (Array.isArray(employees) ? employees : [])
-    .filter(emp => 
-      !assignedEmployeeIds.includes(emp.id) && 
-      emp.status === 'active' &&
-      isEmployeeAvailable(emp.id, inspection.moving_date)
-    );
-
-  const handleAssignEmployee = (employeeId) => {
-    onAssignEmployee(
-      employeeId,
-      inspection.id,
-      `${inspection.moving_date}T08:00:00`,
-      `${inspection.moving_date}T17:00:00`
-    );
+    onAssignEmployee(employeeId, move.id, startTime, endTime);
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="text-2xl font-semibold mb-2">
-              {inspection.customer_name}
-            </h2>
-            <p className="text-gray-600">
-              {format(new Date(inspection.moving_date), 'EEEE, d. MMMM yyyy', { locale: de })}
-            </p>
-          </div>
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+        <div className="flex justify-between items-start mb-4">
+          <h2 className="text-xl font-semibold">{move.title}</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl"
+            className="text-gray-500 hover:text-gray-700"
           >
-            ✕
+            ×
           </button>
         </div>
 
-        {/* Content Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Linke Spalte: Umzugsdetails */}
-          <div className="space-y-6">
-            <div>
-              <h3 className="font-medium text-lg mb-2">Umzugsdetails</h3>
-              <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-                <div>
-                  <p className="text-sm text-gray-500">Adresse</p>
-                  <p className="font-medium">{inspection.address}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Notizen</p>
-                  <p className="font-medium">{inspection.notes}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Status</p>
-                  <span className={`inline-block px-2 py-1 rounded-full text-sm ${
-                    inspection.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                    inspection.status === 'completed' ? 'bg-green-100 text-green-800' : 
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {inspection.status === 'pending' ? 'Ausstehend' : 
-                     inspection.status === 'completed' ? 'Abgeschlossen' : 
-                     inspection.status}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="mb-4">
+          <p><strong>Datum:</strong> {new Date(move.move_date).toLocaleDateString()}</p>
+          <p><strong>Von:</strong> {move.origin_address}</p>
+          <p><strong>Nach:</strong> {move.destination_address}</p>
+          {move.org_name && <p><strong>Organisation:</strong> {move.org_name}</p>}
+        </div>
 
-          {/* Rechte Spalte: Mitarbeiterverwaltung */}
-          <div className="space-y-6">
-            <div>
-              <h3 className="font-medium text-lg mb-2">Zugewiesene Mitarbeiter</h3>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                {assignmentsArray
-                  .filter(a => a.inspection_id === inspection.id)
-                  .map(assignment => {
-                    const employee = employees.find(e => e.id === assignment.employee_id);
-                    return employee ? (
-                      <div 
-                        key={assignment.id} 
-                        className="flex justify-between items-center p-2 bg-white rounded mb-2"
-                      >
-                        <span>{employee.first_name} {employee.last_name}</span>
-                        <button
-                          onClick={() => onRemoveEmployee(assignment.id)}
-                          className="text-red-600 hover:text-red-800 text-sm"
-                        >
-                          Entfernen
-                        </button>
-                      </div>
-                    ) : null;
-                  })}
-              </div>
-            </div>
+        <div className="mb-4">
+          <h3 className="font-semibold mb-2">Zugewiesene Mitarbeiter</h3>
+          {assignedEmployees.length > 0 ? (
+            <ul className="space-y-2">
+              {assignedEmployees.map(employee => (
+                <li key={employee.id} className="flex justify-between items-center bg-gray-50 p-2 rounded">
+                  <span>{employee.first_name} {employee.last_name}</span>
+                  <button
+                    onClick={() => onRemoveEmployee(employee.assignmentId)}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    Entfernen
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-500">Keine Mitarbeiter zugewiesen</p>
+          )}
+        </div>
 
-            <div>
-              <h3 className="font-medium text-lg mb-2">Verfügbare Mitarbeiter</h3>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                {availableEmployees.length === 0 ? (
-                  <p className="text-gray-500 text-sm">Keine weiteren Mitarbeiter verfügbar</p>
-                ) : (
-                  availableEmployees.map(employee => (
-                    <div 
-                      key={employee.id}
-                      className="flex justify-between items-center p-2 bg-white rounded mb-2"
-                    >
-                      <span>{employee.first_name} {employee.last_name}</span>
-                      <button
-                        onClick={() => handleAssignEmployee(employee.id)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Hinzufügen
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+        <div>
+          <h3 className="font-semibold mb-2">Mitarbeiter zuweisen</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {employees
+              .filter(employee => !assignedEmployees.some(ae => ae.id === employee.id))
+              .map(employee => (
+                <button
+                  key={employee.id}
+                  onClick={() => handleAssign(employee.id)}
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded text-sm"
+                >
+                  {employee.first_name} {employee.last_name}
+                </button>
+              ))}
           </div>
         </div>
       </div>

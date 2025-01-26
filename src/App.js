@@ -7,6 +7,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import EmployeeModule from './modules/employees/EmployeeModule';
 import InspectionRoutes from './modules/inspection/routes/InspectionRoutes';
 import VehicleManagement from './components/VehicleManagement/VehicleManagement';
+import SyncMoves from './modules/inspection/components/SyncMoves';
 
 const App = () => {
   const { isAuthenticated } = useAuth();
@@ -29,6 +30,7 @@ const App = () => {
         <Route path="/inspections/*" element={<InspectionRoutes />} />
         <Route path="/employees/*" element={<EmployeeModule />} />
         <Route path="/vehicles" element={<VehicleManagement />} />
+        <Route path="/sync-moves" element={<SyncMoves />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

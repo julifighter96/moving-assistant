@@ -72,7 +72,7 @@ const ColorLegend = () => (
 const MoveScheduler = () => {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
-  const [inspections, setInspections] = useState([]);
+  const [moves, setMoves] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [view, setView] = useState('week');
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -85,34 +85,38 @@ const MoveScheduler = () => {
 
   const fetchData = async () => {
     try {
-      const [employeesRes, inspectionsRes, assignmentsRes] = await Promise.all([
+      const [employeesRes, assignmentsRes, movesRes] = await Promise.all([
         fetch('/moving-assistant/api/employees'),
-        fetch('/moving-assistant/api/inspections'),
-        fetch('/moving-assistant/api/assignments')
+        fetch('/moving-assistant/api/assignments'),
+        fetch('/moving-assistant/api/deals')
       ]);
 
-      const [employeesData, inspectionsData, assignmentsData] = await Promise.all([
+      const [employeesData, assignmentsData, movesData] = await Promise.all([
         employeesRes.json(),
-        inspectionsRes.json(),
-        assignmentsRes.json()
+        assignmentsRes.json(),
+        movesRes.json()
       ]);
 
+      console.log('Fetched moves:', movesData);
       setEmployees(employeesData || []);
-      setInspections(inspectionsData || []);
+      setMoves(movesData || []);
       setAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
-      
-      console.log('Fetched assignments:', assignmentsData); // Debug-Log
     } catch (error) {
       console.error('Error fetching data:', error);
       setEmployees([]);
-      setInspections([]);
+      setMoves([]);
       setAssignments([]);
     }
   };
 
-  const handleEmployeeAssignment = async (employeeId, inspectionId, startDate, endDate) => {
+  const handleEmployeeAssignment = async (employeeId, moveId, startDate, endDate) => {
     try {
-      console.log('Assigning employee:', { employeeId, inspectionId, startDate, endDate }); // Debug-Log
+      console.log('Assigning employee:', {
+        employeeId,
+        moveId,
+        startDate,
+        endDate
+      });
 
       const response = await fetch('/moving-assistant/api/assignments', {
         method: 'POST',
@@ -120,25 +124,31 @@ const MoveScheduler = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          employeeId,
-          inspectionId,
-          startDate,
-          endDate
+          employee_id: employeeId,
+          deal_id: moveId,
+          start_datetime: startDate.toISOString(),
+          end_datetime: endDate.toISOString(),
+          task_type: 'moving'
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to assign employee');
+        console.error('Assignment failed:', data);
+        throw new Error(data.error || 'Fehler beim Zuweisen des Mitarbeiters');
       }
 
-      await fetchData(); // Aktualisiere die Daten
+      console.log('Assignment successful:', data);
+      
+      // Aktualisiere die Zuweisungen
+      await fetchData();
+      
+      // Optional: Zeige Erfolgsmeldung
+      alert('Mitarbeiter erfolgreich zugewiesen');
     } catch (error) {
       console.error('Error assigning employee:', error);
-      setShowConflictWarning({
-        type: 'error',
-        message: 'Fehler beim Zuweisen des Mitarbeiters: ' + error.message
-      });
+      alert(error.message);
     }
   };
 
@@ -164,22 +174,23 @@ const MoveScheduler = () => {
     }
   };
 
-  const calendarEvents = inspections.map(inspection => {
-    const eventColor = getEventColor(inspection, assignments);
-    return {
-      id: inspection.id,
-      title: `${inspection.customer_name} - ${inspection.address}`,
-      start: new Date(`${inspection.moving_date}T08:00:00`),
-      end: new Date(`${inspection.moving_date}T17:00:00`),
-      resource: inspection,
-      color: eventColor
-    };
-  });
+  const calendarEvents = React.useMemo(() => {
+    return moves.map(move => ({
+      id: move.id,
+      title: `Umzug: ${move.title}`,
+      start: new Date(move.move_date),
+      end: new Date(move.move_date),
+      resource: move,
+      allDay: true,
+      eventType: 'move',
+      color: getEventColor(move, assignments)
+    }));
+  }, [moves, assignments]);
 
   // Funktion zum Filtern der Umzüge für einen bestimmten Tag
   const getMovesForDate = (date) => {
-    return inspections.filter(inspection => {
-      const moveDate = new Date(inspection.moving_date);
+    return moves.filter(move => {
+      const moveDate = new Date(move.move_date);
       return moveDate.toDateString() === date.toDateString();
     });
   };
@@ -234,24 +245,11 @@ const MoveScheduler = () => {
               <Calendar
                 localizer={localizer}
                 events={calendarEvents}
-                views={['week', 'month']}
-                view={view}
-                onView={setView}
+                views={['month', 'week']}
+                defaultView="month"
                 style={{ height: 700 }}
                 onSelectEvent={setSelectedEvent}
-                selectable={true}
-                onSelecting={() => true}
-                onSelectSlot={(slotInfo) => {
-                  const localDate = new Date(slotInfo.start);
-                  setSelectedDate(localDate);
-                }}
-                droppable={false}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
                 eventPropGetter={(event) => ({
-                  className: 'cursor-pointer',
                   style: {
                     backgroundColor: event.color,
                     borderRadius: '4px',
@@ -260,40 +258,18 @@ const MoveScheduler = () => {
                     padding: '2px 5px'
                   }
                 })}
-                dayPropGetter={(date) => ({
-                  className: 'cursor-pointer hover:bg-gray-50',
-                  style: {
-                    backgroundColor: 'white'
+                tooltipAccessor={event => {
+                  if (event.eventType === 'move') {
+                    return `${event.title}\nVon: ${event.resource.origin_address}\nNach: ${event.resource.destination_address}`;
                   }
-                })}
-                popup={true}
-                components={{
-                  timeSlotWrapper: ({ children }) => (
-                    <div className="cursor-pointer hover:bg-gray-50">
-                      {children}
-                    </div>
-                  ),
-                  eventWrapper: ({ event, children }) => (
-                    <div
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const employeeData = JSON.parse(e.dataTransfer.getData('employee'));
-                        handleEmployeeAssignment(
-                          employeeData.id,
-                          event.resource.id,
-                          event.start,
-                          event.end
-                        );
-                      }}
-                    >
-                      {children}
-                    </div>
-                  )
+                  return event.title;
+                }}
+                messages={{
+                  week: 'Woche',
+                  month: 'Monat',
+                  today: 'Heute',
+                  previous: 'Zurück',
+                  next: 'Vor'
                 }}
               />
             </div>
@@ -302,7 +278,7 @@ const MoveScheduler = () => {
 
         {selectedEvent && (
           <MoveDetailsPopup
-            inspection={selectedEvent.resource}
+            move={selectedEvent.resource}
             onClose={() => setSelectedEvent(null)}
             employees={employees}
             assignments={assignments}

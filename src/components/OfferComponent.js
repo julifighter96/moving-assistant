@@ -341,6 +341,34 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
             </div>
           </div>
 
+
+       <div className="bg-gray-50 rounded-xl p-6 mt-6">
+  <div className="flex items-center justify-between mb-4">
+    <div className="flex items-center gap-3">
+      <Truck className="w-5 h-5 text-gray-600" />
+      <h3 className="text-lg font-semibold text-gray-900">Streckenberechnung</h3>
+    </div>
+    <button
+      onClick={() => setShowPriceCalculator(!showPriceCalculator)}
+      className="text-sm text-primary hover:text-primary-dark"
+    >
+      {showPriceCalculator ? 'Ausblenden' : 'Anzeigen'}
+    </button>
+  </div>
+  {console.log('inspectionData:', inspectionData)}
+  {showPriceCalculator && (
+  <MovingPriceCalculator 
+    defaultOrigin={inspectionData?.moveInfo?.['07c3da8804f7b96210e45474fba35b8691211ddd']} // Auszugsadresse
+    defaultDestination={inspectionData?.moveInfo?.['9cb4de1018ec8404feeaaaf7ee9b293c78c44281']} // Einzugsadresse
+    onPriceCalculated={(calculatedPrice) => {
+      const transportCost = parseFloat(calculatedPrice);
+      setTotalCost(prev => prev + transportCost);
+    }}
+  />
+)}
+</div>
+
+
           {/* Submit Button */}
           <div className="mt-6 flex gap-4">
             <button

@@ -46,7 +46,7 @@ db.serialize(() => {
 
   // 1. Basis-Tabellen zuerst
   console.log('Creating base tables...');
-  
+
   // Mitarbeiter-Tabelle
   db.run(`CREATE TABLE IF NOT EXISTS employees (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,6 +144,52 @@ db.serialize(() => {
     FOREIGN KEY(employee_id) REFERENCES employees(id),
     FOREIGN KEY(deal_id) REFERENCES deals(id)
   )`);
+
+  // Materialtabelle
+  db.run(`
+    CREATE TABLE IF NOT EXISTS materials (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      current_stock INTEGER NOT NULL DEFAULT 0,
+      min_stock INTEGER NOT NULL,
+      order_quantity INTEGER NOT NULL,
+      unit TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Warenbewegungen
+  db.run(`
+    CREATE TABLE IF NOT EXISTS material_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      material_id INTEGER NOT NULL,
+      movement_type TEXT NOT NULL CHECK(movement_type IN ('in', 'out')),
+      quantity INTEGER NOT NULL,
+      deal_id INTEGER,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (material_id) REFERENCES materials (id),
+      FOREIGN KEY (deal_id) REFERENCES deals (id)
+    )
+  `);
+
+  // Materialzuweisung zu Umzügen
+  db.run(`
+    CREATE TABLE IF NOT EXISTS deal_materials (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      deal_id INTEGER NOT NULL,
+      material_id INTEGER NOT NULL,
+      planned_quantity INTEGER NOT NULL,
+      actual_quantity INTEGER,
+      status TEXT DEFAULT 'planned' CHECK(status IN ('planned', 'assigned', 'used')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (deal_id) REFERENCES deals (id),
+      FOREIGN KEY (material_id) REFERENCES materials (id)
+    )
+  `);
 
   // 3. Test-Daten einfügen
   console.log('Inserting test data...');
@@ -280,6 +326,61 @@ db.serialize(() => {
       } else {
         console.log('Created test team');
       }
+    });
+  });
+
+  // Beispiel-Materialien einfügen
+  db.get('SELECT COUNT(*) as count FROM materials', [], (err, row) => {
+    if (err || row.count > 0) return;
+    
+    const defaultMaterials = [
+      {
+        name: 'Umzugskartons Standard',
+        type: 'Verpackung',
+        current_stock: 500,
+        min_stock: 200,
+        order_quantity: 300,
+        unit: 'Stück'
+      },
+      {
+        name: 'Luftpolsterfolie',
+        type: 'Verpackung',
+        current_stock: 1000,
+        min_stock: 300,
+        order_quantity: 500,
+        unit: 'Meter'
+      },
+      {
+        name: 'Klebeband',
+        type: 'Verpackung',
+        current_stock: 200,
+        min_stock: 50,
+        order_quantity: 100,
+        unit: 'Rollen'
+      },
+      {
+        name: 'Möbeldecken',
+        type: 'Schutz',
+        current_stock: 150,
+        min_stock: 50,
+        order_quantity: 50,
+        unit: 'Stück'
+      }
+    ];
+
+    defaultMaterials.forEach(material => {
+      db.run(`
+        INSERT INTO materials (
+          name, type, current_stock, min_stock, order_quantity, unit
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `, [
+        material.name,
+        material.type,
+        material.current_stock,
+        material.min_stock,
+        material.order_quantity,
+        material.unit
+      ]);
     });
   });
 });
@@ -463,7 +564,7 @@ app.get('/moving-assistant/api/inspections', (req, res) => {
   console.log('GET /moving-assistant/api/inspections called');
   
   db.all(`
-    SELECT i.*,
+    SELECT i.*, 
            d.title as deal_title,
            e.first_name || ' ' || e.last_name as inspector_name
     FROM inspections i
@@ -509,7 +610,7 @@ app.get('/moving-assistant/api/assignments', (req, res) => {
   const query = `
     SELECT 
       a.*,
-      e.first_name || ' ' || e.last_name as employee_name,
+           e.first_name || ' ' || e.last_name as employee_name,
       d.title as deal_title
     FROM assignments a
     LEFT JOIN employees e ON a.employee_id = e.id
@@ -794,6 +895,291 @@ app.get('/moving-assistant/api/teams', (req, res) => {
       return res.status(500).json({ error: err.message });
     }
     res.json(rows || []);
+  });
+});
+
+// API-Routen für das Materialwirtschaftssystem
+
+// Alle Materialien abrufen
+app.get('/moving-assistant/api/materials', (req, res) => {
+  db.all(`
+    SELECT 
+      m.*,
+      (SELECT COUNT(*) FROM material_movements 
+       WHERE material_id = m.id AND movement_type = 'out'
+       AND created_at >= date('now', '-30 days')) as monthly_usage
+    FROM materials m
+    ORDER BY 
+      CASE WHEN current_stock <= min_stock THEN 0 ELSE 1 END,
+      name
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching materials:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Material einem Umzug zuweisen
+app.post('/moving-assistant/api/deals/:dealId/materials', (req, res) => {
+  const { dealId } = req.params;
+  const { materialId, plannedQuantity } = req.body;
+
+  db.run(`
+    INSERT INTO deal_materials (
+      deal_id, material_id, planned_quantity, status
+    ) VALUES (?, ?, ?, 'planned')
+  `, [dealId, materialId, plannedQuantity], function(err) {
+    if (err) {
+      console.error('Error assigning material to deal:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.status(201).json({
+      id: this.lastID,
+      deal_id: dealId,
+      material_id: materialId,
+      planned_quantity: plannedQuantity,
+      status: 'planned'
+    });
+  });
+});
+
+// Materialverbrauch für einen Umzug erfassen
+app.post('/moving-assistant/api/deals/:dealId/materials/:materialId/usage', (req, res) => {
+  const { dealId, materialId } = req.params;
+  const { actualQuantity } = req.body;
+
+  db.serialize(() => {
+    // Beginne Transaktion
+    db.run('BEGIN TRANSACTION');
+
+    // Aktualisiere den tatsächlichen Verbrauch
+    db.run(`
+      UPDATE deal_materials 
+      SET actual_quantity = ?, status = 'used', updated_at = CURRENT_TIMESTAMP
+      WHERE deal_id = ? AND material_id = ?
+    `, [actualQuantity, dealId, materialId]);
+
+    // Erstelle Warenbewegung
+    db.run(`
+      INSERT INTO material_movements (
+        material_id, movement_type, quantity, deal_id
+      ) VALUES (?, 'out', ?, ?)
+    `, [materialId, actualQuantity, dealId]);
+
+    // Aktualisiere Materialbestand
+    db.run(`
+      UPDATE materials 
+      SET current_stock = current_stock - ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [actualQuantity, materialId]);
+
+    // Commit Transaktion
+    db.run('COMMIT', err => {
+      if (err) {
+        console.error('Error recording material usage:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ success: true });
+    });
+  });
+});
+
+// Materialstatistiken abrufen
+app.get('/moving-assistant/api/materials/statistics', (req, res) => {
+  db.all(`
+    SELECT 
+      m.name,
+      m.current_stock,
+      COUNT(DISTINCT mm.deal_id) as number_of_moves,
+      SUM(CASE WHEN mm.movement_type = 'out' THEN mm.quantity ELSE 0 END) as total_usage,
+      AVG(CASE WHEN mm.movement_type = 'out' THEN mm.quantity ELSE NULL END) as avg_usage_per_move
+    FROM materials m
+    LEFT JOIN material_movements mm ON m.id = mm.material_id
+    WHERE mm.created_at >= date('now', '-30 days')
+    GROUP BY m.id
+    ORDER BY total_usage DESC
+  `, [], (err, rows) => {
+    if (err) {
+      console.error('Error fetching material statistics:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Material erstellen
+app.post('/moving-assistant/api/materials', (req, res) => {
+  const { name, type, current_stock, min_stock, order_quantity, unit } = req.body;
+  
+  db.run(`
+    INSERT INTO materials (
+      name, type, current_stock, min_stock, order_quantity, unit
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `, [
+    name,
+    type,
+    current_stock,
+    min_stock,
+    order_quantity,
+    unit
+  ], function(err) {
+    if (err) {
+      console.error('Error creating material:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.status(201).json({
+      id: this.lastID,
+      name,
+      type,
+      current_stock,
+      min_stock,
+      order_quantity,
+      unit,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+  });
+});
+
+// Material aktualisieren
+app.patch('/moving-assistant/api/materials/:id', (req, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+  const updateFields = Object.keys(updates)
+    .map(key => `${key} = ?`)
+    .join(', ');
+  const values = [...Object.values(updates), id];
+
+  db.run(
+    `UPDATE materials SET ${updateFields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    values,
+    function(err) {
+      if (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ message: 'Material nicht gefunden' });
+      }
+      res.json({ id, ...updates });
+    }
+  );
+});
+
+// Material löschen
+app.delete('/moving-assistant/api/materials/:id', (req, res) => {
+  const { id } = req.params;
+
+  db.run('DELETE FROM materials WHERE id = ?', [id], function(err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ message: 'Material nicht gefunden' });
+    }
+    res.json({ message: 'Material erfolgreich gelöscht' });
+  });
+});
+
+// Materialbestand aktualisieren
+app.post('/moving-assistant/api/materials/:id/stock', (req, res) => {
+  const { id } = req.params;
+  const { quantity, movement_type, notes } = req.body;
+
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+
+    // Aktualisiere den Materialbestand
+    db.run(`
+      UPDATE materials 
+      SET current_stock = current_stock ${movement_type === 'in' ? '+' : '-'} ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [quantity, id]);
+
+    // Erstelle einen Bewegungseintrag
+    db.run(`
+      INSERT INTO material_movements (
+        material_id, movement_type, quantity, notes
+      ) VALUES (?, ?, ?, ?)
+    `, [id, movement_type, quantity, notes]);
+
+    db.run('COMMIT', err => {
+      if (err) {
+        console.error('Error updating stock:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ success: true });
+    });
+  });
+});
+
+// Materialzuweisungen für einen Umzug abrufen
+app.get('/moving-assistant/api/deals/:dealId/materials', (req, res) => {
+  const { dealId } = req.params;
+
+  db.all(`
+    SELECT 
+      dm.*,
+      m.name as material_name,
+      m.type as material_type,
+      m.unit
+    FROM deal_materials dm
+    LEFT JOIN materials m ON dm.material_id = m.id
+    WHERE dm.deal_id = ?
+    ORDER BY dm.created_at DESC
+  `, [dealId], (err, rows) => {
+    if (err) {
+      console.error('Error fetching deal materials:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
+// Materialzuweisung für einen Umzug aktualisieren
+app.put('/moving-assistant/api/deals/:dealId/materials/:materialId', (req, res) => {
+  const { dealId, materialId } = req.params;
+  const { planned_quantity, actual_quantity, status } = req.body;
+
+  db.run(`
+    UPDATE deal_materials 
+    SET 
+      planned_quantity = COALESCE(?, planned_quantity),
+      actual_quantity = COALESCE(?, actual_quantity),
+      status = COALESCE(?, status),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE deal_id = ? AND material_id = ?
+  `, [planned_quantity, actual_quantity, status, dealId, materialId], function(err) {
+    if (err) {
+      console.error('Error updating deal material:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Materialzuweisung nicht gefunden' });
+    }
+    res.json({ success: true });
+  });
+});
+
+// Materialzuweisung für einen Umzug löschen
+app.delete('/moving-assistant/api/deals/:dealId/materials/:materialId', (req, res) => {
+  const { dealId, materialId } = req.params;
+
+  db.run(`
+    DELETE FROM deal_materials 
+    WHERE deal_id = ? AND material_id = ?
+  `, [dealId, materialId], function(err) {
+    if (err) {
+      console.error('Error deleting deal material:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Materialzuweisung nicht gefunden' });
+    }
+    res.json({ success: true });
   });
 });
 

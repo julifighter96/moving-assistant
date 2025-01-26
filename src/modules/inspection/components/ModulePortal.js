@@ -6,6 +6,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
 import logo from '../../shared/assets/images/Riedlin-Logo-512px_Neu.webp';
 import VehicleManagement from '../../../components/VehicleManagement/VehicleManagement';
+import InventoryManagement from '../../inventory/InventoryManagement';
 
 const ModulePortal = ({ onInspectionStart }) => {
   const [activeModule, setActiveModule] = useState(null);
@@ -42,7 +43,8 @@ const ModulePortal = ({ onInspectionStart }) => {
       name: 'Materialwirtschaft',
       description: 'Bestandsverwaltung und Nachbestellung',
       icon: Package,
-      component: null
+      component: InventoryManagement,
+      onClick: () => navigate('/inventory')
     },
     {
       id: 'calendar',

@@ -8,6 +8,7 @@ import EmployeeModule from './modules/employees/EmployeeModule';
 import InspectionRoutes from './modules/inspection/routes/InspectionRoutes';
 import VehicleManagement from './components/VehicleManagement/VehicleManagement';
 import SyncMoves from './modules/inspection/components/SyncMoves';
+import InventoryManagement from './modules/inventory/InventoryManagement';
 
 const App = () => {
   const { isAuthenticated } = useAuth();
@@ -31,6 +32,7 @@ const App = () => {
         <Route path="/employees/*" element={<EmployeeModule />} />
         <Route path="/vehicles" element={<VehicleManagement />} />
         <Route path="/sync-moves" element={<SyncMoves />} />
+        <Route path="/inventory" element={<InventoryManagement />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

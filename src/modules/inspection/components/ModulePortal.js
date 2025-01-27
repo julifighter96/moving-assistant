@@ -1,6 +1,6 @@
 // src/modules/inspection/components/ModulePortal.js
 import React, { useState } from 'react';
-import { ClipboardList, Users, Truck, Package, BarChart3, Calendar, MapPin, Settings, RefreshCw } from 'lucide-react';
+import { ClipboardList, Users, Truck, Package, BarChart3, Calendar, MapPin, Settings, RefreshCw, ClipboardCheck, MoveRight } from 'lucide-react';
 import InspectionModule from '../InspectionModule';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
@@ -67,6 +67,14 @@ const ModulePortal = ({ onInspectionStart }) => {
       icon: RefreshCw,
       component: null,
       onClick: () => navigate('/sync-moves')
+    },
+    {
+      id: 'moves',
+      name: 'Umzugsdurchführung',
+      description: 'Steuern Sie aktive Umzüge und erfassen Sie Zeiten',
+      icon: MoveRight,
+      component: null,
+      onClick: () => navigate('/moves')
     }
   ];
 
@@ -123,8 +131,7 @@ const ModulePortal = ({ onInspectionStart }) => {
                   className={`p-6 bg-white rounded-xl shadow-sm border border-gray-200 
                              hover:border-primary hover:shadow-md transition-all duration-200
                              flex flex-col items-center text-center
-                             ${!module.component && !module.onClick ? 'opacity-50 cursor-not-allowed' : ''}
-                            `}
+                             ${!module.component && !module.onClick ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <Icon className="w-12 h-12 mb-4 text-primary" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">

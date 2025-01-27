@@ -8,6 +8,8 @@ const crypto = require('crypto');
 const INITIAL_ROOMS_AND_ITEMS = require('./initialData');
 require('dotenv').config({ path: __dirname + '/.env' });
 const vehicleRoutes = require('./routes/vehicleRoutes');
+const moveRoutes = require('./routes/moveRoutes');
+const employeeRoutes = require('./routes/employeeRoutes');
 
 // Logging für Debugging
 console.log('ENV check:', {
@@ -23,13 +25,11 @@ app.use(cors({
   credentials: true
 }));
 
-const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) => {
-  if (err) {
-    console.error('Database connection error:', err);
-  } else {
-    console.log('Connected to SQLite database');
-  }
-});
+// Datenbankverbindung wird jetzt aus db.js importiert
+const db = require('./db');
+
+// Führe Migrationen aus
+require('./migrations/init');
 
 // Tabellen erstellen
 db.serialize(() => {
@@ -1185,6 +1185,8 @@ app.delete('/moving-assistant/api/deals/:dealId/materials/:materialId', (req, re
 
 // Routen einbinden
 app.use('/moving-assistant/api/vehicles', vehicleRoutes);
+app.use('/moving-assistant/api/employees', employeeRoutes);
+app.use('/moving-assistant/api/moves', moveRoutes);
 
 // Server starten
 const PORT = process.env.PORT || 3001;

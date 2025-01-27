@@ -9,6 +9,7 @@ import InspectionRoutes from './modules/inspection/routes/InspectionRoutes';
 import VehicleManagement from './components/VehicleManagement/VehicleManagement';
 import SyncMoves from './modules/inspection/components/SyncMoves';
 import InventoryManagement from './modules/inventory/InventoryManagement';
+import MoveExecutionModule from './modules/moves/MoveExecutionModule';
 
 const App = () => {
   const { isAuthenticated } = useAuth();
@@ -33,6 +34,7 @@ const App = () => {
         <Route path="/vehicles" element={<VehicleManagement />} />
         <Route path="/sync-moves" element={<SyncMoves />} />
         <Route path="/inventory" element={<InventoryManagement />} />
+        <Route path="/moves/*" element={<MoveExecutionModule />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

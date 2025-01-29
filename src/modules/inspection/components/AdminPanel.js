@@ -7,35 +7,38 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [items, setItems] = useState([]);
   const [newRoom, setNewRoom] = useState('');
-  const [newItem, setNewItem] = useState({ name: '', volume: 0 });
+  const [newItem, setNewItem] = useState({
+    name: '',
+    volume: 0,
+    width: 0,
+    length: 0,
+    height: 0
+  });
   const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const loadConfiguration = async () => {
-      try {
-        const loadedRooms = await adminService.getRooms();
-        if (Array.isArray(loadedRooms)) {  // Prüfen ob es ein Array ist
-          setRooms(loadedRooms);
-          if (loadedRooms.length > 0 && !selectedRoom) {
-            setSelectedRoom(loadedRooms[0].name);
-          }
-        } else {
-          setRooms([]);  // Fallback zu leerem Array
-          console.error('Loaded rooms is not an array:', loadedRooms);
-        }
-      } catch (err) {
-        console.error('Error loading configuration:', err);
-        setError('Fehler beim Laden der Räume');
-        setRooms([]);  // Fallback zu leerem Array im Fehlerfall
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadConfiguration();
-  }, [selectedRoom]);
+  }, []);
+
+  const loadConfiguration = async () => {
+    try {
+      setLoading(true);
+      const data = await adminService.getConfiguration();
+      console.log('Loaded configuration:', data);
+      setRooms(data.rooms || []);
+      if (data.rooms && data.rooms.length > 0 && !selectedRoom) {
+        setSelectedRoom(data.rooms[0].name);
+      }
+    } catch (error) {
+      console.error('Error loading configuration:', error);
+      setError(error.message);
+      setRooms([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const loadItems = async () => {
@@ -134,9 +137,10 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
       setLoading(false);
     }
   };
+
   const handleAddItem = async () => {
     if (!newItem.name.trim() || !selectedRoom) return;
-    
+
     try {
       setLoading(true);
       setError(null);
@@ -145,11 +149,11 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
         width: parseFloat(newItem.width) || 0,
         length: parseFloat(newItem.length) || 0, 
         height: parseFloat(newItem.height) || 0,
-        volume: parseFloat(newItem.width * newItem.length * newItem.height) || 0,
+        volume: parseFloat(newItem.volume) || 0,
         room: selectedRoom
       };
       await adminService.addItem(itemData);
-      setNewItem({ name: '', width: 0, length: 0, height: 0 });
+      setNewItem({ name: '', volume: 0, width: 0, length: 0, height: 0 });
       await loadItems(selectedRoom);
       if (onUpdateItems) {
         onUpdateItems(await adminService.getItems(selectedRoom));
@@ -161,6 +165,8 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
       setLoading(false);
     }
   };
+
+  const isAddItemDisabled = !selectedRoom || !newItem.name;
 
   if (loading && !rooms.length) {
     return (
@@ -231,134 +237,130 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
             Gegenstände für {selectedRoom}
           </h2>
           
-          {/* Neuen Gegenstand hinzufügen */}
-          <div className="flex gap-4 mb-6">
-          <div className="grid grid-cols-5 gap-4 mb-6">
-  <input
-    type="text"
-    value={newItem.name}
-    onChange={(e) => setNewItem({...newItem, name: e.target.value})}
-    placeholder="Name des Gegenstands"
-    className="col-span-2 p-2 border rounded"
-  />
-  <div className="col-span-3 grid grid-cols-3 gap-2">
-    <input
-      type="number"
-      value={newItem.width}
-      onChange={(e) => setNewItem({...newItem, width: parseFloat(e.target.value)})}
-      placeholder="Breite (cm)"
-      className="p-2 border rounded"
-    />
-    <input
-      type="number" 
-      value={newItem.length}
-      onChange={(e) => setNewItem({...newItem, length: parseFloat(e.target.value)})}
-      placeholder="Länge (cm)"
-      className="p-2 border rounded"
-    />
-    <input
-      type="number"
-      value={newItem.height}
-      onChange={(e) => setNewItem({...newItem, height: parseFloat(e.target.value)})}
-      placeholder="Höhe (cm)"
-      className="p-2 border rounded"
-    />
-    </div>
-    </div>
-  <button
-    onClick={() => {
-      if (newItem.name && newItem.volume > 0) {
-        handleAddItem();
-      }
-    }}
-    disabled={!newItem.name || newItem.volume <= 0}
-    className="px-6 py-2 bg-green-500 text-white rounded-r-md hover:bg-green-600 
-               disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-  >
-    Hinzufügen
-  </button>
-</div>
+          {/* Item Form */}
+          <div className="mt-4">
+            <h3 className="text-lg font-semibold mb-2">Neuer Gegenstand</h3>
+            <div className="grid grid-cols-5 gap-4 mb-6">
+              <input
+                type="text"
+                value={newItem.name}
+                onChange={(e) => setNewItem({...newItem, name: e.target.value})}
+                placeholder="Name des Gegenstands"
+                className="col-span-2 p-2 border rounded"
+              />
+              <div className="col-span-3 grid grid-cols-3 gap-2">
+                <input
+                  type="number"
+                  value={newItem.width}
+                  onChange={(e) => setNewItem({...newItem, width: parseFloat(e.target.value)})}
+                  placeholder="Breite (cm)"
+                  className="p-2 border rounded"
+                />
+                <input
+                  type="number"
+                  value={newItem.length}
+                  onChange={(e) => setNewItem({...newItem, length: parseFloat(e.target.value)})}
+                  placeholder="Länge (cm)"
+                  className="p-2 border rounded"
+                />
+                <input
+                  type="number"
+                  value={newItem.height}
+                  onChange={(e) => setNewItem({...newItem, height: parseFloat(e.target.value)})}
+                  placeholder="Höhe (cm)"
+                  className="p-2 border rounded"
+                />
+              </div>
+              <button
+                onClick={handleAddItem}
+                disabled={!newItem.name.trim() || !selectedRoom}
+                className="px-6 py-2 bg-green-500 text-white rounded-r-md hover:bg-green-600 
+                           disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                Hinzufügen
+              </button>
+            </div>
+          </div>
 
-<div className="grid grid-cols-6 gap-4 px-4 py-2 bg-gray-100 rounded-t-lg font-medium">
-  <div className="col-span-2">Name</div>
-  <div>Breite (cm)</div>
-  <div>Länge (cm)</div>
-  <div>Höhe (cm)</div>
-  <div>Aktionen</div>
-</div>
+          <div className="grid grid-cols-6 gap-4 px-4 py-2 bg-gray-100 rounded-t-lg font-medium">
+            <div className="col-span-2">Name</div>
+            <div>Breite (cm)</div>
+            <div>Länge (cm)</div>
+            <div>Höhe (cm)</div>
+            <div>Aktionen</div>
+          </div>
 
-<div className="space-y-2">
-  {items.map((item) => (
-    <div key={item.id} className="grid grid-cols-6 gap-4 p-4 bg-white rounded-lg items-center">
-      {editingItem?.id === item.id ? (
-        <>
-          <div className="col-span-2">
-            <input
-              type="text"
-              value={editingItem.name}
-              onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
-              className="w-full p-2 border rounded"
-            />
-          </div>
-          <div>
-            <input
-              type="number"
-              value={editingItem.width || 0}
-              onChange={(e) => setEditingItem({...editingItem, width: parseFloat(e.target.value)})}
-              className="w-full p-2 border rounded"
-            />
-          </div>
-          <div>
-            <input
-              type="number"
-              value={editingItem.length || 0}
-              onChange={(e) => setEditingItem({...editingItem, length: parseFloat(e.target.value)})}
-              className="w-full p-2 border rounded"
-            />
-          </div>
-          <div>
-            <input
-              type="number"
-              value={editingItem.height || 0}
-              onChange={(e) => setEditingItem({...editingItem, height: parseFloat(e.target.value)})}
-              className="w-full p-2 border rounded"
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleUpdateItem(editingItem)}
-              className="px-3 py-1 bg-green-500 text-white rounded"
-            >
-              Speichern
-            </button>
-            <button
-              onClick={() => setEditingItem(null)}
-              className="px-3 py-1 bg-gray-500 text-white rounded"
-            >
-              Abbrechen
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="col-span-2 font-medium">{item.name}</div>
-          <div>{item.width || 0}</div>
-          <div>{item.length || 0}</div>
-          <div>{item.height || 0}</div>
-          <div>
-            <button
-              onClick={() => setEditingItem(item)}
-              className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded"
-            >
-              Bearbeiten
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-    
-  ))}
-
+          <div className="space-y-2">
+            {items.map((item) => (
+              <div key={item.id} className="grid grid-cols-6 gap-4 p-4 bg-white rounded-lg items-center">
+                {editingItem?.id === item.id ? (
+                  <>
+                    <div className="col-span-2">
+                      <input
+                        type="text"
+                        value={editingItem.name}
+                        onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="number"
+                        value={editingItem.width || 0}
+                        onChange={(e) => setEditingItem({...editingItem, width: parseFloat(e.target.value)})}
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="number"
+                        value={editingItem.length || 0}
+                        onChange={(e) => setEditingItem({...editingItem, length: parseFloat(e.target.value)})}
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="number"
+                        value={editingItem.height || 0}
+                        onChange={(e) => setEditingItem({...editingItem, height: parseFloat(e.target.value)})}
+                        className="w-full p-2 border rounded"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleUpdateItem(editingItem)}
+                        className="px-3 py-1 bg-green-500 text-white rounded"
+                      >
+                        Speichern
+                      </button>
+                      <button
+                        onClick={() => setEditingItem(null)}
+                        className="px-3 py-1 bg-gray-500 text-white rounded"
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="col-span-2 font-medium">{item.name}</div>
+                    <div>{item.width || 0}</div>
+                    <div>{item.length || 0}</div>
+                    <div>{item.height || 0}</div>
+                    <div>
+                      <button
+                        onClick={() => setEditingItem(item)}
+                        className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded"
+                      >
+                        Bearbeiten
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+            ))}
 
             {!items.length && (
               <p className="text-gray-500 text-center py-4">
@@ -366,11 +368,11 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
               </p>
             )}
             {/* Preiskonfiguration als neue Sektion am Ende */}
-      <div className="bg-white rounded-lg p-6 shadow-sm">
-        <h2 className="text-xl font-semibold mb-4">Preiskonfiguration</h2>
-        <p className="text-gray-500 mb-6">Verwalten Sie hier die Preise für Möbel und Materialien</p>
-        <PriceConfiguration />
-      </div>
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <h2 className="text-xl font-semibold mb-4">Preiskonfiguration</h2>
+              <p className="text-gray-500 mb-6">Verwalten Sie hier die Preise für Möbel und Materialien</p>
+              <PriceConfiguration />
+            </div>
           </div>
         </div>
       )}

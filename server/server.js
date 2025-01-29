@@ -10,6 +10,7 @@ require('dotenv').config({ path: __dirname + '/.env' });
 const vehicleRoutes = require('./routes/vehicleRoutes');
 const moveRoutes = require('./routes/moveRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 // Logging für Debugging
 console.log('ENV check:', {
@@ -21,7 +22,11 @@ console.log('ENV check:', {
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://movingmanager.lolworlds.online'],
+  origin: [
+    'http://localhost:3000', 
+    'https://movingmanager.lolworlds.online',
+    'http://movingmanager.lolworlds.online'
+  ],
   credentials: true
 }));
 
@@ -190,6 +195,37 @@ db.serialize(() => {
       FOREIGN KEY (material_id) REFERENCES materials (id)
     )
   `);
+
+  // Admin rooms table with proper initialization
+  console.log('Creating admin_rooms table...');
+  db.run(`CREATE TABLE IF NOT EXISTS admin_rooms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    items TEXT NOT NULL DEFAULT '[]',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`, [], (err) => {
+    if (err) {
+      console.error('Error creating admin_rooms table:', err);
+      return;
+    }
+
+    // Insert initial room data
+    console.log('Inserting initial room data...');
+    const initialRooms = Object.entries(INITIAL_ROOMS_AND_ITEMS).map(([name, items]) => ({
+      name,
+      items: JSON.stringify(items)
+    }));
+
+    const stmt = db.prepare('INSERT INTO admin_rooms (name, items) VALUES (?, ?)');
+    initialRooms.forEach(room => {
+      console.log('Inserting room:', room.name);
+      stmt.run([room.name, room.items], (err) => {
+        if (err) console.error('Error inserting initial room:', err);
+      });
+    });
+    stmt.finalize();
+  });
 
   // 3. Test-Daten einfügen
   console.log('Inserting test data...');
@@ -971,234 +1007,42 @@ app.post('/api/deals/:dealId/materials/:materialId/usage', (req, res) => {
     // Aktualisiere Materialbestand
     db.run(`
       UPDATE materials 
-      SET current_stock = current_stock - ?,
-          updated_at = CURRENT_TIMESTAMP
+      SET current_stock = current_stock - ?
       WHERE id = ?
     `, [actualQuantity, materialId]);
 
     // Commit Transaktion
-    db.run('COMMIT', err => {
-      if (err) {
-        console.error('Error recording material usage:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ success: true });
-    });
+    db.run('COMMIT');
+  });
+
+  res.status(201).json({
+    deal_id: dealId,
+    material_id: materialId,
+    actual_quantity: actualQuantity
   });
 });
 
-// Materialstatistiken abrufen
-app.get('/api/materials/statistics', (req, res) => {
-  db.all(`
-    SELECT 
-      m.name,
-      m.current_stock,
-      COUNT(DISTINCT mm.deal_id) as number_of_moves,
-      SUM(CASE WHEN mm.movement_type = 'out' THEN mm.quantity ELSE 0 END) as total_usage,
-      AVG(CASE WHEN mm.movement_type = 'out' THEN mm.quantity ELSE NULL END) as avg_usage_per_move
-    FROM materials m
-    LEFT JOIN material_movements mm ON m.id = mm.material_id
-    WHERE mm.created_at >= date('now', '-30 days')
-    GROUP BY m.id
-    ORDER BY total_usage DESC
-  `, [], (err, rows) => {
-    if (err) {
-      console.error('Error fetching material statistics:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
-  });
+// Log registered routes
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
 });
 
-// Material erstellen
-app.post('/api/materials', (req, res) => {
-  const { name, type, current_stock, min_stock, order_quantity, unit } = req.body;
-  
-  db.run(`
-    INSERT INTO materials (
-      name, type, current_stock, min_stock, order_quantity, unit
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `, [
-    name,
-    type,
-    current_stock,
-    min_stock,
-    order_quantity,
-    unit
-  ], function(err) {
-    if (err) {
-      console.error('Error creating material:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.status(201).json({
-      id: this.lastID,
-      name,
-      type,
-      current_stock,
-      min_stock,
-      order_quantity,
-      unit,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    });
-  });
-});
+// Routes
+app.use('/api/admin', adminRoutes);
+console.log('Admin routes registered at /api/admin');
 
-// Material aktualisieren
-app.patch('/api/materials/:id', (req, res) => {
-  const { id } = req.params;
-  const updates = req.body;
-  const updateFields = Object.keys(updates)
-    .map(key => `${key} = ?`)
-    .join(', ');
-  const values = [...Object.values(updates), id];
-
-  db.run(
-    `UPDATE materials SET ${updateFields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    values,
-    function(err) {
-      if (err) {
-        return res.status(400).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ message: 'Material nicht gefunden' });
-      }
-      res.json({ id, ...updates });
-    }
-  );
-});
-
-// Material löschen
-app.delete('/api/materials/:id', (req, res) => {
-  const { id } = req.params;
-
-  db.run('DELETE FROM materials WHERE id = ?', [id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
-      return res.status(404).json({ message: 'Material nicht gefunden' });
-    }
-    res.json({ message: 'Material erfolgreich gelöscht' });
-  });
-});
-
-// Materialbestand aktualisieren
-app.post('/api/materials/:id/stock', (req, res) => {
-  const { id } = req.params;
-  const { quantity, movement_type, notes } = req.body;
-
-  db.serialize(() => {
-    db.run('BEGIN TRANSACTION');
-
-    // Aktualisiere den Materialbestand
-    db.run(`
-      UPDATE materials 
-      SET current_stock = current_stock ${movement_type === 'in' ? '+' : '-'} ?,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [quantity, id]);
-
-    // Erstelle einen Bewegungseintrag
-    db.run(`
-      INSERT INTO material_movements (
-        material_id, movement_type, quantity, notes
-      ) VALUES (?, ?, ?, ?)
-    `, [id, movement_type, quantity, notes]);
-
-    db.run('COMMIT', err => {
-      if (err) {
-        console.error('Error updating stock:', err);
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ success: true });
-    });
-  });
-});
-
-// Materialzuweisungen für einen Umzug abrufen
-app.get('/api/deals/:dealId/materials', (req, res) => {
-  const { dealId } = req.params;
-
-  db.all(`
-    SELECT 
-      dm.*,
-      m.name as material_name,
-      m.type as material_type,
-      m.unit
-    FROM deal_materials dm
-    LEFT JOIN materials m ON dm.material_id = m.id
-    WHERE dm.deal_id = ?
-    ORDER BY dm.created_at DESC
-  `, [dealId], (err, rows) => {
-    if (err) {
-      console.error('Error fetching deal materials:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows || []);
-  });
-});
-
-// Materialzuweisung für einen Umzug aktualisieren
-app.put('/api/deals/:dealId/materials/:materialId', (req, res) => {
-  const { dealId, materialId } = req.params;
-  const { planned_quantity, actual_quantity, status } = req.body;
-
-  db.run(`
-    UPDATE deal_materials 
-    SET 
-      planned_quantity = COALESCE(?, planned_quantity),
-      actual_quantity = COALESCE(?, actual_quantity),
-      status = COALESCE(?, status),
-      updated_at = CURRENT_TIMESTAMP
-    WHERE deal_id = ? AND material_id = ?
-  `, [planned_quantity, actual_quantity, status, dealId, materialId], function(err) {
-    if (err) {
-      console.error('Error updating deal material:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Materialzuweisung nicht gefunden' });
-    }
-    res.json({ success: true });
-  });
-});
-
-// Materialzuweisung für einen Umzug löschen
-app.delete('/api/deals/:dealId/materials/:materialId', (req, res) => {
-  const { dealId, materialId } = req.params;
-
-  db.run(`
-    DELETE FROM deal_materials 
-    WHERE deal_id = ? AND material_id = ?
-  `, [dealId, materialId], function(err) {
-    if (err) {
-      console.error('Error deleting deal material:', err);
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Materialzuweisung nicht gefunden' });
-    }
-    res.json({ success: true });
-  });
-});
-
-// Routen einbinden
-app.use('/api/vehicles', vehicleRoutes);
-app.use('/api/employees', employeeRoutes);
-app.use('/api/moves', moveRoutes);
-
-// Static files am Ende der Konfiguration
+// Static files and catch-all route should be LAST
 app.use(express.static(path.join(__dirname, '..', 'build')));
 
-// Catch-all Route für React am Ende der Konfiguration
+// This should be the very last route
 app.get('*', (req, res) => {
+  // Log when catch-all route is hit
+  console.log('Catch-all route hit for:', req.url);
   res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
 });
 
-// Server starten
 const PORT = process.env.PORT || 3002;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Database location: ${path.join(__dirname, 'recognition.db')}`);
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });

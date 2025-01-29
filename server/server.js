@@ -386,8 +386,8 @@ db.serialize(() => {
 });
 
 // API-Routen
-app.get('/moving-assistant/api/vehicles', (req, res) => {
-  console.log('GET /moving-assistant/api/vehicles called');
+app.get('/api/vehicles', (req, res) => {
+  console.log('GET /api/vehicles called');
   
   db.all('SELECT * FROM vehicles ORDER BY license_plate', [], (err, rows) => {
     if (err) {
@@ -400,7 +400,7 @@ app.get('/moving-assistant/api/vehicles', (req, res) => {
 });
 
 // Fahrzeug erstellen
-app.post('/moving-assistant/api/vehicles', (req, res) => {
+app.post('/api/vehicles', (req, res) => {
   const { license_plate, type, loading_capacity, length, width, height, max_weight, status } = req.body;
   
   db.run(`
@@ -437,7 +437,7 @@ app.post('/moving-assistant/api/vehicles', (req, res) => {
 });
 
 // Fahrzeugbuchungen abrufen
-app.get('/moving-assistant/api/vehicles/:id/bookings', (req, res) => {
+app.get('/api/vehicles/:id/bookings', (req, res) => {
   const vehicleId = req.params.id;
   
   db.all(`
@@ -455,7 +455,7 @@ app.get('/moving-assistant/api/vehicles/:id/bookings', (req, res) => {
 });
 
 // Fahrzeugbuchung erstellen
-app.post('/moving-assistant/api/vehicles/:id/bookings', (req, res) => {
+app.post('/api/vehicles/:id/bookings', (req, res) => {
   const vehicleId = req.params.id;
   const { deal_id, start_date, end_date, volume, weight } = req.body;
   
@@ -481,8 +481,8 @@ app.post('/moving-assistant/api/vehicles/:id/bookings', (req, res) => {
 });
 
 // Mitarbeiter-API-Routen
-app.get('/moving-assistant/api/employees', (req, res) => {
-  console.log('GET /moving-assistant/api/employees called');
+app.get('/api/employees', (req, res) => {
+  console.log('GET /api/employees called');
   
   db.all('SELECT * FROM employees ORDER BY last_name, first_name', [], (err, rows) => {
     if (err) {
@@ -494,7 +494,7 @@ app.get('/moving-assistant/api/employees', (req, res) => {
   });
 });
 
-app.post('/moving-assistant/api/employees', (req, res) => {
+app.post('/api/employees', (req, res) => {
   const { first_name, last_name, email, phone, role } = req.body;
   
   db.run(`
@@ -517,7 +517,7 @@ app.post('/moving-assistant/api/employees', (req, res) => {
   });
 });
 
-app.put('/moving-assistant/api/employees/:id', (req, res) => {
+app.put('/api/employees/:id', (req, res) => {
   const { id } = req.params;
   const { first_name, last_name, email, phone, role } = req.body;
   
@@ -544,7 +544,7 @@ app.put('/moving-assistant/api/employees/:id', (req, res) => {
   });
 });
 
-app.delete('/moving-assistant/api/employees/:id', (req, res) => {
+app.delete('/api/employees/:id', (req, res) => {
   const { id } = req.params;
   
   db.run('DELETE FROM employees WHERE id = ?', [id], function(err) {
@@ -560,8 +560,8 @@ app.delete('/moving-assistant/api/employees/:id', (req, res) => {
 });
 
 // Inspektionen-API-Routen
-app.get('/moving-assistant/api/inspections', (req, res) => {
-  console.log('GET /moving-assistant/api/inspections called');
+app.get('/api/inspections', (req, res) => {
+  console.log('GET /api/inspections called');
   
   db.all(`
     SELECT i.*, 
@@ -580,7 +580,7 @@ app.get('/moving-assistant/api/inspections', (req, res) => {
   });
 });
 
-app.post('/moving-assistant/api/inspections', (req, res) => {
+app.post('/api/inspections', (req, res) => {
   const { deal_id, inspector_id, scheduled_date, notes, status } = req.body;
   
   db.run(`
@@ -604,7 +604,7 @@ app.post('/moving-assistant/api/inspections', (req, res) => {
 });
 
 // Zuweisungen-API-Routen
-app.get('/moving-assistant/api/assignments', (req, res) => {
+app.get('/api/assignments', (req, res) => {
   console.log('Fetching assignments...');
   
   const query = `
@@ -632,7 +632,7 @@ app.get('/moving-assistant/api/assignments', (req, res) => {
   });
 });
 
-app.post('/moving-assistant/api/assignments', async (req, res) => {
+app.post('/api/assignments', async (req, res) => {
   const { employee_id, deal_id, start_datetime, end_datetime, task_type = 'moving' } = req.body;
 
   console.log('Creating assignment:', {
@@ -741,7 +741,7 @@ app.post('/moving-assistant/api/assignments', async (req, res) => {
 });
 
 // Sync Deals API
-app.post('/moving-assistant/api/sync-deals', async (req, res) => {
+app.post('/api/sync-deals', async (req, res) => {
   const { deals } = req.body;
   console.log('Received deals for sync:', deals);
   
@@ -811,7 +811,7 @@ app.post('/moving-assistant/api/sync-deals', async (req, res) => {
 });
 
 // Ersetze die bestehende /api/deals Route mit dieser Version:
-app.get('/moving-assistant/api/deals', (req, res) => {
+app.get('/api/deals', (req, res) => {
   console.log('Fetching future deals from database...');
   
   const query = `
@@ -859,7 +859,7 @@ app.get('/moving-assistant/api/deals', (req, res) => {
 });
 
 // Debug-Endpunkt für direkte Datenbankinspektion
-app.get('/moving-assistant/api/debug/deals', (req, res) => {
+app.get('/api/debug/deals', (req, res) => {
   db.all(`
     SELECT 
       'Alle Deals' as info, 
@@ -888,7 +888,7 @@ app.get('/moving-assistant/api/debug/deals', (req, res) => {
 });
 
 // Teams API-Route
-app.get('/moving-assistant/api/teams', (req, res) => {
+app.get('/api/teams', (req, res) => {
   db.all('SELECT * FROM teams', [], (err, rows) => {
     if (err) {
       console.error('Error fetching teams:', err);
@@ -901,7 +901,7 @@ app.get('/moving-assistant/api/teams', (req, res) => {
 // API-Routen für das Materialwirtschaftssystem
 
 // Alle Materialien abrufen
-app.get('/moving-assistant/api/materials', (req, res) => {
+app.get('/api/materials', (req, res) => {
   db.all(`
     SELECT 
       m.*,
@@ -922,7 +922,7 @@ app.get('/moving-assistant/api/materials', (req, res) => {
 });
 
 // Material einem Umzug zuweisen
-app.post('/moving-assistant/api/deals/:dealId/materials', (req, res) => {
+app.post('/api/deals/:dealId/materials', (req, res) => {
   const { dealId } = req.params;
   const { materialId, plannedQuantity } = req.body;
 
@@ -946,7 +946,7 @@ app.post('/moving-assistant/api/deals/:dealId/materials', (req, res) => {
 });
 
 // Materialverbrauch für einen Umzug erfassen
-app.post('/moving-assistant/api/deals/:dealId/materials/:materialId/usage', (req, res) => {
+app.post('/api/deals/:dealId/materials/:materialId/usage', (req, res) => {
   const { dealId, materialId } = req.params;
   const { actualQuantity } = req.body;
 
@@ -988,7 +988,7 @@ app.post('/moving-assistant/api/deals/:dealId/materials/:materialId/usage', (req
 });
 
 // Materialstatistiken abrufen
-app.get('/moving-assistant/api/materials/statistics', (req, res) => {
+app.get('/api/materials/statistics', (req, res) => {
   db.all(`
     SELECT 
       m.name,
@@ -1011,7 +1011,7 @@ app.get('/moving-assistant/api/materials/statistics', (req, res) => {
 });
 
 // Material erstellen
-app.post('/moving-assistant/api/materials', (req, res) => {
+app.post('/api/materials', (req, res) => {
   const { name, type, current_stock, min_stock, order_quantity, unit } = req.body;
   
   db.run(`
@@ -1045,7 +1045,7 @@ app.post('/moving-assistant/api/materials', (req, res) => {
 });
 
 // Material aktualisieren
-app.patch('/moving-assistant/api/materials/:id', (req, res) => {
+app.patch('/api/materials/:id', (req, res) => {
   const { id } = req.params;
   const updates = req.body;
   const updateFields = Object.keys(updates)
@@ -1069,7 +1069,7 @@ app.patch('/moving-assistant/api/materials/:id', (req, res) => {
 });
 
 // Material löschen
-app.delete('/moving-assistant/api/materials/:id', (req, res) => {
+app.delete('/api/materials/:id', (req, res) => {
   const { id } = req.params;
 
   db.run('DELETE FROM materials WHERE id = ?', [id], function(err) {
@@ -1084,7 +1084,7 @@ app.delete('/moving-assistant/api/materials/:id', (req, res) => {
 });
 
 // Materialbestand aktualisieren
-app.post('/moving-assistant/api/materials/:id/stock', (req, res) => {
+app.post('/api/materials/:id/stock', (req, res) => {
   const { id } = req.params;
   const { quantity, movement_type, notes } = req.body;
 
@@ -1117,7 +1117,7 @@ app.post('/moving-assistant/api/materials/:id/stock', (req, res) => {
 });
 
 // Materialzuweisungen für einen Umzug abrufen
-app.get('/moving-assistant/api/deals/:dealId/materials', (req, res) => {
+app.get('/api/deals/:dealId/materials', (req, res) => {
   const { dealId } = req.params;
 
   db.all(`
@@ -1140,7 +1140,7 @@ app.get('/moving-assistant/api/deals/:dealId/materials', (req, res) => {
 });
 
 // Materialzuweisung für einen Umzug aktualisieren
-app.put('/moving-assistant/api/deals/:dealId/materials/:materialId', (req, res) => {
+app.put('/api/deals/:dealId/materials/:materialId', (req, res) => {
   const { dealId, materialId } = req.params;
   const { planned_quantity, actual_quantity, status } = req.body;
 
@@ -1165,7 +1165,7 @@ app.put('/moving-assistant/api/deals/:dealId/materials/:materialId', (req, res) 
 });
 
 // Materialzuweisung für einen Umzug löschen
-app.delete('/moving-assistant/api/deals/:dealId/materials/:materialId', (req, res) => {
+app.delete('/api/deals/:dealId/materials/:materialId', (req, res) => {
   const { dealId, materialId } = req.params;
 
   db.run(`
@@ -1184,9 +1184,17 @@ app.delete('/moving-assistant/api/deals/:dealId/materials/:materialId', (req, re
 });
 
 // Routen einbinden
-app.use('/moving-assistant/api/vehicles', vehicleRoutes);
-app.use('/moving-assistant/api/employees', employeeRoutes);
-app.use('/moving-assistant/api/moves', moveRoutes);
+app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/employees', employeeRoutes);
+app.use('/api/moves', moveRoutes);
+
+// Static files am Ende der Konfiguration
+app.use(express.static(path.join(__dirname, '..', 'build')));
+
+// Catch-all Route für React am Ende der Konfiguration
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
+});
 
 // Server starten
 const PORT = process.env.PORT || 3002;

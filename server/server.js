@@ -21,7 +21,7 @@ console.log('ENV check:', {
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: ['http://localhost:3000', 'https://movingmanager.lolworlds.online'],
   credentials: true
 }));
 
@@ -1189,7 +1189,7 @@ app.use('/moving-assistant/api/employees', employeeRoutes);
 app.use('/moving-assistant/api/moves', moveRoutes);
 
 // Server starten
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Database location: ${path.join(__dirname, 'recognition.db')}`);

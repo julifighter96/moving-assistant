@@ -153,13 +153,12 @@ const InspectionModule = () => {
   const [dealData, setDealData] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [currentRoom, setCurrentRoom] = useState(INITIAL_ROOMS[0]);
-  // Neuer State für Tab-Verwaltung
   const [roomsData, setRoomsData] = useState(() => {
     const initialRoomsData = {};
-    rooms.forEach(room => {
+    INITIAL_ROOMS.forEach(room => {
       initialRoomsData[room] = {
         items: [],
-        packMaterials: DEFAULT_PACK_MATERIALS,
+        packMaterials: DEFAULT_PACK_MATERIALS.map(material => ({ ...material })),
         photos: [],
         totalVolume: 0,
         estimatedWeight: 0,
@@ -238,15 +237,10 @@ const InspectionModule = () => {
   const handleRouteClick = () => {
     setCurrentStep('route-planner');
   };
-  const handleStartInspection = (selectedDeal) => {
-    console.log('Starting inspection with deal:', selectedDeal);
-    if (!selectedDeal?.id) {
-      console.error('No deal selected');
-      return;
-    }
-    
-    setDealData(selectedDeal);
-    setSelectedDealId(selectedDeal.id);
+  const handleStartInspection = (dealId, data) => {
+    console.log('Starting inspection with:', { dealId, data });
+    setSelectedDealId(dealId?.toString());
+    setDealData(data);
     setCurrentStep(1);
   };
 
@@ -326,15 +320,26 @@ const InspectionModule = () => {
     setPopupMessage('Umzugsinformationen erfolgreich aktualisiert!');
   };
 
-  const handleRoomChange = useCallback((room) => {
-    setCurrentRoom(room);
+  const handleRoomChange = useCallback((roomName) => {
+    setCurrentRoom(roomName);
+    setRoomsData(prev => ({
+      ...prev,
+      [roomName]: prev[roomName] || {
+        items: [],
+        packMaterials: DEFAULT_PACK_MATERIALS.map(material => ({ ...material })),
+        photos: [],
+        totalVolume: 0,
+        estimatedWeight: 0,
+        notes: ''
+      }
+    }));
   }, []);
 
-  const handleUpdateRoomData = useCallback((roomName, updatedRoomData) => {
+  const handleUpdateRoomData = useCallback((updatedRoomData) => {
     setRoomsData(prevData => ({
       ...prevData,
-      [roomName]: {
-        ...prevData[roomName],
+      [updatedRoomData.roomName]: {
+        ...prevData[updatedRoomData.roomName],
         ...updatedRoomData
       }
     }));
@@ -632,26 +637,40 @@ useEffect(() => {
             />
             
             <div className="mt-8">
-              {currentStep === 0 && <DealViewer onStartInspection={handleStartInspection} />}
+              {currentStep === 0 && (
+                <DealViewer onStartInspection={handleStartInspection} />
+              )}
               {currentStep === 1 && (
                 <MoveInformationComponent
+                  dealId={selectedDealId}
                   dealData={dealData}
                   onComplete={handleMoveInfoComplete}
                 />
               )}
               {currentStep === 2 && (
-                <div>
-                  <RoomSelector
-                    rooms={rooms}
-                    currentRoom={currentRoom}
-                    onRoomChange={handleRoomChange}
-                    onAddRoom={handleAddRoom}
-                  />
-                  <RoomItemsSelector
-                    roomData={roomsData[currentRoom]}
-                    onUpdateRoom={(data) => handleUpdateRoomData(currentRoom, data)}
-                    onAddItem={handleAddItem}
-                  />
+                <div className="grid grid-cols-4 gap-6">
+                  <div className="col-span-1">
+                    <RoomSelector
+                      rooms={rooms}
+                      currentRoom={currentRoom}
+                      onRoomChange={handleRoomChange}
+                      onAddRoom={handleAddRoom}
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <RoomItemsSelector
+                      roomData={roomsData[currentRoom] || {
+                        items: [],
+                        packMaterials: DEFAULT_PACK_MATERIALS.map(material => ({ ...material })),
+                        photos: [],
+                        totalVolume: 0,
+                        estimatedWeight: 0,
+                        notes: ''
+                      }}
+                      onUpdateRoom={(data) => handleUpdateRoomData(data)}
+                      onAddItem={handleAddItem}
+                    />
+                  </div>
                 </div>
               )}
               {currentStep === 3 && (
@@ -664,7 +683,13 @@ useEffect(() => {
                   moveInfo={moveInfo}
                   roomsData={roomsData}
                   additionalInfo={additionalInfo}
+                  dealId={selectedDealId}
+                  volumeReductions={{}}
+                  onVolumeReductionChange={(name, value) => {
+                    // Handle volume reductions if needed
+                  }}
                   onComplete={handleOfferComplete}
+                  setCurrentStep={setCurrentStep}
                 />
               )}
               {currentStep === 5 && (

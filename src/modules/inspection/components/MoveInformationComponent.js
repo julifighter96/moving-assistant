@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { updateDealDirectly } from '../utils/dealUpdateFunctions';
-import { getDeal } from '../services/pipedriveService';
+import { pipedriveService } from '../services/pipedriveService';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { de } from 'date-fns/locale';
@@ -15,8 +15,8 @@ const MOVE_INFO_FIELDS = [
    { name: 'Etage(n) Entladestelle', apiKey: '9e4e07bce884e21671546529b564da98ceb4765a', type: 'number' },
 ];
 
-const MoveInformationComponent = ({ dealId, onComplete }) => {
- const [moveInfo, setMoveInfo] = useState({});
+const MoveInformationComponent = ({ dealId, dealData, onComplete }) => {
+ const [moveInfo, setMoveInfo] = useState(null);
  const [isLoading, setIsLoading] = useState(true);
  const [error, setError] = useState(null);
  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
@@ -37,32 +37,45 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
  }, []);
 
  useEffect(() => {
-   const fetchDealData = async () => {
-     setIsLoading(true);
-     setError(null);
+   const loadDealData = async () => {
      try {
-       const dealData = await getDeal(dealId);
+       if (!dealId) {
+         throw new Error('No deal ID provided');
+       }
+
+       // Ensure dealId is a string
+       const id = dealId?.toString();
+       if (!id || id === '[object Object]') {
+         throw new Error('Invalid deal ID format');
+       }
+
+       setIsLoading(true);
+       const data = dealData || await pipedriveService.getDeal(id);
+       
+       // Transform the data into the expected format
        const initialInfo = {};
        MOVE_INFO_FIELDS.forEach(field => {
-         if (field.type === 'date' && dealData[field.apiKey]) {
-           initialInfo[field.apiKey] = new Date(dealData[field.apiKey]);
-         } else if (field.type === 'number' && dealData[field.apiKey]) {
-           initialInfo[field.apiKey] = parseInt(dealData[field.apiKey], 10);
+         if (field.type === 'date' && data[field.apiKey]) {
+           initialInfo[field.apiKey] = new Date(data[field.apiKey]);
+         } else if (field.type === 'number' && data[field.apiKey]) {
+           initialInfo[field.apiKey] = parseInt(data[field.apiKey], 10);
          } else {
-           initialInfo[field.apiKey] = dealData[field.apiKey] || '';
+           initialInfo[field.apiKey] = data[field.apiKey] || '';
          }
        });
+       
        setMoveInfo(initialInfo);
+       setError(null);
      } catch (err) {
        console.error('Error fetching deal data:', err);
-       setError('Fehler beim Laden der Daten. Bitte versuchen Sie es erneut.');
+       setError(err.message);
      } finally {
        setIsLoading(false);
      }
    };
 
-   fetchDealData();
- }, [dealId]);
+   loadDealData();
+ }, [dealId, dealData]);
 
  const handleInputChange = (apiKey, value, type) => {
    setMoveInfo(prevInfo => ({

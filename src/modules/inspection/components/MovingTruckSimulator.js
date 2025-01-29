@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
+import { adminService } from '../../../services/adminService';
 
 const MAX_HEIGHT = 3.3;
 const GRID_SIZE = 0.5;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { adminService } from '../services/adminService';
+import { adminService } from '../../../services/adminService';
 import { Package, Edit, Save, X } from 'lucide-react';
 
 const PriceConfiguration = () => {

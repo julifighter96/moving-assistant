@@ -7,6 +7,8 @@ import MoveExecution from './components/MoveExecution';
 const MoveExecutionModule = () => {
   const [activeMove, setActiveMove] = useState(null);
   const [activeMoves, setActiveMoves] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,12 +17,19 @@ const MoveExecutionModule = () => {
 
   const fetchActiveMoves = async () => {
     try {
-      const response = await fetch('/api/moves/active');
-      if (!response.ok) throw new Error('Fehler beim Laden der aktiven Umzüge');
-      const data = await response.json();
-      setActiveMoves(data);
+      const [movesRes] = await Promise.all([
+        fetch('/api/deals')
+      ]);
+      
+      const [movesData] = await Promise.all([
+        movesRes.json()
+      ]);
+
+      console.log('Fetched moves:', movesData);
+      setActiveMoves(movesData || []);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching active moves:', error);
+      setActiveMoves([]);
     }
   };
 
@@ -35,6 +44,11 @@ const MoveExecutionModule = () => {
             <p className="text-gray-500">
               Verwalten Sie aktive Umzüge und deren Durchführung
             </p>
+            {activeMoves.length === 0 && (
+              <p className="text-gray-500 mt-2">
+                Keine aktiven Umzüge verfügbar
+              </p>
+            )}
           </div>
           <button
             onClick={() => navigate('/')}
@@ -58,6 +72,8 @@ const MoveExecutionModule = () => {
             moves={activeMoves}
             onMoveSelect={setActiveMove}
             onUpdate={fetchActiveMoves}
+            loading={loading}
+            error={error}
           />
         )}
       </div>

@@ -2,26 +2,28 @@
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL;
+const BASE_URL = `${API_URL}/admin`;
 
 let priceCache = null;
 
 export const adminService = {
   async addRoom(name) {
-    // Add leading slash if missing in API_URL
-    const url = API_URL.endsWith('/') 
-      ? `${API_URL}admin/rooms`
-      : `${API_URL}/admin/rooms`;
-      
-    const response = await axios.post(url, { name });
-    return response.data;
+    try {
+      console.log('Adding room:', name);
+      const response = await axios.post(`${BASE_URL}/rooms`, { name });
+      return response.data;
+    } catch (error) {
+      console.error('Error adding room:', error);
+      throw error;
+    }
   },
 
   async getRooms() {
     try {
-      console.log('Fetching rooms from:', `${API_URL}/admin/rooms`);
-      const response = await axios.get(`${API_URL}/admin/rooms`);
+      console.log('Fetching rooms from:', `${BASE_URL}/rooms`);
+      const response = await axios.get(`${BASE_URL}/rooms`);
       console.log('Rooms response:', response.data);
-      return Array.isArray(response.data) ? response.data : [];
+      return response.data.rooms || [];
     } catch (error) {
       console.error('Error fetching rooms:', error.response || error);
       return [];
@@ -30,10 +32,8 @@ export const adminService = {
 
   async getItems(room) {
     try {
-      console.log(`Fetching items for room "${room}" from ${API_URL}/admin/items`);
-      const response = await axios.get(`${API_URL}/admin/items`, {
-        params: { room }
-      });
+      console.log(`Fetching items for room "${room}" from ${BASE_URL}/items/${room}`);
+      const response = await axios.get(`${BASE_URL}/items/${room}`);
       console.log(`Items response for room "${room}":`, response.data);
       
       if (!Array.isArray(response.data)) {
@@ -53,31 +53,43 @@ export const adminService = {
   },
 
   async addItem(item) {
-    return await axios.post(`${API_URL}/admin/items`, {
-      name: item.name,
-      volume: item.volume,
-      width: item.width,
-      length: item.length,
-      height: item.height,
-      room: item.room 
-    });
+    try {
+      const response = await axios.post(`${BASE_URL}/items`, {
+        name: item.name,
+        volume: item.volume,
+        width: item.width,
+        length: item.length,
+        height: item.height,
+        room: item.room
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error adding item:', error);
+      throw error;
+    }
   },
   
   async updateItem(id, item) {
-    return await axios.put(`${API_URL}/admin/items/${id}`, {
-      name: item.name,
-      volume: item.volume,
-      width: item.width,
-      length: item.length,
-      height: item.height
-    });
+    try {
+      const response = await axios.put(`${BASE_URL}/items/${id}`, {
+        name: item.name,
+        volume: item.volume,
+        width: item.width,
+        length: item.length,
+        height: item.height
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error updating item:', error);
+      throw error;
+    }
   },
+
   async getPrices() {
     try {
       console.log('Fetching prices...');
-      const response = await axios.get(`${API_URL}/admin/prices`);
+      const response = await axios.get(`${BASE_URL}/prices`);
       console.log('Prices response:', response.data);
-      // Sicherstellen dass wir ein Array zurückgeben
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('Error fetching prices:', error);
@@ -85,18 +97,39 @@ export const adminService = {
     }
   },
 
-  // In adminService.js
-async updatePrice(id, priceData) {
-  try {
-    const response = await axios.put(`${API_URL}/admin/prices/${id}`, priceData);
-    return response.data;
-  } catch (error) {
-    console.error('Error updating price:', error);
-    throw error;
-  }
-},
+  async updatePrice(id, priceData) {
+    try {
+      const response = await axios.put(`${BASE_URL}/prices/${id}`, priceData);
+      return response.data;
+    } catch (error) {
+      console.error('Error updating price:', error);
+      throw error;
+    }
+  },
 
   getCachedPrices() {
     return priceCache;
+  },
+
+  async getConfiguration() {
+    try {
+      console.log('Fetching configuration...');
+      const response = await axios.get(`${BASE_URL}/rooms`);
+      console.log('Configuration response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching configuration:', error);
+      throw error;
+    }
+  },
+
+  async saveConfiguration(config) {
+    try {
+      const response = await axios.post(`${BASE_URL}/rooms/bulk`, config);
+      return response.data;
+    } catch (error) {
+      console.error('Error saving configuration:', error);
+      throw error;
+    }
   }
 };

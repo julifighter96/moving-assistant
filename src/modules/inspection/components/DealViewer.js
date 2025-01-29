@@ -70,6 +70,14 @@ const DealViewer = ({ onStartInspection }) => {
     );
   };
 
+  const handleDealSelect = (deal) => {
+    if (!deal?.id) {
+      console.error('Invalid deal selected:', deal);
+      return;
+    }
+    onStartInspection(deal.id.toString(), deal);
+  };
+
   return (
     <div className="bg-white rounded-lg p-6">      
       <div className="mb-6">
@@ -105,7 +113,7 @@ const DealViewer = ({ onStartInspection }) => {
           {deals.map((deal) => (
             <button 
               key={deal.item.id}
-              onClick={() => onStartInspection(deal.item)}
+              onClick={() => handleDealSelect(deal.item)}
               className="w-full text-left bg-gray-50 hover:bg-blue-50 p-4 rounded-lg border border-gray-200 hover:border-primary transition-all duration-200"
             >
               <div className="flex justify-between items-start gap-4">

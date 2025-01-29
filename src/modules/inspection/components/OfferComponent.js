@@ -4,7 +4,7 @@ import { updateDealForOffer } from '../utils/dealUpdateFunctions';
 import { addNoteToDeal } from '../services/pipedriveService';
 import MovingPriceCalculator from './MovingPriceCalculator';
 
-const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, volumeReductions, onVolumeReductionChange }) => {
+const OfferComponent = ({ moveInfo, roomsData, additionalInfo, dealId, onComplete, setCurrentStep, volumeReductions = {}, onVolumeReductionChange }) => {
  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
  const [totalCost, setTotalCost] = useState(0);
 
@@ -23,7 +23,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
     duebelarbeitenCount: 0
   };
 
-  Object.values(inspectionData.rooms || {}).forEach(room => {
+  Object.values(roomsData || {}).forEach(room => {
     room.items.forEach(item => {
       if (!combinedData.items[item.name]) {
         combinedData.items[item.name] = { ...item, quantity: 0 };
@@ -85,7 +85,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
     materialCost,
     combinedData
   };
-}, [inspectionData, volumeReductions]);
+}, [roomsData, volumeReductions]);
 
  useEffect(() => {
    setTotalCost(furnitureCost + materialCost);
@@ -101,10 +101,10 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
     const handleAcceptOffer = async () => {
       try {
         const offerDetails = {
-          rooms: inspectionData.rooms,
-          additionalInfo: inspectionData.additionalInfo,
+          rooms: roomsData,
+          additionalInfo: additionalInfo,
           combinedData: combinedData,
-          moveInfo: inspectionData.moveInfo
+          moveInfo: moveInfo
         };
      
         // Hauptinfo
@@ -124,7 +124,7 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
           .join('\n');
      
         // Räume mit Möbeln und Notizen
-        const roomsSection = Object.entries(inspectionData.rooms)
+        const roomsSection = Object.entries(roomsData)
   .map(([roomName, roomData]) => {
     const roomItems = roomData.items
       .filter(item => item.quantity > 0)
@@ -273,7 +273,7 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
           )}
 
           {/* Room Notes Section */}
-          {Object.entries(inspectionData.rooms)
+          {Object.entries(roomsData)
             .some(([_, roomData]) => roomData.notes && roomData.notes.trim()) && (
             <div className="bg-gray-50 rounded-xl p-6 mb-6">
               <div className="flex items-center gap-3 mb-4">
@@ -281,7 +281,7 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
                 <h3 className="text-lg font-semibold text-gray-900">Raum Notizen</h3>
               </div>
               <div className="space-y-3">
-                {Object.entries(inspectionData.rooms)
+                {Object.entries(roomsData)
                   .filter(([_, roomData]) => roomData.notes && roomData.notes.trim())
                   .map(([roomName, roomData]) => (
                     <div key={roomName} className="bg-white rounded-lg p-4 shadow-sm">
@@ -355,11 +355,10 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
       {showPriceCalculator ? 'Ausblenden' : 'Anzeigen'}
     </button>
   </div>
-  {console.log('inspectionData:', inspectionData)}
   {showPriceCalculator && (
   <MovingPriceCalculator 
-    defaultOrigin={inspectionData?.moveInfo?.['07c3da8804f7b96210e45474fba35b8691211ddd']} // Auszugsadresse
-    defaultDestination={inspectionData?.moveInfo?.['9cb4de1018ec8404feeaaaf7ee9b293c78c44281']} // Einzugsadresse
+    defaultOrigin={moveInfo?.['07c3da8804f7b96210e45474fba35b8691211ddd']}
+    defaultDestination={moveInfo?.['9cb4de1018ec8404feeaaaf7ee9b293c78c44281']}
     onPriceCalculated={(calculatedPrice) => {
       const transportCost = parseFloat(calculatedPrice);
       setTotalCost(prev => prev + transportCost);

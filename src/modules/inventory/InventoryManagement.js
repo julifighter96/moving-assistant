@@ -17,7 +17,7 @@ const InventoryManagement = () => {
 
   const fetchMaterials = async () => {
     try {
-      const response = await fetch('/moving-assistant/api/materials');
+      const response = await fetch('/api/materials');
       if (!response.ok) throw new Error('Fehler beim Laden der Materialien');
       const data = await response.json();
       setMaterials(data);

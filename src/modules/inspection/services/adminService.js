@@ -1,7 +1,7 @@
 // services/adminService.js
 import axios from 'axios';
 
-const BASE_URL = '/moving-assistant/api/admin';
+const BASE_URL = '/api/admin';
 
 let priceCache = null;
 

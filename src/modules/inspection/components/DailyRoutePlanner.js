@@ -81,7 +81,7 @@ const DailyRoutePlanner = () => {
       });
   
       // Synchronisiere Deals mit lokaler Datenbank
-      await fetch('/moving-assistant/api/sync-deals', {
+      await fetch('/api/sync-deals', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

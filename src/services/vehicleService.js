@@ -1,4 +1,4 @@
-const API_BASE_URL = '/moving-assistant/api';
+const API_BASE_URL = '/api';
 
 export const fetchVehicles = async () => {
   const response = await fetch(`${API_BASE_URL}/vehicles`);

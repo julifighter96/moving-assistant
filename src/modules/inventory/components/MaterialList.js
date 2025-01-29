@@ -21,7 +21,7 @@ const MaterialList = ({ materials, onUpdate }) => {
   const handleAddMaterial = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('/moving-assistant/api/materials', {
+      const response = await fetch('/api/materials', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -48,7 +48,7 @@ const MaterialList = ({ materials, onUpdate }) => {
   const handleStockUpdate = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`/moving-assistant/api/materials/${selectedMaterial.id}/stock`, {
+      const response = await fetch(`/api/materials/${selectedMaterial.id}/stock`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

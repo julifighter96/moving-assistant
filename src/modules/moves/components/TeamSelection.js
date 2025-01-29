@@ -18,7 +18,7 @@ const TeamSelection = ({ moveId, currentTeam, onClose, onSave }) => {
       setLoading(true);
       setError(null);
       console.log('Fetching employees...'); // Debug log
-      const response = await fetch('/moving-assistant/api/employees');
+      const response = await fetch('/api/employees');
       if (!response.ok) throw new Error('Fehler beim Laden der Mitarbeiter');
       const data = await response.json();
       console.log('Received employees:', data); // Debug log
@@ -41,7 +41,7 @@ const TeamSelection = ({ moveId, currentTeam, onClose, onSave }) => {
 
   const handleSave = async () => {
     try {
-      const response = await fetch(`/moving-assistant/api/moves/${moveId}/team`, {
+      const response = await fetch(`/api/moves/${moveId}/team`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

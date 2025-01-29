@@ -15,7 +15,7 @@ const QualificationManager = () => {
 
   const fetchQualifications = React.useCallback(async () => {
     try {
-      const response = await fetch('/moving-assistant/api/qualifications');
+      const response = await fetch('/api/qualifications');
       if (!response.ok) {
         throw new Error('Failed to fetch qualifications');
       }
@@ -28,7 +28,7 @@ const QualificationManager = () => {
 
   const fetchEmployeeQualifications = React.useCallback(async () => {
     try {
-      const response = await fetch(`/moving-assistant/api/employee-qualifications/${id}`);
+      const response = await fetch(`/api/employee-qualifications/${id}`);
       if (!response.ok) {
         throw new Error('Failed to fetch employee qualifications');
       }
@@ -47,7 +47,7 @@ const QualificationManager = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('/moving-assistant/api/employee-qualifications', {
+      const response = await fetch('/api/employee-qualifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

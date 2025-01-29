@@ -15,7 +15,7 @@ const MoveExecutionModule = () => {
 
   const fetchActiveMoves = async () => {
     try {
-      const response = await fetch('/moving-assistant/api/moves/active');
+      const response = await fetch('/api/moves/active');
       if (!response.ok) throw new Error('Fehler beim Laden der aktiven Umzüge');
       const data = await response.json();
       setActiveMoves(data);

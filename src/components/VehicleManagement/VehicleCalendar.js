@@ -16,7 +16,7 @@ const VehicleCalendar = ({ vehicles, onVehicleSelect }) => {
   // Neue Funktion zum Laden der Buchungen
   const fetchBookings = async (vehicleId) => {
     try {
-      const response = await fetch(`/moving-assistant/api/vehicles/${vehicleId}/bookings`);
+      const response = await fetch(`/api/vehicles/${vehicleId}/bookings`);
       if (!response.ok) throw new Error('Fehler beim Laden der Buchungen');
       const data = await response.json();
       return data;
@@ -42,7 +42,7 @@ const VehicleCalendar = ({ vehicles, onVehicleSelect }) => {
   useEffect(() => {
     const fetchMoves = async () => {
       try {
-        const response = await fetch('/moving-assistant/api/deals');
+        const response = await fetch('/api/deals');
         if (!response.ok) throw new Error('Fehler beim Laden der Umzüge');
         const data = await response.json();
         console.log('VehicleCalendar - Received moves from API:', data);
@@ -126,7 +126,7 @@ const VehicleCalendar = ({ vehicles, onVehicleSelect }) => {
         moveDate: selectedEvent.start
       });
 
-      const response = await fetch('/moving-assistant/api/vehicles/bookings', {
+      const response = await fetch('/api/vehicles/bookings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -181,7 +181,7 @@ const VehicleCalendar = ({ vehicles, onVehicleSelect }) => {
         throw new Error('Buchung nicht gefunden');
       }
 
-      const response = await fetch(`/moving-assistant/api/vehicles/bookings/${booking.id}`, {
+      const response = await fetch(`/api/vehicles/bookings/${booking.id}`, {
         method: 'DELETE'
       });
 

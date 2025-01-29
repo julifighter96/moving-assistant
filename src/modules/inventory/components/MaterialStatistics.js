@@ -10,7 +10,7 @@ const MaterialStatistics = () => {
 
   const fetchStatistics = async () => {
     try {
-      const response = await fetch('/moving-assistant/api/materials/statistics');
+      const response = await fetch('/api/materials/statistics');
       if (!response.ok) throw new Error('Fehler beim Laden der Statistiken');
       const data = await response.json();
       setStatistics(data);

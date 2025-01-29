@@ -41,7 +41,7 @@ const VehicleDetail = ({ vehicle, onClose, onUpdate }) => {
   const handleSubmit = async () => {
     try {
       if (vehicle.isNew) {
-        await fetch('/moving-assistant/api/vehicles', {
+        await fetch('/api/vehicles', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

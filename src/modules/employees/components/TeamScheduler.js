@@ -26,8 +26,8 @@ const TeamScheduler = () => {
   const fetchData = async () => {
     try {
       const [employeesRes, assignmentsRes] = await Promise.all([
-        fetch('/moving-assistant/api/employees'),
-        fetch('/moving-assistant/api/assignments')
+        fetch('/api/employees'),
+        fetch('/api/assignments')
       ]);
 
       const [employeesData, assignmentsData] = await Promise.all([
@@ -39,7 +39,7 @@ const TeamScheduler = () => {
       setAssignments(assignmentsData);
 
       // Fetch moves
-      const movesResponse = await fetch('/moving-assistant/api/deals');
+      const movesResponse = await fetch('/api/deals');
       if (!movesResponse.ok) throw new Error('Fehler beim Laden der Umzüge');
       const movesData = await movesResponse.json();
       console.log('TeamScheduler - Received moves from API:', movesData);

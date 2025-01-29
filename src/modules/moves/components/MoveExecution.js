@@ -21,7 +21,7 @@ const MoveExecution = ({ move, onBack }) => {
 
   const fetchTeam = async () => {
     try {
-      const response = await fetch(`/moving-assistant/api/moves/${move.id}/team`);
+      const response = await fetch(`/api/moves/${move.id}/team`);
       if (!response.ok) throw new Error('Fehler beim Laden des Teams');
       const data = await response.json();
       setTeam(data);
@@ -38,7 +38,7 @@ const MoveExecution = ({ move, onBack }) => {
     }
 
     try {
-      const response = await fetch(`/moving-assistant/api/moves/${move.deal_id}/start`, {
+      const response = await fetch(`/api/moves/${move.deal_id}/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,7 +63,7 @@ const MoveExecution = ({ move, onBack }) => {
   const handleTogglePause = async () => {
     try {
       const action = status === 'in_progress' ? 'pause' : 'resume';
-      const response = await fetch(`/moving-assistant/api/moves/${move.id}/toggle-pause`, {
+      const response = await fetch(`/api/moves/${move.id}/toggle-pause`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -83,7 +83,7 @@ const MoveExecution = ({ move, onBack }) => {
 
   const handleComplete = async (materialUsage) => {
     try {
-      const response = await fetch(`/moving-assistant/api/moves/${move.id}/complete`, {
+      const response = await fetch(`/api/moves/${move.id}/complete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -25,7 +25,7 @@ const VehicleManagement = () => {
     loadVehicles();
     const fetchMoves = async () => {
       try {
-        const response = await fetch('/moving-assistant/api/deals');
+        const response = await fetch('/api/deals');
         if (!response.ok) throw new Error('Fehler beim Laden der Umzüge');
         const data = await response.json();
         setMoves(data);
@@ -41,7 +41,7 @@ const VehicleManagement = () => {
     try {
       console.log('Fetching vehicles...');
       setLoading(true);
-      const response = await fetch('/moving-assistant/api/vehicles');
+      const response = await fetch('/api/vehicles');
       console.log('Response status:', response.status);
       console.log('Response headers:', response.headers);
       

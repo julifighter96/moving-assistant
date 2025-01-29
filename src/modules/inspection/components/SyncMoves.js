@@ -17,7 +17,7 @@ const SyncMoves = () => {
 
   const fetchSyncedDeals = async () => {
     try {
-      const response = await fetch('/moving-assistant/api/deals');
+      const response = await fetch('/api/deals');
       if (!response.ok) throw new Error('Fehler beim Laden der Aufträge');
       const data = await response.json();
       setDeals(data);
@@ -60,7 +60,7 @@ const SyncMoves = () => {
         start += 100;
       }
 
-      const syncResponse = await fetch('/moving-assistant/api/sync-deals', {
+      const syncResponse = await fetch('/api/sync-deals', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

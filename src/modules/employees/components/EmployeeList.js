@@ -20,7 +20,7 @@ const EmployeeList = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/moving-assistant/api/employees');
+      const response = await fetch('/api/employees');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

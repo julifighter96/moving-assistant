@@ -86,9 +86,9 @@ const MoveScheduler = () => {
   const fetchData = async () => {
     try {
       const [employeesRes, assignmentsRes, movesRes] = await Promise.all([
-        fetch('/moving-assistant/api/employees'),
-        fetch('/moving-assistant/api/assignments'),
-        fetch('/moving-assistant/api/deals')
+        fetch('/api/employees'),
+        fetch('/api/assignments'),
+        fetch('/api/deals')
       ]);
 
       const [employeesData, assignmentsData, movesData] = await Promise.all([
@@ -118,7 +118,7 @@ const MoveScheduler = () => {
         endDate
       });
 
-      const response = await fetch('/moving-assistant/api/assignments', {
+      const response = await fetch('/api/assignments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -156,7 +156,7 @@ const MoveScheduler = () => {
     try {
       console.log('Removing assignment:', assignmentId); // Debug-Log
 
-      const response = await fetch(`/moving-assistant/api/assignments/${assignmentId}`, {
+      const response = await fetch(`/api/assignments/${assignmentId}`, {
         method: 'DELETE'
       });
 
@@ -203,7 +203,7 @@ const MoveScheduler = () => {
             <h1 className="text-2xl font-bold">Umzugsplanung</h1>
             <div className="flex gap-4">
               <button
-                onClick={() => navigate('/moving-assistant/employees')}
+                onClick={() => navigate('/employees')}
                 className="bg-gray-500 hover:bg-gray-700 text-white px-4 py-2 rounded"
               >
                 Zurück zur Übersicht

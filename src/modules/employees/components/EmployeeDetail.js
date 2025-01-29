@@ -19,7 +19,7 @@ const EmployeeDetail = () => {
 
   const fetchEmployee = React.useCallback(async () => {
     try {
-      const response = await fetch(`/moving-assistant/api/employees/${id}`);
+      const response = await fetch(`/api/employees/${id}`);
       if (!response.ok) {
         throw new Error('Employee not found');
       }
@@ -54,7 +54,7 @@ const EmployeeDetail = () => {
       console.log('Sending employee data:', formData);
 
       const response = await fetch(
-        id ? `/moving-assistant/api/employees/${id}` : '/moving-assistant/api/employees', 
+        id ? `/api/employees/${id}` : '/api/employees', 
         {
           method: id ? 'PUT' : 'POST',
           headers: {

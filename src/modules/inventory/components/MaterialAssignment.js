@@ -12,7 +12,7 @@ const MaterialAssignment = ({ materials }) => {
 
   const fetchDeals = async () => {
     try {
-      const response = await fetch('/moving-assistant/api/deals');
+      const response = await fetch('/api/deals');
       if (!response.ok) throw new Error('Fehler beim Laden der Umzüge');
       const data = await response.json();
       setDeals(data);
@@ -23,7 +23,7 @@ const MaterialAssignment = ({ materials }) => {
 
   const fetchAssignments = async (dealId) => {
     try {
-      const response = await fetch(`/moving-assistant/api/deals/${dealId}/materials`);
+      const response = await fetch(`/api/deals/${dealId}/materials`);
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Fehler beim Laden der Materialzuweisungen');
@@ -41,7 +41,7 @@ const MaterialAssignment = ({ materials }) => {
     if (!selectedDeal) return;
 
     try {
-      const response = await fetch(`/moving-assistant/api/deals/${selectedDeal.id}/materials`, {
+      const response = await fetch(`/api/deals/${selectedDeal.id}/materials`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -69,7 +69,7 @@ const MaterialAssignment = ({ materials }) => {
     if (!selectedDeal) return;
 
     try {
-      const response = await fetch(`/moving-assistant/api/deals/${selectedDeal.id}/materials/${materialId}`, {
+      const response = await fetch(`/api/deals/${selectedDeal.id}/materials/${materialId}`, {
         method: 'DELETE'
       });
 

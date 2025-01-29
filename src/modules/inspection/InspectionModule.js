@@ -532,7 +532,7 @@ useEffect(() => {
         }
         break;
         
-      case '/moving-assistant/inspections':
+      case '/inspections':
         console.log('Attempting to navigate to inspections overview...');
         try {
           navigate('/inspections', { replace: true });
@@ -542,7 +542,7 @@ useEffect(() => {
         }
         break;
         
-      case '/moving-assistant/inspections/route':
+      case '/inspections/route':
         console.log('Attempting to navigate to route planner...');
         try {
           navigate('/inspections/route-planner', { replace: true });
@@ -581,7 +581,7 @@ useEffect(() => {
                 Besichtigung
               </button>
               <button
-                onClick={() => handleNavigate('/moving-assistant/inspections/route')}
+                onClick={() => handleNavigate('/inspections/route')}
                 className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
               >
                 Routenplanung

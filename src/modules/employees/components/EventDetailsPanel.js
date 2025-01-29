@@ -3,7 +3,7 @@ import React from 'react';
 const EventDetailsPanel = ({ event, onClose, onUpdate }) => {
   const handleRemoveEmployee = async (employeeId) => {
     try {
-      await fetch(`/moving-assistant/api/assignments/${event.resource.id}/employees/${employeeId}`, {
+      await fetch(`/api/assignments/${event.resource.id}/employees/${employeeId}`, {
         method: 'DELETE'
       });
       onUpdate();

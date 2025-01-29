@@ -26,7 +26,7 @@ const TimeTracking = ({ executionId, status }) => {
 
   const fetchTimeRecords = async () => {
     try {
-      const response = await fetch(`/moving-assistant/api/moves/${executionId}/time-records`);
+      const response = await fetch(`/api/moves/${executionId}/time-records`);
       if (!response.ok) throw new Error('Fehler beim Laden der Zeiterfassung');
       const data = await response.json();
       setTimeRecords(data);

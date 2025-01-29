@@ -1,6 +1,6 @@
 // src/components/AIAnalysisTab.js
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Camera, Loader, X } from 'lucide-react';
+import { Upload, Camera, Loader, X, Video } from 'lucide-react';
 import { recognitionService } from '../services/recognitionService';
 import AIFeedbackDisplay from './AIFeedbackDisplay';
 
@@ -261,6 +261,7 @@ const AnalysisResults = ({ results, onApplyResults }) => {
 
 const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   const [files, setFiles] = useState([]);
+  const [mediaType, setMediaType] = useState('photo'); // Hier neuer state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeInput, setActiveInput] = useState('upload');
   const [stream, setStream] = useState(null);
@@ -290,7 +291,7 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   Gib auch Umzugshinweise und Besonderheiten an.
   
 
-  Das Format der gegenstände muss in m sein also bei 100cm 0.1, aber das Volumen in m³.
+  Das Format der gegenstände muss in cm sein also bei 1m 100cm, aber das Volumen in m³.
   Format als JSON:
   {
     "items": [{
@@ -308,7 +309,12 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   );
   
   const handleEdit = (item) => {
-    setEditingItem(item);
+    // Formatiere die Maße in das richtige Format für das Eingabefeld
+    const dimensions = `${item.length || 0} x ${item.width || 0} x ${item.height || 0}`;
+    setEditingItem({
+      ...item,
+      dimensions: dimensions
+    });
   };
 
   const handleDelete = (itemToDelete) => {
@@ -379,32 +385,35 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
     </p>
   </div>
 
-  const handleFileUpload = (event) => {
-    try {
-      const selectedFiles = Array.from(event.target.files).filter(file => {
-        const isValidType = file.type.startsWith('image/');
-        const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
-        return isValidType && isValidSize;
-      });
+const handleFileUpload = (event) => {
+  try {
+    const selectedFiles = Array.from(event.target.files).filter(file => {
+      const isValidType = mediaType === 'photo' ? 
+        file.type.startsWith('image/') : 
+        file.type.startsWith('video/');
+      const isValidSize = file.size <= (mediaType === 'photo' ? 10 : 50) * 1024 * 1024; // 10MB for images, 50MB for videos
+      return isValidType && isValidSize;
+    });
 
-      if (selectedFiles.length === 0) {
-        setError('Bitte nur Bilddateien bis 10MB auswählen');
-        return;
-      }
-
-      setFiles(prev => [
-        ...prev,
-        ...selectedFiles.map(file => ({
-          id: Date.now() + Math.random(),
-          file,
-          preview: URL.createObjectURL(file)
-        }))
-      ]);
-      setError(null);
-    } catch (err) {
-      setError('Fehler beim Laden der Dateien');
+    if (selectedFiles.length === 0) {
+      setError(`Bitte nur ${mediaType === 'photo' ? 'Bilder' : 'Videos'} bis ${mediaType === 'photo' ? '10MB' : '50MB'} auswählen`);
+      return;
     }
-  };
+
+    setFiles(prev => [
+      ...prev,
+      ...selectedFiles.map(file => ({
+        id: Date.now() + Math.random(),
+        file,
+        preview: URL.createObjectURL(file),
+        type: mediaType
+      }))
+    ]);
+    setError(null);
+  } catch (err) {
+    setError('Fehler beim Laden der Dateien');
+  }
+};
 
   const handleCameraCapture = async () => {
     try {
@@ -474,39 +483,67 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   };
 
   const handleAnalyze = async () => {
-    if (files.length === 0) {
-      setError('Bitte mindestens ein Foto hochladen');
-      return;
-    }
-  
+    let mediaData = [];
     setIsAnalyzing(true);
-    setError(null);
-  
+    
     try {
-      const imagePromises = files.map(async (file) => {
+      const mediaPromises = files.map(async (file) => {
         return new Promise((resolve) => {
           const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
+          reader.onloadend = () => resolve({
+            type: file.type === 'photo' ? 'image' : 'video',
+            data: reader.result
+          });
           reader.readAsDataURL(file.file);
         });
       });
   
-      const base64Images = await Promise.all(imagePromises);
+      mediaData = await Promise.all(mediaPromises);
       
-      // Verwende recognitionService statt direktem fetch
-      const analysisResults = await recognitionService.analyzeRoom(
-        base64Images, 
+      const requestData = {
+        images: mediaData.filter(m => m.type === 'image').map(m => m.data),
+        videos: mediaData.filter(m => m.type === 'video').map(m => m.data),
         roomName,
-        customPrompt
-      );
+        customPrompt: customPrompt || ''
+      };
   
-      if (!analysisResults || !analysisResults.items) {
-        throw new Error('Ungültiges Antwortformat von der API');
+      // Add detailed request logging
+      console.log('Request payload:', {
+        imageCount: requestData.images.length,
+        videoCount: requestData.videos.length,
+        hasRoomName: !!requestData.roomName,
+        promptLength: requestData.customPrompt.length
+      });
+  
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+      });
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText,
+          headers: Object.fromEntries(response.headers)
+        });
+        throw new Error(`API Error: ${errorText}`);
       }
   
+      const analysisResults = await response.json();
       setAnalysisResults(analysisResults);
+      
     } catch (err) {
-      console.error('Analysis error:', err);
+      console.error('Analysis error details:', {
+        message: err.message,
+        mediaTypes: mediaData.map(m => m.type),
+        apiUrl: process.env.REACT_APP_API_URL
+      });
       setError(err.message || 'Fehler bei der Analyse');
     } finally {
       setIsAnalyzing(false);
@@ -516,26 +553,53 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   return (
     <div className="space-y-6">
       {/* Input Selection */}
-      <div className="flex space-x-4">
-        <button
-          onClick={() => setActiveInput('upload')}
-          className={`flex-1 py-3 px-4 rounded-lg flex items-center justify-center gap-2 ${
-            activeInput === 'upload' ? 'bg-primary text-white' : 'bg-gray-100 hover:bg-gray-200'
-          }`}
-        >
-          <Upload className="w-5 h-5" />
-          Upload
-        </button>
-        <button
-          onClick={handleCameraCapture}
-          className={`flex-1 py-3 px-4 rounded-lg flex items-center justify-center gap-2 ${
-            activeInput === 'camera' ? 'bg-primary text-white' : 'bg-gray-100 hover:bg-gray-200'
-          }`}
-        >
-          <Camera className="w-5 h-5" />
-          Kamera
-        </button>
-      </div>
+      <div className="flex space-x-4 mb-4">
+  <button
+    onClick={() => setMediaType('photo')}
+    className={`flex-1 py-2 px-4 rounded-lg ${
+      mediaType === 'photo' ? 'bg-primary text-white' : 'bg-gray-100'
+    }`}
+  >
+    <Camera className="w-4 h-4 inline mr-2" />
+    Fotos
+  </button>
+  <button
+    onClick={() => setMediaType('video')}
+    className={`flex-1 py-2 px-4 rounded-lg ${
+      mediaType === 'video' ? 'bg-primary text-white' : 'bg-gray-100'
+    }`}
+  >
+    <Video className="w-4 h-4 inline mr-2" />
+    Videos
+  </button>
+</div>
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  {files.map(file => (
+    <div key={file.id} className="relative group min-h-[300px] max-h-[400px] w-full">
+      {file.type === 'photo' ? (
+        <img
+          src={file.preview}
+          alt="Vorschau"
+          className="w-full h-full object-contain bg-gray-100 rounded-lg"
+          onClick={() => setSelectedImage(file)}
+        />
+      ) : (
+        <video
+          src={file.preview}
+          className="w-full h-full object-contain bg-gray-100 rounded-lg"
+          controls
+        />
+      )}
+      <button
+        onClick={() => removeFile(file.id)}
+        className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-colors"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  ))}
+</div>
 
       {/* Error Display */}
       {error && (
@@ -574,14 +638,14 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
       {/* Upload Area */}
       {activeInput === 'upload' && (
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleFileUpload}
-            className="hidden"
-            id="file-upload"
-          />
+         <input
+  type="file"
+  accept={mediaType === 'photo' ? "image/*" : "video/*"}
+  multiple
+  onChange={handleFileUpload}
+  className="hidden"
+  id="file-upload"
+/>
           <label
             htmlFor="file-upload"
             className="cursor-pointer block text-center"
@@ -659,9 +723,9 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
 )}
 
 <div className="space-y-2">
-  <div className="flex justify-between items-center">
-    <label className="text-sm font-medium text-gray-700">Analyse-Prompt anpassen</label>
-    <button
+      <div className="flex justify-between items-center">
+        <label className="text-sm font-medium text-gray-700">Analyse-Prompt anpassen</label>
+        <button
       onClick={() => setCustomPrompt(`Analysiere diese Bilder eines ${roomName}s und identifiziere alle Möbelstücke. 
 Für jeden Gegenstand gib an:
 1. Name auf Deutsch
@@ -705,14 +769,18 @@ Format als JSON:
 
       {/* Analysis Button */}
       <button
-        onClick={handleAnalyze}
         disabled={isAnalyzing || files.length === 0}
         className="w-full bg-primary text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        onClick={() => {
+          console.log('Analyze button clicked');
+          handleAnalyze();
+        }}
+      
       >
         {isAnalyzing ? (
           <>
             <Loader className="w-5 h-5 animate-spin" />
-            Analysiere mit Claude AI...
+            Analysiere mit Open AI...
           </>
         ) : (
           'KI-Analyse starten'

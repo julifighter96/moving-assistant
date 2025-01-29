@@ -4,21 +4,25 @@ import { updateDealForOffer } from '../utils/dealUpdateFunctions';
 import { addNoteToDeal } from '../services/pipedriveService';
 import MovingPriceCalculator from './MovingPriceCalculator';
 
-const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  }) => {
+const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, volumeReductions, onVolumeReductionChange }) => {
  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
  const [totalCost, setTotalCost] = useState(0);
 
  const { furnitureCost, materialCost, combinedData } = useMemo(() => {
+  console.log('Berechne combinedData mit volumeReductions:', volumeReductions);
+  
   const combinedData = {
     items: {},
     packMaterials: {},
     totalVolume: 0,
-    estimatedWeight: 0,
+    customWeightTotal: 0,
+    volumeBasedWeightTotal: 0,
+    itemsWithCustomWeight: 0,
+    itemsWithVolumeWeight: 0,
     demontageCount: 0,
     duebelarbeitenCount: 0
   };
 
-  // Combine data from rooms
   Object.values(inspectionData.rooms || {}).forEach(room => {
     room.items.forEach(item => {
       if (!combinedData.items[item.name]) {
@@ -28,9 +32,29 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
       if (item.demontiert) combinedData.demontageCount += item.quantity;
       if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
       
-      // Calculate volume for each item in m³
+      // Berechne das Volumen OHNE Reduktion
       const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
-      combinedData.totalVolume += itemVolume;
+      
+      console.log('Item Volumen berechnet:', {
+        name: item.name,
+        dimensions: { length: item.length, width: item.width, height: item.height },
+        quantity: item.quantity,
+        volume: itemVolume
+      });
+
+      if (item.weight) {
+        combinedData.customWeightTotal += item.weight * item.quantity;
+        combinedData.itemsWithCustomWeight += item.quantity;
+      } else {
+        // Wende die Reduktion NUR auf das volumeBasedWeight an
+        const reductionFactor = volumeReductions[item.name] || 1;
+        combinedData.volumeBasedWeightTotal += itemVolume * 200 * reductionFactor;
+        combinedData.itemsWithVolumeWeight += item.quantity;
+      }
+      
+      // Wende die Reduktion NUR auf das Gesamtvolumen an
+      const reductionFactor = volumeReductions[item.name] || 1;
+      combinedData.totalVolume += itemVolume * reductionFactor;
     });
 
     room.packMaterials.forEach(material => {
@@ -40,7 +64,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
   });
 
   // Calculate estimated weight (200kg per m³)
-  combinedData.estimatedWeight = combinedData.totalVolume * 200;
+  combinedData.estimatedWeight = combinedData.customWeightTotal + combinedData.volumeBasedWeightTotal;
 
   // Calculate costs
   const BASE_RATE = 50; // €/m³
@@ -55,12 +79,13 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
     return total + (prices[name] || 0) * quantity;
   }, 0);
 
+  console.log('Berechnete combinedData:', combinedData);
   return {
     furnitureCost,
     materialCost,
     combinedData
   };
-}, [inspectionData]);
+}, [inspectionData, volumeReductions]);
 
  useEffect(() => {
    setTotalCost(furnitureCost + materialCost);
@@ -73,50 +98,75 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
   const activePackMaterials = Object.entries(combinedData.packMaterials || {})
     .filter(([_, quantity]) => quantity > 0);
 
-  const handleAcceptOffer = async () => {
-    try {
-      
-      const offerDetails = {
-        rooms: inspectionData.rooms,
-        additionalInfo: inspectionData.additionalInfo,
-        combinedData: combinedData,
-        moveInfo: inspectionData.moveInfo
-      };
-
-      await updateDealForOffer(dealId, offerDetails);
-
-      // Create detailed note content
-      const roomNotesSection = Object.entries(inspectionData.rooms)
-        .filter(([_, roomData]) => roomData.notes && roomData.notes.trim())
-        .map(([roomName, roomData]) => `\n\nNotizen ${roomName}:\n${roomData.notes}`)
-        .join('\n');
-
-      const noteContent = `Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³\n` +
-        `Geschätztes Gewicht: ${Math.round(combinedData.estimatedWeight)} kg\n` +
-        `Möbelkosten: ${furnitureCost.toFixed(2)} €\n` +
-        `Materialkosten: ${materialCost.toFixed(2)} €\n` +
-        `Gesamtkosten: ${totalCost.toFixed(2)} €\n\n` +
-        
-        `Möbel:\n${Object.entries(combinedData.items)
-          .filter(([_, item]) => item.quantity > 0)
-          .map(([name, item]) => 
-            `${name}: ${item.quantity} (Demontiert: ${item.demontiert ? 'Ja' : 'Nein'}, ` +
-            `Dübelarbeiten: ${item.duebelarbeiten ? 'Ja' : 'Nein'})`)
-          .join('\n')}\n\n` +
-        
-        `Packmaterialien:\n${Object.entries(combinedData.packMaterials)
+    const handleAcceptOffer = async () => {
+      try {
+        const offerDetails = {
+          rooms: inspectionData.rooms,
+          additionalInfo: inspectionData.additionalInfo,
+          combinedData: combinedData,
+          moveInfo: inspectionData.moveInfo
+        };
+     
+        // Hauptinfo
+        const summarySection = `Gesamtvolumen: ${combinedData.totalVolume.toFixed(2)} m³
+Gewicht Details:
+- Manuell eingegebenes Gewicht (${combinedData.itemsWithCustomWeight} Artikel): ${Math.round(combinedData.customWeightTotal)} kg
+- Volumenbasiertes Gewicht (${combinedData.itemsWithVolumeWeight} Artikel): ${Math.round(combinedData.volumeBasedWeightTotal)} kg
+- Gesamtgewicht: ${Math.round(combinedData.estimatedWeight)} kg
+Möbelkosten: ${furnitureCost.toFixed(2)} €
+Materialkosten: ${materialCost.toFixed(2)} €
+Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
+     
+        // Packmaterial Sektion
+        const packingSection = Object.entries(combinedData.packMaterials)
           .filter(([_, quantity]) => quantity > 0)
           .map(([name, quantity]) => `${name}: ${quantity}`)
-          .join('\n')}` +
-        roomNotesSection;
+          .join('\n');
+     
+        // Räume mit Möbeln und Notizen
+        const roomsSection = Object.entries(inspectionData.rooms)
+  .map(([roomName, roomData]) => {
+    const roomItems = roomData.items
+      .filter(item => item.quantity > 0)
+      .map(item => {
+        let itemStr = `  - ${item.name} (${item.quantity}x)`;
+        const options = [];
+        if (item.demontiert) options.push('Demontiert');
+        if (item.duebelarbeiten) options.push('Dübelarbeiten');
+        if (item.remontiert) options.push('Remontiert');
+        if (item.elektro) options.push('Elektro');
 
-      await addNoteToDeal(dealId, noteContent);
-      onComplete();
-    } catch (error) {
-      console.error('Fehler beim Verarbeiten des Angebots:', error);
-      alert(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
-    }
-  };
+        if (options.length > 0) {
+          itemStr += ` [${options.join(', ')}]`;
+        }
+        return itemStr;
+      })
+      .join('\n');
+     
+            const roomNote = roomData.notes ? `\nNotizen:\n${roomData.notes}` : '';
+            
+            return roomItems || roomNote ? 
+              `\n${roomName}:\n${roomItems}${roomNote}` : '';
+          })
+          .filter(section => section)
+          .join('\n');
+     
+        const noteContent = [
+          summarySection,
+          '\nPackmaterialien:',
+          packingSection,
+          roomsSection
+        ].join('\n');
+     
+        await updateDealForOffer(dealId, offerDetails);
+        await addNoteToDeal(dealId, noteContent);
+        
+        onComplete();
+      } catch (error) {
+        console.error('Fehler beim Verarbeiten des Angebots:', error);
+        alert(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
+      }
+     };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -130,25 +180,38 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
         <div className="p-6">
           {/* Summary Card */}
           <div className="bg-blue-50 rounded-xl p-6 mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <ClipboardList className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-semibold text-blue-900">Zusammenfassung</h3>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="text-sm text-gray-500">Gesamtvolumen</div>
-                <div className="text-xl font-bold text-blue-900">
-                  {combinedData.totalVolume.toFixed(2)} m³
-                </div>
-              </div>
-              <div className="bg-white rounded-lg p-4 shadow-sm">
-                <div className="text-sm text-gray-500">Geschätztes Gewicht</div>
-                <div className="text-xl font-bold text-blue-900">
-                  {Math.round(combinedData.estimatedWeight)} kg
-                </div>
-              </div>
-            </div>
-          </div>
+  <div className="flex items-center gap-3 mb-4">
+    <ClipboardList className="w-5 h-5 text-blue-600" />
+    <h3 className="text-lg font-semibold text-blue-900">Zusammenfassung</h3>
+  </div>
+  <div className="space-y-4">
+    <div className="bg-white rounded-lg p-4 shadow-sm">
+      <div className="text-sm text-gray-500">Gesamtvolumen</div>
+      <div className="text-xl font-bold text-blue-900">
+        {combinedData.totalVolume.toFixed(2)} m³
+      </div>
+    </div>
+    <div className="bg-white rounded-lg p-4 shadow-sm">
+      <div className="text-sm text-gray-500 mb-2">Gewicht</div>
+      {combinedData.itemsWithCustomWeight > 0 && (
+        <div className="flex justify-between text-sm mb-1">
+          <span>Manuell eingegeben ({combinedData.itemsWithCustomWeight} Artikel)</span>
+          <span>{Math.round(combinedData.customWeightTotal)} kg</span>
+        </div>
+      )}
+      {combinedData.itemsWithVolumeWeight > 0 && (
+        <div className="flex justify-between text-sm mb-1">
+          <span>Volumenbasiert ({combinedData.itemsWithVolumeWeight} Artikel)</span>
+          <span>{Math.round(combinedData.volumeBasedWeightTotal)} kg</span>
+        </div>
+      )}
+      <div className="flex justify-between font-bold text-blue-900 pt-2 border-t">
+        <span>Gesamtgewicht</span>
+        <span>{Math.round(combinedData.estimatedWeight)} kg</span>
+      </div>
+    </div>
+  </div>
+</div>
 
           {/* Furniture Section */}
           {activeItems.length > 0 && (
@@ -183,9 +246,24 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
                         <div className="text-sm">
                           <span className="text-gray-600">{item.length}x{item.width}x{item.height}cm</span>
                           <div className="text-gray-500">
-                            {((item.length * item.width * item.height) / 1000000).toFixed(2)} m³
+                            Original: {((item.length * item.width * item.height) / 1000000).toFixed(2)} m³
+                            {volumeReductions[name] !== 1 && (
+                              <div>
+                                Reduziert: {((item.length * item.width * item.height * (volumeReductions[name] || 1)) / 1000000).toFixed(2)} m³
+                              </div>
+                            )}
                           </div>
                         </div>
+                        <select
+                          className="mt-2 text-sm border rounded p-1"
+                          value={volumeReductions[name] || 1}
+                          onChange={(e) => onVolumeReductionChange(name, parseFloat(e.target.value))}
+                        >
+                          <option value={1}>100% Volumen</option>
+                          <option value={0.75}>75% Volumen</option>
+                          <option value={0.5}>50% Volumen</option>
+                          <option value={0.25}>25% Volumen</option>
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -263,6 +341,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
             </div>
           </div>
 
+
        <div className="bg-gray-50 rounded-xl p-6 mt-6">
   <div className="flex items-center justify-between mb-4">
     <div className="flex items-center gap-3">
@@ -288,6 +367,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep  })
   />
 )}
 </div>
+
 
           {/* Submit Button */}
           <div className="mt-6 flex gap-4">

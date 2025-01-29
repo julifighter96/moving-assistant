@@ -334,17 +334,30 @@ const DailyRoutePlanner = () => {
           </div>
           
           {optimizedRoute && (
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <Clock className="w-5 h-5 text-blue-600" />
-                <h4 className="font-medium text-blue-900">Routendetails</h4>
-              </div>
-              <div className="text-sm text-blue-800">
-                <p>Gesamtdistanz: {(optimizedRoute.legs.reduce((sum, leg) => sum + leg.distance.value, 0) / 1000).toFixed(1)} km</p>
-                <p>Geschätzte Fahrzeit: {Math.round(optimizedRoute.legs.reduce((sum, leg) => sum + leg.duration.value, 0) / 3600)} Stunden</p>
-              </div>
-            </div>
-          )}
+  <div className="bg-blue-50 p-4 rounded-lg">
+    <div className="flex items-center gap-2 mb-2">
+      <Clock className="w-5 h-5 text-blue-600" />
+      <h4 className="font-medium text-blue-900">Routendetails</h4>
+    </div>
+    <div className="text-sm text-blue-800">
+      <p>Gesamtdistanz: {(optimizedRoute.legs.reduce((sum, leg) => sum + leg.distance.value, 0) / 1000).toFixed(1)} km</p>
+      <p>Geschätzte Fahrzeit: {Math.round(optimizedRoute.legs.reduce((sum, leg) => sum + leg.duration.value, 0) / 3600)} Stunden</p>
+    </div>
+    <button
+      onClick={() => {
+        const waypoints = optimizedRoute.legs.map(leg => 
+          encodeURIComponent(leg.end_address)
+        ).join('|');
+        const url = `https://www.google.com/maps/dir/?api=1&origin=Greschbachstraße 29, 76229 Karlsruhe&destination=Greschbachstraße 29, 76229 Karlsruhe&waypoints=${waypoints}&travelmode=driving`;
+        window.open(url, '_blank');
+      }}
+      className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+    >
+      <MapPin className="w-4 h-4" />
+      In Google Maps öffnen
+    </button>
+  </div>
+)}
         </div>
 
         <div className="h-[600px] bg-gray-100 rounded-lg">

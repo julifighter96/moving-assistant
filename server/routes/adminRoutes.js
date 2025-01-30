@@ -65,48 +65,21 @@ db.serialize(() => {
 });
 
 // GET /api/admin/rooms
-router.get('/rooms', (req, res) => {
-  console.log('GET /api/admin/rooms handler called');
-  
-  // First get all rooms
-  db.all('SELECT * FROM admin_rooms ORDER BY name', [], (err, rooms) => {
-    if (err) {
-      console.error('Database error when fetching rooms:', err);
-      return res.status(500).json({ error: err.message });
-    }
-
-    console.log('Found rooms in database:', rooms);
-
-    // Then get all items
-    db.all('SELECT * FROM items ORDER BY room, name', [], (err, allItems) => {
-      if (err) {
-        console.error('Database error when fetching items:', err);
-        return res.status(500).json({ error: err.message });
-      }
-
-      console.log('Found all items in database:', allItems);
-
-      // Group items by room
-      const itemsByRoom = allItems.reduce((acc, item) => {
-        if (!acc[item.room]) {
-          acc[item.room] = [];
-        }
-        acc[item.room].push(item);
-        return acc;
-      }, {});
-
-      console.log('Items grouped by room:', itemsByRoom);
-
-      // Attach items to their respective rooms
-      const processedRooms = rooms.map(room => ({
-        ...room,
-        items: itemsByRoom[room.name] || []
-      }));
-
-      console.log('Final processed rooms with items:', processedRooms);
-      res.json({ rooms: processedRooms });
+router.get('/rooms', async (req, res) => {
+  console.log('GET /api/admin/rooms called');
+  try {
+    const rooms = await new Promise((resolve, reject) => {
+      db.all('SELECT * FROM admin_rooms ORDER BY name', [], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
     });
-  });
+    console.log('Rooms from database:', rooms);
+    res.json(rooms);
+  } catch (error) {
+    console.error('Error fetching rooms:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // POST /api/admin/rooms (single room)
@@ -332,29 +305,27 @@ router.get('/items/:room', (req, res) => {
   const { room } = req.params;
   console.log('GET /api/admin/items/:room called for room:', room);
 
-  // First check if the room exists
-  db.get('SELECT COUNT(*) as count FROM items WHERE room = ?', [room], (err, result) => {
+  // Get room with items
+  db.get('SELECT items FROM admin_rooms WHERE name = ?', [room], (err, result) => {
     if (err) {
       console.error('Error checking room:', err);
       return res.status(500).json({ error: err.message });
     }
 
-    console.log('Items count for room:', room, result.count);
+    console.log('Found room data:', result);
 
-    // Get all items for the room
-    db.all(
-      'SELECT * FROM items WHERE room = ? ORDER BY name',
-      [room],
-      (err, rows) => {
-        if (err) {
-          console.error('Database error when fetching items:', err);
-          return res.status(500).json({ error: err.message });
-        }
-        
-        console.log('Found items for room:', room, rows);
-        res.json(rows || []);
-      }
-    );
+    if (!result) {
+      return res.json([]);
+    }
+
+    try {
+      const items = JSON.parse(result.items);
+      console.log('Parsed items for room:', room, items);
+      res.json(items || []);
+    } catch (e) {
+      console.error('Error parsing items JSON:', e);
+      res.status(500).json({ error: 'Invalid items data' });
+    }
   });
 });
 
@@ -432,6 +403,47 @@ router.put('/items/:id', (req, res) => {
       res.json(updatedItem);
     }
   );
+});
+
+// GET /api/admin/material-assignments
+router.get('/material-assignments', async (req, res) => {
+  try {
+    const assignments = await new Promise((resolve, reject) => {
+      db.all('SELECT * FROM material_assignments', [], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+    res.json(assignments);
+  } catch (error) {
+    console.error('Error fetching material assignments:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/admin/material-statistics
+router.get('/material-statistics', async (req, res) => {
+  try {
+    const statistics = await new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          m.name,
+          COUNT(ma.id) as usage_count,
+          SUM(ma.quantity) as total_quantity
+        FROM materials m
+        LEFT JOIN material_assignments ma ON m.id = ma.material_id
+        GROUP BY m.id, m.name
+        ORDER BY m.name
+      `, [], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+    res.json(statistics);
+  } catch (error) {
+    console.error('Error fetching material statistics:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Log all routes when the module is loaded

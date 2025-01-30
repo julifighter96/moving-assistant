@@ -20,81 +20,82 @@ const RoomItemsSelector = ({ roomData = {}, onUpdateRoom, onAddItem }) => {
     weight: 0  // Add weight field
   });
   const [prices, setPrices] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [selectedRoom, setSelectedRoom] = useState(null);
+  const [selectedItems, setSelectedItems] = useState([]);
 
-useEffect(() => {
-  const loadPrices = async () => {
-    try {
-      const loadedPrices = await adminService.getPrices();
-      setPrices(loadedPrices);
-    } catch (err) {
-      console.error('Error loading prices:', err);
-    }
-  };
-  loadPrices();
-}, []);
+  useEffect(() => {
+    const loadPrices = async () => {
+      try {
+        const loadedPrices = await adminService.getPrices();
+        setPrices(loadedPrices);
+      } catch (err) {
+        console.error('Error loading prices:', err);
+      }
+    };
+    loadPrices();
+  }, []);
   
 
-const [weightPerCubicMeter, setWeightPerCubicMeter] = useState(200);
+  const [weightPerCubicMeter, setWeightPerCubicMeter] = useState(200);
 
-// Füge diesen useEffect hinzu um den konfigurierten Wert zu laden
-useEffect(() => {
-  const fetchWeightConfig = async () => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/admin/prices`);
-      const prices = await response.json();
-      const weightConfig = prices.find(p => p.name === 'Gewicht pro m³ (kg)');
-      if (weightConfig) {
-        setWeightPerCubicMeter(weightConfig.price);
+  // Füge diesen useEffect hinzu um den konfigurierten Wert zu laden
+  useEffect(() => {
+    const fetchWeightConfig = async () => {
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/admin/prices`);
+        const prices = await response.json();
+        const weightConfig = prices.find(p => p.name === 'Gewicht pro m³ (kg)');
+        if (weightConfig) {
+          setWeightPerCubicMeter(weightConfig.price);
+        }
+      } catch (error) {
+        console.error('Error loading weight configuration:', error);
       }
-    } catch (error) {
-      console.error('Error loading weight configuration:', error);
-    }
-  };
-  fetchWeightConfig();
-}, []);
+    };
+    fetchWeightConfig();
+  }, []);
 
-
-
-const totalVolume = useMemo(() => {
-  const itemsVolume = items.reduce((total, item) => {
-    const itemVolume = (item.length * item.width * item.height) / 1000000; // cm³ to m³
-    return total + itemVolume * item.quantity;
-  }, 0);
-
-  const packMaterialsVolume = packMaterials.reduce((total, material) => {
-    // Prüfen ob material ein Karton ist
-    if (['Umzugskartons (Standard)', 'Bücherkartons (Bücher&Geschirr)', 'Kleiderkisten'].includes(material.name)) {
-      const priceConfig = prices?.find(p => p.name === material.name);
-      if (priceConfig?.length && priceConfig?.width && priceConfig?.height) {
-        const materialVolume = (priceConfig.length * priceConfig.width * priceConfig.height) / 1000000;
-        return total + materialVolume * material.quantity;
-      }
-    }
-    return total;
-  }, 0);
-
-  return itemsVolume + packMaterialsVolume;
-}, [items, packMaterials, prices]);
-
-// Aktualisiere die bestehende Gewichtsberechnung
-const estimatedWeight = useMemo(() => {
-  const customWeights = items.reduce((total, item) => {
-    if (item.weight) {
-      return total + (item.weight * (item.quantity || 0));
-    }
-    return total;
-  }, 0);
-
-  const volumeBasedWeight = items.reduce((total, item) => {
-    if (!item.weight) {
+  const totalVolume = useMemo(() => {
+    const itemsVolume = items.reduce((total, item) => {
       const itemVolume = (item.length * item.width * item.height) / 1000000; // cm³ to m³
-      return total + (itemVolume * weightPerCubicMeter * (item.quantity || 0));
-    }
-    return total;
-  }, 0);
+      return total + itemVolume * item.quantity;
+    }, 0);
 
-  return customWeights + volumeBasedWeight;
-}, [items, weightPerCubicMeter]);
+    const packMaterialsVolume = packMaterials.reduce((total, material) => {
+      // Prüfen ob material ein Karton ist
+      if (['Umzugskartons (Standard)', 'Bücherkartons (Bücher&Geschirr)', 'Kleiderkisten'].includes(material.name)) {
+        const priceConfig = prices?.find(p => p.name === material.name);
+        if (priceConfig?.length && priceConfig?.width && priceConfig?.height) {
+          const materialVolume = (priceConfig.length * priceConfig.width * priceConfig.height) / 1000000;
+          return total + materialVolume * material.quantity;
+        }
+      }
+      return total;
+    }, 0);
+
+    return itemsVolume + packMaterialsVolume;
+  }, [items, packMaterials, prices]);
+
+  // Aktualisiere die bestehende Gewichtsberechnung
+  const estimatedWeight = useMemo(() => {
+    const customWeights = items.reduce((total, item) => {
+      if (item.weight) {
+        return total + (item.weight * (item.quantity || 0));
+      }
+      return total;
+    }, 0);
+
+    const volumeBasedWeight = items.reduce((total, item) => {
+      if (!item.weight) {
+        const itemVolume = (item.length * item.width * item.height) / 1000000; // cm³ to m³
+        return total + (itemVolume * weightPerCubicMeter * (item.quantity || 0));
+      }
+      return total;
+    }, 0);
+
+    return customWeights + volumeBasedWeight;
+  }, [items, weightPerCubicMeter]);
 
   // Update parent component whenever data changes
   useEffect(() => {
@@ -347,6 +348,51 @@ const estimatedWeight = useMemo(() => {
       </div>
     );
   }, [editingItem, handleQuantityChange, handleCheckboxChange, prices]); 
+
+  useEffect(() => {
+    const loadRooms = async () => {
+      try {
+        const loadedRooms = await adminService.getRooms();
+        console.log('Loaded rooms in RoomItemsSelector:', loadedRooms);
+        setRooms(loadedRooms);
+      } catch (error) {
+        console.error('Error loading rooms:', error);
+      }
+    };
+    loadRooms();
+  }, []);
+
+  useEffect(() => {
+    const loadItems = async () => {
+      if (!roomData.roomName) return;
+      try {
+        console.log('Loading items for room:', roomData.roomName);
+        const room = rooms.find(r => r.name === roomData.roomName);
+        if (room) {
+          const items = JSON.parse(room.items || '[]');
+          console.log('Loaded items:', items);
+          setItems(items.map(item => ({
+            ...item,
+            quantity: 0,
+            demontiert: false,
+            duebelarbeiten: false,
+            remontiert: false,
+            elektro: false
+          })));
+          // Lade auch die Packmaterialien aus der Datenbank
+          const packMaterials = await adminService.getPackMaterials();
+          setPackMaterials(packMaterials.map(material => ({
+            ...material,
+            quantity: 0
+          })));
+        }
+      } catch (error) {
+        console.error('Error loading items:', error);
+      }
+    };
+    loadItems();
+  }, [roomData.roomName, rooms]);
+
   return (
     <div className="bg-white rounded-lg overflow-hidden shadow-lg">
       <div className="bg-blue-600 text-white p-4">

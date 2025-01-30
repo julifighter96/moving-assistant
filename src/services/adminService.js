@@ -20,34 +20,40 @@ export const adminService = {
 
   async getRooms() {
     try {
-      console.log('Fetching rooms from:', `${BASE_URL}/rooms`);
-      const response = await axios.get(`${BASE_URL}/rooms`);
-      console.log('Rooms response:', response.data);
-      return response.data.rooms || [];
+      const response = await fetch('/api/admin/rooms');
+      console.log('Admin getRooms response:', response);
+      if (!response.ok) {
+        throw new Error('Failed to fetch rooms');
+      }
+      const data = await response.json();
+      console.log('Admin getRooms data:', data);
+      return Array.isArray(data) ? data : [];
     } catch (error) {
-      console.error('Error fetching rooms:', error.response || error);
+      console.error('Error in getRooms:', error);
       return [];
     }
   },
 
-  async getItems(room) {
+  async getItems(roomName) {
     try {
-      console.log(`Fetching items for room "${room}" from ${BASE_URL}/items/${room}`);
-      const response = await axios.get(`${BASE_URL}/items/${room}`);
-      console.log(`Items response for room "${room}":`, response.data);
-      
-      if (!Array.isArray(response.data)) {
-        console.warn('Response is not an array:', response.data);
-        return [];
+      console.log('Getting items for room:', roomName);
+      const response = await fetch(`/api/admin/items/${roomName}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch items');
       }
-      
-      return response.data;
+      const data = await response.json();
+      if (data.items && typeof data.items === 'string') {
+        try {
+          return JSON.parse(data.items);
+        } catch (e) {
+          console.error('Error parsing items JSON:', e);
+          return [];
+        }
+      }
+      console.log('Items data:', data);
+      return data;
     } catch (error) {
-      console.error(`Error fetching items for room "${room}":`, error);
-      if (error.response) {
-        console.error('Error response:', error.response.data);
-        console.error('Status:', error.response.status);
-      }
+      console.error('Error in getItems:', error);
       return [];
     }
   },
@@ -130,6 +136,48 @@ export const adminService = {
     } catch (error) {
       console.error('Error saving configuration:', error);
       throw error;
+    }
+  },
+
+  async getPackMaterials() {
+    try {
+      const response = await fetch('/api/admin/pack-materials');
+      if (!response.ok) {
+        throw new Error('Failed to fetch pack materials');
+      }
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error in getPackMaterials:', error);
+      return [];
+    }
+  },
+
+  async getMaterialAssignments() {
+    try {
+      const response = await fetch('/api/admin/material-assignments');
+      if (!response.ok) {
+        throw new Error('Failed to fetch material assignments');
+      }
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error in getMaterialAssignments:', error);
+      return [];
+    }
+  },
+
+  async getMaterialStatistics() {
+    try {
+      const response = await fetch('/api/admin/material-statistics');
+      if (!response.ok) {
+        throw new Error('Failed to fetch material statistics');
+      }
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error in getMaterialStatistics:', error);
+      return [];
     }
   }
 };

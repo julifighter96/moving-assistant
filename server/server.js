@@ -1030,7 +1030,9 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/admin', adminRoutes);
+app.use('/api/moves', moveRoutes);
 console.log('Admin routes registered at /api/admin');
+console.log('Move routes registered at /api/moves');
 
 // Static files and catch-all route should be LAST
 app.use(express.static(path.join(__dirname, '..', 'build')));

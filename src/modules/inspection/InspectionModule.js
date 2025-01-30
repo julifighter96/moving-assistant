@@ -322,18 +322,25 @@ const InspectionModule = () => {
 
   const handleRoomChange = useCallback((roomName) => {
     setCurrentRoom(roomName);
-    setRoomsData(prev => ({
-      ...prev,
-      [roomName]: prev[roomName] || {
-        items: [],
-        packMaterials: DEFAULT_PACK_MATERIALS.map(material => ({ ...material })),
-        photos: [],
-        totalVolume: 0,
-        estimatedWeight: 0,
-        notes: ''
-      }
-    }));
-  }, []);
+    const room = rooms.find(r => r.name === roomName);
+    if (room) {
+      const items = JSON.parse(room.items || '[]');
+      setRoomsData(prev => ({
+        ...prev,
+        [roomName]: {
+          ...prev[roomName],
+          items: items.map(item => ({
+            ...item,
+            quantity: 0,
+            demontiert: false,
+            duebelarbeiten: false,
+            remontiert: false,
+            elektro: false
+          }))
+        }
+      }));
+    }
+  }, [rooms]);
 
   const handleUpdateRoomData = useCallback((updatedRoomData) => {
     setRoomsData(prevData => ({

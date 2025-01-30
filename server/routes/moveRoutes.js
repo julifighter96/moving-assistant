@@ -2,6 +2,56 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
+// Test-Daten einfügen
+router.get('/init-test-data', async (req, res) => {
+  try {
+    // Erst prüfen ob schon Daten existieren
+    const existing = await new Promise((resolve, reject) => {
+      db.get('SELECT COUNT(*) as count FROM move_executions', [], (err, row) => {
+        if (err) reject(err);
+        else resolve(row.count);
+      });
+    });
+    
+    if (existing === 0) {
+      // Füge Test-Deal ein falls nötig
+      await new Promise((resolve, reject) => {
+        db.run(`INSERT INTO deals (
+          id, title, origin_address, destination_address, move_date
+        ) VALUES (
+          1, 
+          'Test Umzug', 
+          'Teststraße 1, Berlin', 
+          'Neustraße 2, Berlin',
+          date('now')
+        )`, [], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      // Füge Test-Umzug ein
+      await new Promise((resolve, reject) => {
+        db.run(`INSERT INTO move_executions (
+          deal_id, status, start_time
+        ) VALUES (
+          1,
+          'pending',
+          datetime('now')
+        )`, [], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    }
+
+    res.json({ message: 'Test data initialized' });
+  } catch (error) {
+    console.error('Error initializing test data:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Aktive Umzüge abrufen
 router.get('/active', async (req, res) => {
   try {
@@ -331,6 +381,34 @@ router.put('/:executionId/team', async (req, res) => {
   } catch (error) {
     await db.run('ROLLBACK');
     console.error('Error updating team:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Debug-Endpunkt
+router.get('/debug-dates', async (req, res) => {
+  try {
+    const dates = await new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          id,
+          title,
+          move_date,
+          date('now') as today,
+          date('now', '+7 days') as next_week,
+          CASE 
+            WHEN date(move_date) BETWEEN date('now') AND date('now', '+7 days')
+            THEN 'yes' 
+            ELSE 'no' 
+          END as in_range
+        FROM deals
+      `, [], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+    res.json(dates);
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

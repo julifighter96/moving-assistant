@@ -1,8 +1,10 @@
+import { fetchWithAuth } from '../utils/fetchWithAuth';
+
 export const moveService = {
   async getActiveMoves() {
     try {
       console.log('Fetching active moves...');
-      const response = await fetch('/api/moves/active');
+      const response = await fetchWithAuth('moves/active');
       if (!response.ok) {
         throw new Error('Fehler beim Laden der aktiven Umzüge');
       }

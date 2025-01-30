@@ -1,6 +1,6 @@
 // src/modules/inspection/components/ModulePortal.js
 import React, { useState } from 'react';
-import { ClipboardList, Users, Truck, Package, BarChart3, Calendar, MapPin, Settings, RefreshCw, ClipboardCheck, MoveRight } from 'lucide-react';
+import { ClipboardList, Users, Truck, Package, RefreshCw, MoveRight } from 'lucide-react';
 import InspectionModule from '../InspectionModule';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
@@ -45,20 +45,6 @@ const ModulePortal = ({ onInspectionStart }) => {
       icon: Package,
       component: InventoryManagement,
       onClick: () => navigate('/inventory')
-    },
-    {
-      id: 'calendar',
-      name: 'Terminplanung',
-      description: 'Umzüge und Ressourcenplanung',
-      icon: Calendar,
-      component: null
-    },
-    {
-      id: 'analytics',
-      name: 'Statistiken & KPIs',
-      description: 'Unternehmenskennzahlen und Auswertungen',
-      icon: BarChart3,
-      component: null
     },
     {
       id: 'sync-moves',

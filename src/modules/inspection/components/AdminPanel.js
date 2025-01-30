@@ -16,49 +16,39 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
     const loadConfiguration = async () => {
       try {
         const loadedRooms = await adminService.getRooms();
-        if (Array.isArray(loadedRooms)) {  // Prüfen ob es ein Array ist
-          setRooms(loadedRooms);
-          if (loadedRooms.length > 0 && !selectedRoom) {
-            setSelectedRoom(loadedRooms[0].name);
-          }
-        } else {
-          setRooms([]);  // Fallback zu leerem Array
-          console.error('Loaded rooms is not an array:', loadedRooms);
+        console.log('Loaded rooms:', loadedRooms);
+        setRooms(loadedRooms);
+        if (loadedRooms.length > 0 && !selectedRoom) {
+          setSelectedRoom(loadedRooms[0].name);
         }
       } catch (err) {
         console.error('Error loading configuration:', err);
         setError('Fehler beim Laden der Räume');
-        setRooms([]);  // Fallback zu leerem Array im Fehlerfall
+        setRooms([]);
       } finally {
         setLoading(false);
       }
     };
 
     loadConfiguration();
-  }, [selectedRoom]);
+  }, []);
 
   useEffect(() => {
     const loadItems = async () => {
-      if (selectedRoom) {
-        try {
-          const loadedItems = await adminService.getItems(selectedRoom);
-          if (Array.isArray(loadedItems)) {  // Prüfen ob es ein Array ist
-            setItems(loadedItems);
-          } else {
-            setItems([]);  // Fallback zu leerem Array
-            console.error('Loaded items is not an array:', loadedItems);
-          }
-        } catch (err) {
-          console.error('Error loading items:', err);
-          setError('Fehler beim Laden der Gegenstände');
-          setItems([]);  // Fallback zu leerem Array im Fehlerfall
-        }
+      if (!selectedRoom) return;
+
+      try {
+        const loadedItems = await adminService.getItems(selectedRoom);
+        console.log('Loaded items for room:', selectedRoom, loadedItems);
+        setItems(loadedItems);
+      } catch (err) {
+        console.error('Error loading items:', err);
+        setItems([]);
       }
     };
 
     loadItems();
   }, [selectedRoom]);
-
 
   const handleUpdateItem = async (item) => {
     try {
@@ -187,6 +177,13 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
         </div>
       )}
 
+      {/* Debug Info */}
+      <div className="text-sm text-gray-500">
+        <p>Rooms count: {rooms.length}</p>
+        <p>Selected room: {selectedRoom}</p>
+        <p>Items count: {items.length}</p>
+      </div>
+
       {/* Räume Sektion */}
       <div className="bg-white rounded-lg p-6 shadow-sm">
         <h2 className="text-xl font-semibold mb-4">Räume verwalten</h2>
@@ -207,10 +204,10 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
-          {Array.isArray(rooms) && rooms.map((room) => (  // Sicherstellen dass rooms ein Array ist
+        <div className="flex flex-wrap gap-2">
+          {rooms.map((room) => (
             <button
-              key={room.id || room.name}  // Fallback für key
+              key={room.id}
               onClick={() => setSelectedRoom(room.name)}
               className={`p-4 rounded-lg border ${
                 selectedRoom === room.name

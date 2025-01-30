@@ -3,12 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Play, Pause, StopCircle, ArrowLeft } from 'lucide-react';
 import ActiveMovesList from './components/ActiveMovesList';
 import MoveExecution from './components/MoveExecution';
+import { moveService } from '../../services/moveService';
 
 const MoveExecutionModule = () => {
   const [activeMove, setActiveMove] = useState(null);
   const [activeMoves, setActiveMoves] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -17,19 +16,12 @@ const MoveExecutionModule = () => {
 
   const fetchActiveMoves = async () => {
     try {
-      const [movesRes] = await Promise.all([
-        fetch('/api/deals')
-      ]);
-      
-      const [movesData] = await Promise.all([
-        movesRes.json()
-      ]);
-
-      console.log('Fetched moves:', movesData);
-      setActiveMoves(movesData || []);
+      const response = await fetch('/api/moves/active');
+      if (!response.ok) throw new Error('Fehler beim Laden der aktiven Umzüge');
+      const data = await response.json();
+      setActiveMoves(data);
     } catch (error) {
-      console.error('Error fetching active moves:', error);
-      setActiveMoves([]);
+      console.error('Error:', error);
     }
   };
 
@@ -72,8 +64,6 @@ const MoveExecutionModule = () => {
             moves={activeMoves}
             onMoveSelect={setActiveMove}
             onUpdate={fetchActiveMoves}
-            loading={loading}
-            error={error}
           />
         )}
       </div>

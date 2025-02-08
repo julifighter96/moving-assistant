@@ -4,7 +4,7 @@ import { getDeal } from '../services/pipedriveService';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { de } from 'date-fns/locale';
-import { Truck } from 'lucide-react';
+import { Truck, ExternalLink } from 'lucide-react';
 import MovingPriceCalculator from './MovingPriceCalculator';
 import axios from 'axios';
 import Toast from './Toast';
@@ -24,6 +24,7 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
  const [transportCost, setTransportCost] = useState(0);
  const [toast, setToast] = useState(null);
+ const [calculatedRoute, setCalculatedRoute] = useState(null);
 
  useEffect(() => {
    // Load Google Maps Script
@@ -129,6 +130,17 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
    }
  };
 
+ const openInGoogleMaps = () => {
+   if (calculatedRoute && calculatedRoute.origin && calculatedRoute.destination) {
+     const origin = encodeURIComponent(calculatedRoute.origin);
+     const destination = encodeURIComponent(calculatedRoute.destination);
+     const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+     window.open(url, '_blank');
+   } else {
+     showToast('Bitte berechnen Sie zuerst die Route', 'error');
+   }
+ };
+
  if (isLoading) {
    return <div className="text-center py-4">Lade Umzugsinformationen...</div>;
  }
@@ -205,13 +217,30 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
        </div>
        
        {showPriceCalculator && (
-         <MovingPriceCalculator 
-           defaultOrigin={moveInfo['07c3da8804f7b96210e45474fba35b8691211ddd']}
-           defaultDestination={moveInfo['9cb4de1018ec8404feeaaaf7ee9b293c78c44281']}
-           onPriceCalculated={(calculatedPrice) => {
-             setTransportCost(parseFloat(calculatedPrice));
-           }}
-         />
+         <div className="relative">
+           <div className="h-[70vh] w-full mb-4" style={{ minHeight: '500px' }}>
+             <MovingPriceCalculator 
+               defaultOrigin={moveInfo['07c3da8804f7b96210e45474fba35b8691211ddd']}
+               defaultDestination={moveInfo['9cb4de1018ec8404feeaaaf7ee9b293c78c44281']}
+               onPriceCalculated={(calculatedPrice) => {
+                 setTransportCost(parseFloat(calculatedPrice));
+               }}
+               onRouteCalculated={(route) => {
+                 setCalculatedRoute(route);
+               }}
+             />
+           </div>
+           <div className="flex justify-end">
+             <button
+               onClick={openInGoogleMaps}
+               className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium bg-white px-4 py-2 rounded-lg shadow-sm"
+               disabled={!calculatedRoute}
+             >
+               <ExternalLink className="w-4 h-4" />
+               In Google Maps öffnen
+             </button>
+           </div>
+         </div>
        )}
      </div>
 

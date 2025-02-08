@@ -37,10 +37,8 @@ export const photoStorage = {
   },
 
   async deleteAllPhotos() {
-    console.log('🧹 Deleting all photos from storage');
     try {
       await db.photos.clear();
-      console.log('✨ All photos deleted successfully');
     } catch (error) {
       console.error('❌ Error deleting all photos:', error);
       throw error;

@@ -164,7 +164,6 @@ const updateDealForOffer = async (dealId, dealData) => {
       await uploadPhotosToFile(dealId, allPhotos);
       try {
         await photoStorage.deleteAllPhotos();
-        console.log('✨ Successfully cleaned up all local photos');
       } catch (cleanupError) {
         console.error('⚠️ Error cleaning up local photos:', cleanupError);
         // Continue with the deal update even if cleanup fails
@@ -172,7 +171,6 @@ const updateDealForOffer = async (dealId, dealData) => {
     }
 
     const formattedData = formatDealData(dealData);
-    console.log('Sending formatted data to Pipedrive:', formattedData);
 
     const response = await axios({
       method: 'put',
@@ -238,7 +236,6 @@ const formatDealData = (inspectionData) => {
       detailsText += `Packmaterialien:\n${packMaterials.join('\n')}\n\n`;
     }
 
-    console.log('inspectionData.rooms:', inspectionData.rooms);
     if (inspectionData.rooms) {
       const roomNotes = Object.entries(inspectionData.rooms)
         .filter(([_, roomData]) => roomData.notes && roomData.notes.trim())

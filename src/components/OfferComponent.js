@@ -3,13 +3,15 @@ import { Package, Truck, Calculator, ClipboardList, FileText } from 'lucide-reac
 import { updateDealForOffer } from '../utils/dealUpdateFunctions';
 import { addNoteToDeal } from '../services/pipedriveService';
 import MovingPriceCalculator from './MovingPriceCalculator';
+import axios from 'axios';
+import Toast from './Toast';
 
 const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, volumeReductions, onVolumeReductionChange }) => {
  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
  const [totalCost, setTotalCost] = useState(0);
+ const [toast, setToast] = useState(null);
 
  const { furnitureCost, materialCost, combinedData } = useMemo(() => {
-  console.log('Berechne combinedData mit volumeReductions:', volumeReductions);
   
   const combinedData = {
     items: {},
@@ -34,13 +36,6 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
       
       // Berechne das Volumen OHNE Reduktion
       const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
-      
-      console.log('Item Volumen berechnet:', {
-        name: item.name,
-        dimensions: { length: item.length, width: item.width, height: item.height },
-        quantity: item.quantity,
-        volume: itemVolume
-      });
 
       if (item.weight) {
         combinedData.customWeightTotal += item.weight * item.quantity;
@@ -79,7 +74,6 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
     return total + (prices[name] || 0) * quantity;
   }, 0);
 
-  console.log('Berechnete combinedData:', combinedData);
   return {
     furnitureCost,
     materialCost,
@@ -164,12 +158,23 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
         onComplete();
       } catch (error) {
         console.error('Fehler beim Verarbeiten des Angebots:', error);
-        alert(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
+        showToast(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
       }
      };
 
+  const showToast = (message, type = 'error') => {
+    setToast({ message, type });
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-center text-gray-900">
@@ -355,7 +360,6 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
       {showPriceCalculator ? 'Ausblenden' : 'Anzeigen'}
     </button>
   </div>
-  {console.log('inspectionData:', inspectionData)}
   {showPriceCalculator && (
   <MovingPriceCalculator 
     defaultOrigin={inspectionData?.moveInfo?.['07c3da8804f7b96210e45474fba35b8691211ddd']} // Auszugsadresse

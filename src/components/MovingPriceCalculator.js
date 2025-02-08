@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Loader } from 'lucide-react';
+import axios from 'axios';
+import Toast from './Toast';
 
-const MovingPriceCalculator = ({ defaultOrigin, defaultDestination }) => {
+const MovingPriceCalculator = ({ defaultOrigin, defaultDestination, onPriceCalculated }) => {
   const [locations, setLocations] = useState({
     origin: defaultOrigin || '',
     destination: defaultDestination || ''
@@ -15,6 +17,7 @@ const MovingPriceCalculator = ({ defaultOrigin, defaultDestination }) => {
     origin: null,
     destination: null
   });
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -96,7 +99,7 @@ const MovingPriceCalculator = ({ defaultOrigin, defaultDestination }) => {
           estimatedPrice: calculatePrice(route.legs[0].distance.value / 1000)
         });
       } else {
-        alert('Keine Route gefunden');
+        showToast('Keine Route gefunden');
       }
     });
   };
@@ -107,68 +110,81 @@ const MovingPriceCalculator = ({ defaultOrigin, defaultDestination }) => {
     return (BASE_PRICE + (distance * PRICE_PER_KM)).toFixed(2);
   };
 
+  const showToast = (message, type = 'error') => {
+    setToast({ message, type });
+  };
+
   return (
-    <div className="bg-white rounded-lg p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Start-Adresse
-            </label>
-            <input
-              id="origin-input"
-              type="text"
-              defaultValue={defaultOrigin}
-              className="w-full p-2 border rounded-md"
-              placeholder="Von..."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Ziel-Adresse
-            </label>
-            <input
-              id="destination-input"
-              type="text"
-              defaultValue={defaultDestination}
-              className="w-full p-2 border rounded-md"
-              placeholder="Nach..."
-            />
-          </div>
-
-          <button
-            onClick={calculateRoute}
-            disabled={isLoading || !locations.origin || !locations.destination}
-            className="w-full bg-primary text-white p-3 rounded-md disabled:bg-gray-300 
-                     disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {isLoading ? (
-              <>
-                <Loader className="animate-spin mr-2" />
-                Berechne Route...
-              </>
-            ) : (
-              'Route berechnen'
-            )}
-          </button>
-
-          {routeDetails && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-md">
-              <h3 className="font-medium mb-2">Routendetails:</h3>
-              <div className="space-y-2 text-sm">
-                <p>Entfernung: {routeDetails.distance}</p>
-                <p>Fahrzeit: {routeDetails.duration}</p>
-                <p className="text-lg font-medium text-primary">
-                  Geschätzte Fahrtkosten: {routeDetails.estimatedPrice}€
-                </p>
-              </div>
+    <div className="max-w-2xl mx-auto p-6">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+      <div className="bg-white rounded-lg p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start-Adresse
+              </label>
+              <input
+                id="origin-input"
+                type="text"
+                defaultValue={defaultOrigin}
+                className="w-full p-2 border rounded-md"
+                placeholder="Von..."
+              />
             </div>
-          )}
-        </div>
 
-        <div className="h-[400px] bg-gray-100 rounded-lg">
-          <div id="map" className="w-full h-full rounded-lg"></div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ziel-Adresse
+              </label>
+              <input
+                id="destination-input"
+                type="text"
+                defaultValue={defaultDestination}
+                className="w-full p-2 border rounded-md"
+                placeholder="Nach..."
+              />
+            </div>
+
+            <button
+              onClick={calculateRoute}
+              disabled={isLoading || !locations.origin || !locations.destination}
+              className="w-full bg-primary text-white p-3 rounded-md disabled:bg-gray-300 
+                       disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {isLoading ? (
+                <>
+                  <Loader className="animate-spin mr-2" />
+                  Berechne Route...
+                </>
+              ) : (
+                'Route berechnen'
+              )}
+            </button>
+
+            {routeDetails && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-md">
+                <h3 className="font-medium mb-2">Routendetails:</h3>
+                <div className="space-y-2 text-sm">
+                  <p>Entfernung: {routeDetails.distance}</p>
+                  <p>Fahrzeit: {routeDetails.duration}</p>
+                  <p className="text-lg font-medium text-primary">
+                    Geschätzte Fahrtkosten: {routeDetails.estimatedPrice}€
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="h-[400px] bg-gray-100 rounded-lg">
+            <div id="map" className="w-full h-full rounded-lg"></div>
+          </div>
         </div>
       </div>
     </div>

@@ -18,9 +18,7 @@ export const adminService = {
 
   async getRooms() {
     try {
-      console.log('Fetching rooms from:', `${API_URL}/admin/rooms`);
       const response = await axios.get(`${API_URL}/admin/rooms`);
-      console.log('Rooms response:', response.data);
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('Error fetching rooms:', error.response || error);
@@ -30,11 +28,9 @@ export const adminService = {
 
   async getItems(room) {
     try {
-      console.log(`Fetching items for room "${room}" from ${API_URL}/admin/items`);
       const response = await axios.get(`${API_URL}/admin/items`, {
         params: { room }
       });
-      console.log(`Items response for room "${room}":`, response.data);
       
       if (!Array.isArray(response.data)) {
         console.warn('Response is not an array:', response.data);
@@ -74,9 +70,7 @@ export const adminService = {
   },
   async getPrices() {
     try {
-      console.log('Fetching prices...');
       const response = await axios.get(`${API_URL}/admin/prices`);
-      console.log('Prices response:', response.data);
       // Sicherstellen dass wir ein Array zurückgeben
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {

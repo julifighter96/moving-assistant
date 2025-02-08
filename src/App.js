@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect  } from 'react';
-import { Home, ClipboardList, Settings, Check, Plus, MapPin } from 'lucide-react';
+import { Home, ClipboardList, Settings, Check, Plus, MapPin, LogOut } from 'lucide-react';
 import DealViewer from './components/DealViewer';
 import MoveInformationComponent from './components/MoveInformationComponent';
 import RoomSelector from './components/RoomSelector';
@@ -16,6 +16,7 @@ import { adminService } from './services/adminService';
 import AdminPanel from './components/AdminPanel';
 import InspectionOverview from './components/InspectionOverview';
 import MovingTruckSimulator, { TRUCK_DIMENSIONS, autoPackItems } from './components/MovingTruckSimulator';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -78,15 +79,17 @@ const STEPS = [
   { label: 'Administration', status: 'pending', id: 'admin' }
 ];
 
-const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsClick, onRouteClick  }) => {
+const TabletHeader = ({ currentDeal, onAdminClick, onHomeClick, onInspectionsClick, onRouteClick }) => {
+  const { user, logout } = useAuth();
+
   return (
     <header className="bg-white border-b border-neutral-200 h-16 fixed top-0 left-0 right-0 z-50">
       <div className="h-full flex items-center justify-between px-6">
         <div className="flex items-center">
-        <img 
+          <img 
             src={logo}
             alt="Riedlin Logo" 
-            className="h-16 w-auto"  // Adjusted height for better visibility
+            className="h-16 w-auto"
           />
           <span className="ml-3 text-2xl font-semibold text-neutral-900">Umzugshelfer</span>
         </div>
@@ -100,7 +103,6 @@ const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsCli
         )}
         
         <nav className="flex items-center space-x-2">
-          {/* Separate Buttons statt map */}
           <button 
             type="button"
             onClick={() => onHomeClick && onHomeClick()}
@@ -111,23 +113,6 @@ const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsCli
           </button>
 
           <button 
-            type="button"
-            onClick = {() => onInspectionsClick && onInspectionsClick()}
-            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
-          >
-            <ClipboardList className="h-6 w-6" />
-
-            <span className="ml-2 text-base">Inspektionen</span>
-          </button>
-
-          <button 
-            type="button"
-            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
-          >
-            <Settings className="h-6 w-6" />
-            <span className="ml-2 text-base">Settings</span>
-          </button>
-          <button 
             onClick={onRouteClick}
             className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
           >
@@ -135,14 +120,27 @@ const TabletHeader = ({ currentDeal,onAdminClick , onHomeClick, onInspectionsCli
             <span className="ml-2 text-base">Routen</span>
           </button>
 
-          <button 
-            type="button"
-            onClick={() => onAdminClick && onAdminClick()}
-            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
-          >
-            <Settings className="h-6 w-6" />
-            <span className="ml-2">Admin</span>
-          </button>
+          {user?.role === 'admin' && (
+            <button 
+              type="button"
+              onClick={() => onAdminClick && onAdminClick()}
+              className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
+            >
+              <Settings className="h-6 w-6" />
+              <span className="ml-2">Admin</span>
+            </button>
+          )}
+
+          {user && (
+            <button 
+              type="button"
+              onClick={logout}
+              className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200 text-red-600"
+            >
+              <LogOut className="h-6 w-6" />
+              <span className="ml-2">Abmelden</span>
+            </button>
+          )}
         </nav>
       </div>
     </header>
@@ -234,6 +232,8 @@ function App() {
   const [items, setItems] = useState([]);
   const [volumeReductions, setVolumeReductions] = useState({});
   
+  const { user } = useAuth();
+
   useEffect(() => {
     const loadConfiguration = async () => {
       try {
@@ -414,20 +414,17 @@ function App() {
 
   // Handler für Volumenreduktionen
   const handleVolumeReductionChange = useCallback((itemName, value) => {
-    console.log('Volumenreduktion geändert:', { itemName, value });
     setVolumeReductions(prev => {
       const newReductions = {
         ...prev,
         [itemName]: value
       };
-      console.log('Neue volumeReductions:', newReductions);
       return newReductions;
     });
   }, []);
 
   // Funktion zum Erstellen der Items mit aktuellen volumeReductions
   const createItems = useCallback((roomsData, reductions) => {
-    console.log('Creating items with dimensions:');
     
     const items = Object.entries(roomsData).flatMap(([roomName, roomData]) => 
       roomData.items
@@ -446,14 +443,6 @@ function App() {
           const reducedWidth = width * volumeReductionFactor;
           const reducedHeight = height * volumeReductionFactor;
           const reducedLength = length * volumeReductionFactor;
-
-          console.log('Item dimensions:', {
-            name: item.name,
-            originalCm: { width: item.width, height: item.height, length: item.length },
-            originalVolume: (width * height * length),
-            reductionFactor,
-            reducedVolume: (reducedWidth * reducedHeight * reducedLength)
-          });
 
           const row = Math.floor(i / 3);
           const col = i % 3;
@@ -478,19 +467,12 @@ function App() {
   // Effect für Updates wenn sich roomsData oder volumeReductions ändern
   useEffect(() => {
     if (currentStep === 5) {
-      console.log('Step 5 erreicht, aktualisiere Items mit:', {
-        roomsData,
-        volumeReductions
-      });
       setItems(createItems(roomsData, volumeReductions));
     }
   }, [currentStep, roomsData, volumeReductions, createItems]);
 
   const handleAutoPack = () => {
-    console.log('Starting auto-pack with items:', items);
-    const packed = autoPackItems(items, TRUCK_DIMENSIONS);
-    console.log('Packed items:', packed);
-    
+    const packed = autoPackItems(items, TRUCK_DIMENSIONS); 
     if (packed.length < items.length) {
       console.warn('Not all items could be placed:', {
         total: items.length,
@@ -542,6 +524,11 @@ function App() {
   };
 
   const handleStepChange = (newStep) => {
+    if (newStep === 'admin' && user?.role !== 'admin') {
+      // Prevent access to admin step for non-admin users
+      return;
+    }
+    
     if (typeof newStep === 'number' && newStep >= 0 && newStep < STEPS.length - 1) {
       setCurrentStep(newStep);
     } else if (newStep === 'admin') {
@@ -566,83 +553,90 @@ function App() {
        />
       <main className="pt-20 px-6 pb-6">
         <div className="max-w-none mx-auto">
-          {/* Step Progress */}
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-  <div className="flex justify-between">
-    {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
-      const isCompleted = typeof currentStep === 'number' && index < currentStep;
-      const isCurrent = currentStep === step.id;
-                
-                return (
-                  <div key={step.label} className="flex flex-col items-center flex-1">
-                    <div className="relative w-full">
-                      {index !== 0 && (
-                        <div 
-                          className={`absolute left-0 right-1/2 top-4 h-1 -z-10 
-                          ${isCompleted ? 'bg-primary' : 'bg-gray-200'}`}
-                        />
-                      )}
-                      {index !== STEPS.length - 1 && (
-                        <div 
-                          className={`absolute left-1/2 right-0 top-4 h-1 -z-10 
-                          ${index < currentStep ? 'bg-primary' : 'bg-gray-200'}`}
-                        />
-                      )}
-                      <div className="flex justify-center">
-                        <div 
-                          className={`w-8 h-8 rounded-full flex items-center justify-center 
-                          ${isCompleted ? 'bg-primary text-white' : 
-                            isCurrent ? 'bg-primary-light border-2 border-primary' : 
-                            'bg-gray-200'}`}
-                        >
-                          {isCompleted ? (
-                            <Check className="h-5 w-5" />
-                          ) : (
-                            <span>{index + 1}</span>
-                          )}
+          {/* Step Progress - nur anzeigen, wenn weder admin noch route aktiv ist */}
+          {currentStep !== 'admin' && currentStep !== 'route-planner' && (
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+              <div className="flex justify-between">
+                {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
+                  const isCompleted = typeof currentStep === 'number' && index < currentStep;
+                  const isCurrent = currentStep === step.id;
+                  
+                  return (
+                    <div key={step.label} className="flex flex-col items-center flex-1">
+                      <div className="relative w-full">
+                        {index !== 0 && (
+                          <div 
+                            className={`absolute left-0 right-1/2 top-4 h-1 -z-10 
+                            ${isCompleted ? 'bg-primary' : 'bg-gray-200'}`}
+                          />
+                        )}
+                        {index !== STEPS.length - 1 && (
+                          <div 
+                            className={`absolute left-1/2 right-0 top-4 h-1 -z-10 
+                            ${index < currentStep ? 'bg-primary' : 'bg-gray-200'}`}
+                          />
+                        )}
+                        <div className="flex justify-center">
+                          <div 
+                            className={`w-8 h-8 rounded-full flex items-center justify-center 
+                            ${isCompleted ? 'bg-primary text-white' : 
+                              isCurrent ? 'bg-primary-light border-2 border-primary' : 
+                              'bg-gray-200'}`}
+                          >
+                            {isCompleted ? (
+                              <Check className="h-5 w-5" />
+                            ) : (
+                              <span>{index + 1}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <span className={`mt-2 text-sm font-medium text-center
+                        ${isCurrent ? 'text-primary' : 'text-gray-500'}`}>
+                        {step.label}
+                      </span>
                     </div>
-                    <span className={`mt-2 text-sm font-medium text-center
-                      ${isCurrent ? 'text-primary' : 'text-gray-500'}`}>
-                      {step.label}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* CHANGE 1: Add Step Controls here */}
-          <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex justify-between items-center">
-  <button 
-    onClick={() => handleStepChange(currentStep - 1)} 
-    disabled={currentStep === 0 || currentStep === 'admin'}
-    className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
-  >
-    Zurück
-  </button>
-  <div className="flex flex-col items-center">
-    <span className="text-lg font-medium">
-      {currentStep === 'admin' ? 'Administration' : `Schritt ${currentStep + 1} von ${STEPS.length - 1}`}
-    </span>
-    <span className="text-sm text-gray-500">
-      {STEPS.find(step => step.id === currentStep)?.label}
-    </span>
-  </div>
-  <button 
-  onClick={() => handleStepChange(currentStep + 1)} 
-  disabled={currentStep === STEPS.length - 2 || currentStep === 'admin' || currentStep === 4 || currentStep === 5}
-  className={`h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px] ${
-    currentStep === 4 || currentStep === 5 ? 'hidden' : ''
-  }`}
->
-    Weiter
-  </button>
-</div>
+          {/* Back/Forward Controls - nur anzeigen, wenn weder admin noch route aktiv ist */}
+          {currentStep !== 'admin' && currentStep !== 'route-planner' && (
+            <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex justify-between items-center">
+              <button 
+                onClick={() => handleStepChange(currentStep - 1)} 
+                disabled={currentStep === 0}
+                className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
+              >
+                Zurück
+              </button>
+              <div className="flex flex-col items-center">
+                <span className="text-lg font-medium">
+                  {currentStep === 4 ? 'Angebot erstellen' :
+                   currentStep === 5 ? 'Beladungssimulation' :
+                   `Schritt ${currentStep + 1} von ${STEPS.length - 1}`}
+                </span>
+                <span className="text-sm text-gray-500">
+                  {currentStep === 4 ? 'Überprüfen und finalisieren Sie das Angebot' :
+                   currentStep === 5 ? 'Planen Sie die optimale Beladung des Umzugswagens' :
+                   STEPS.find(step => step.id === currentStep)?.label}
+                </span>
+              </div>
+              <button 
+                onClick={() => handleStepChange(currentStep + 1)} 
+                disabled={currentStep === STEPS.length - 2 || currentStep === 'admin' || currentStep === 4 || currentStep === 5}
+                className={`h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px] ${
+                  currentStep === 4 || currentStep === 5 ? 'invisible' : ''
+                }`}
+              >
+                Weiter
+              </button>
+            </div>
+          )}
 
           {/* Main Content Area */}
-          {/* CHANGE 2: Remove the old StepNavigation component if it exists */}
           <div className="space-y-6">
             {currentStep === 0 && (
               <div className="bg-white rounded-lg shadow-sm">
@@ -837,7 +831,7 @@ function App() {
     </div>
   </div>
 )}
-              {currentStep === 'admin' && (
+              {currentStep === 'admin' && user?.role === 'admin' ? (
   <div className="bg-white rounded-lg shadow-sm">
     <div className="p-6 border-b border-gray-200">
       <h2 className="text-xl font-semibold">Administration</h2>
@@ -857,7 +851,14 @@ function App() {
       />
     </div>
   </div>
-)}
+) : currentStep === 'admin' ? (
+  <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="text-center">
+      <h2 className="text-xl font-semibold text-red-600">Zugriff verweigert</h2>
+      <p className="text-gray-500 mt-2">Sie haben keine Berechtigung, auf diesen Bereich zuzugreifen.</p>
+    </div>
+  </div>
+) : null}
 
 {currentStep === 'route-planner' && <DailyRoutePlanner />}
 
@@ -894,4 +895,11 @@ function App() {
   );
 }
 
-export default App;
+// Wrap the App component with AuthProvider
+const AppWithAuth = () => (
+  <AuthProvider>
+    <App />
+  </AuthProvider>
+);
+
+export default AppWithAuth;

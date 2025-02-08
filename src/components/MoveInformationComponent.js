@@ -6,6 +6,8 @@ import "react-datepicker/dist/react-datepicker.css";
 import { de } from 'date-fns/locale';
 import { Truck } from 'lucide-react';
 import MovingPriceCalculator from './MovingPriceCalculator';
+import axios from 'axios';
+import Toast from './Toast';
 
 const MOVE_INFO_FIELDS = [
    { name: 'Wunschdatum', apiKey: 'b9d01d5dcd86c878a57cb0febd336e4d390af900', type: 'date' },
@@ -21,6 +23,7 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
  const [error, setError] = useState(null);
  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
  const [transportCost, setTransportCost] = useState(0);
+ const [toast, setToast] = useState(null);
 
  useEffect(() => {
    // Load Google Maps Script
@@ -71,6 +74,10 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
    }));
  };
 
+ const showToast = (message, type = 'error') => {
+   setToast({ message, type });
+ };
+
  const handleSubmit = async () => {
    try {
      const dataToUpdate = {};
@@ -87,12 +94,38 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
      // Add transport cost to the data
      dataToUpdate.transportCost = transportCost;
      
-     console.log('Sending data to update:', dataToUpdate);
-     await updateDealDirectly(dealId, dataToUpdate);
-     onComplete(dataToUpdate);
+     const token = localStorage.getItem('token');
+     const baseUrl = process.env.REACT_APP_API_URL;
+     const url = `${baseUrl}/moves/${dealId}`;
+
+     
+     const response = await axios.put(
+       url,
+       dataToUpdate,
+       {
+         headers: { 
+           Authorization: `Bearer ${token}`,
+           'Content-Type': 'application/json',
+           'Accept': 'application/json'
+         }
+       }
+     );
+
+
+     onComplete(response.data);
+     showToast('Umzugsinformationen wurden erfolgreich aktualisiert', 'success');
    } catch (error) {
-     console.error('Fehler beim Aktualisieren der Umzugsinformationen:', error);
-     alert(`Es gab einen Fehler beim Aktualisieren der Umzugsinformationen: ${error.message}`);
+     console.error('API Error Details:', {
+       message: error.message,
+       status: error.response?.status,
+       statusText: error.response?.statusText,
+       data: error.response?.data,
+       url: error.config?.url,
+       method: error.config?.method,
+       headers: error.config?.headers,
+       requestData: error.config?.data
+     });
+     showToast(`Es gab einen Fehler beim Aktualisieren der Umzugsinformationen: ${error.message}`);
    }
  };
 
@@ -192,6 +225,14 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
          Informationen speichern und fortfahren
        </button>
      </div>
+
+     {toast && (
+       <Toast
+         message={toast.message}
+         type={toast.type}
+         onClose={() => setToast(null)}
+       />
+     )}
    </div>
  );
 };

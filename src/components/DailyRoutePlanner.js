@@ -54,7 +54,7 @@ const DailyRoutePlanner = () => {
       let start = 0;
       let moreItemsExist = true;
   
-      console.log('Starting to fetch all deals...');
+   
   
       while (moreItemsExist) {
         const response = await axios.get(`${process.env.REACT_APP_PIPEDRIVE_API_URL}/deals`, {
@@ -67,18 +67,13 @@ const DailyRoutePlanner = () => {
           }
         });
   
-        console.log(`Fetched batch starting at ${start}, got ${response.data.data.length} deals`);
         
         allDeals = [...allDeals, ...response.data.data];
         moreItemsExist = response.data.additional_data?.pagination.more_items_in_collection || false;
         start += 100;
       }
   
-      console.log(`Total deals fetched: ${allDeals.length}`);
-      console.log('Checking all deals sorted by ID:');
-      allDeals.forEach(deal => {
-        console.log(`Deal ID ${deal.id} - ${deal.title}: Move date = ${deal['949696aa9d99044db90383a758a74675587ed893']}`);
-      });
+  
   
       // Use allDeals instead of response.data.data for the rest of your logic
       const filteredDeals = allDeals
@@ -112,7 +107,6 @@ const DailyRoutePlanner = () => {
   };
   const calculateRoute = async (currentDeals) => {
     if (!directionsService || !currentDeals.length) {
-      console.log('No directions service or deals');
       return;
     }
    
@@ -124,7 +118,6 @@ const DailyRoutePlanner = () => {
       const clusters = deals.reduce((acc, deal) => {
         const originPostal = deal.originAddress.match(/\b\d{5}\b/)?.[0]?.substring(0, 2);
         if (!originPostal) {
-          console.log('Could not extract postal code from:', deal.originAddress);
           return acc;
         }
         
@@ -135,7 +128,6 @@ const DailyRoutePlanner = () => {
         return acc;
       }, {});
    
-      console.log('Created regional clusters:', clusters);
       return clusters;
     };
    
@@ -149,11 +141,9 @@ const DailyRoutePlanner = () => {
              Math.abs(Number(b) - Number(KARLSRUHE_REGION.substring(0, 2)));
     });
    
-    console.log('Regions sorted by distance from Karlsruhe:', sortedRegions);
    
     // Create ordered waypoints by region
     const orderedLocations = sortedRegions.flatMap(region => {
-      console.log(`Processing region ${region} with ${clusters[region].length} deals`);
       return clusters[region].flatMap(deal => [
         { 
           location: deal.originAddress,
@@ -165,8 +155,6 @@ const DailyRoutePlanner = () => {
         }
       ]);
     });
-   
-    console.log('Final ordered locations:', orderedLocations);
    
     if (orderedLocations.length < 1) {
       console.log('No valid locations to route');
@@ -200,11 +188,6 @@ const DailyRoutePlanner = () => {
       const totalDistance = route.legs.reduce((sum, leg) => sum + leg.distance.value, 0) / 1000;
       const totalDuration = route.legs.reduce((sum, leg) => sum + leg.duration.value, 0) / 3600;
    
-      console.log(`Route calculated successfully:
-        Total Distance: ${totalDistance.toFixed(1)} km
-        Total Duration: ${totalDuration.toFixed(1)} hours
-        Number of stops: ${orderedLocations.length}
-      `);
    
     } catch (error) {
       console.error('Error calculating route:', error);

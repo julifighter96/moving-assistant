@@ -506,14 +506,7 @@ const handleFileUpload = (event) => {
         roomName,
         customPrompt: customPrompt || ''
       };
-  
-      // Add detailed request logging
-      console.log('Request payload:', {
-        imageCount: requestData.images.length,
-        videoCount: requestData.videos.length,
-        hasRoomName: !!requestData.roomName,
-        promptLength: requestData.customPrompt.length
-      });
+
   
       const response = await fetch(`${process.env.REACT_APP_API_URL}/analyze`, {
         method: 'POST',
@@ -771,8 +764,7 @@ Format als JSON:
       <button
         disabled={isAnalyzing || files.length === 0}
         className="w-full bg-primary text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        onClick={() => {
-          console.log('Analyze button clicked');
+        onClick={() => {    
           handleAnalyze();
         }}
       

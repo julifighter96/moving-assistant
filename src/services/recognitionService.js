@@ -8,13 +8,6 @@ export const recognitionService = {
       const baseUrl = API_URL.replace(/\/+$/, '');
       const url = `${baseUrl}/analyze`;
 
-      console.log('Starting analysis request:', {
-        url,
-        roomName,
-        imageCount: images.length,
-        hasCustomPrompt: !!customPrompt
-      });
-
       const response = await fetch(url, {
         method: 'POST',
         headers: { 
@@ -28,9 +21,6 @@ export const recognitionService = {
         })
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', [...response.headers.entries()]);
-
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Error response body:', errorText);
@@ -38,11 +28,6 @@ export const recognitionService = {
       }
 
       const data = await response.json();
-      console.log('Successful analysis response:', {
-        hasItems: !!data.items,
-        itemCount: data.items?.length,
-        totalVolume: data.totalVolume
-      });
 
       return data;
     } catch (error) {

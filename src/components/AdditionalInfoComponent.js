@@ -94,7 +94,6 @@ const AdditionalInfoComponent = ({ onComplete }) => {
 
   const handleSubmit = useCallback(() => {
     const flattenedInfo = additionalInfo.flatMap(category => category.fields);
-    console.log('Submitting additional info:', flattenedInfo);
     onComplete(flattenedInfo);
   }, [additionalInfo, onComplete]);
 

@@ -7,10 +7,9 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#2563EB',
-          hover: '#1D4ED8',
-          light: '#DBEAFE',
-          dark: '#1E40AF'
+          DEFAULT: '#2563eb',
+          dark: '#1d4ed8',
+          light: '#dbeafe',
         },
         secondary: {
           DEFAULT: '#10B981',
@@ -36,6 +35,20 @@ module.exports = {
           800: '#1E293B',
           900: '#0F172A'
         }
+      },
+      keyframes: {
+        'slide-in': {
+          '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' }
+        },
+        'fade-out': {
+          '0%': { opacity: '1' },
+          '100%': { opacity: '0' }
+        }
+      },
+      animation: {
+        'slide-in': 'slide-in 0.3s ease-out',
+        'fade-out': 'fade-out 0.3s ease-out'
       }
     }
   },

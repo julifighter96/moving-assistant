@@ -109,12 +109,7 @@ const findBestPosition = (item, placedItems, truckDimensions) => {
 };
 
 export const autoPackItems = (itemsToPlace, dimensions) => {
-  console.log('Checking item dimensions:', itemsToPlace.map(item => ({
-    name: item.name,
-    size: item.size,
-    heightInM: item.size[1],
-    heightCheck: item.size[1] > MAX_HEIGHT
-  })));
+
 
   // Sort by volume (largest first)
   const sortedItems = [...itemsToPlace].sort((a, b) => {

@@ -15,6 +15,7 @@ const MOVE_INFO_FIELDS = [
    { name: 'Etage(n) Beladestelle', apiKey: '72cfdc30fa0621d1d6947cf408409e44c6bb40d6', type: 'number' },
    { name: 'Einzugsadresse', apiKey: '9cb4de1018ec8404feeaaaf7ee9b293c78c44281', type: 'text' },
    { name: 'Etage(n) Entladestelle', apiKey: '9e4e07bce884e21671546529b564da98ceb4765a', type: 'number' },
+   { name: 'HVZ', apiKey: '78050c086c106b0e9f655eb0b92ceb1ae1825378', type: 'multiselect', options: ['B', 'E', 'Z'], value: [] },
 ];
 
 const MoveInformationComponent = ({ dealId, onComplete }) => {
@@ -52,6 +53,9 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
            initialInfo[field.apiKey] = new Date(dealData[field.apiKey]);
          } else if (field.type === 'number' && dealData[field.apiKey]) {
            initialInfo[field.apiKey] = parseInt(dealData[field.apiKey], 10);
+         } else if (field.type === 'multiselect') {
+           // Ensure we have an array for multiselect fields
+           initialInfo[field.apiKey] = Array.isArray(dealData[field.apiKey]) ? dealData[field.apiKey] : [];
          } else {
            initialInfo[field.apiKey] = dealData[field.apiKey] || '';
          }
@@ -75,6 +79,19 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
    }));
  };
 
+ const handleMultiSelectChange = (apiKey, option) => {
+   setMoveInfo(prevInfo => {
+     const currentValues = Array.isArray(prevInfo[apiKey]) ? prevInfo[apiKey] : [];
+     const newValues = currentValues.includes(option)
+       ? currentValues.filter(v => v !== option)
+       : [...currentValues, option];
+     return {
+       ...prevInfo,
+       [apiKey]: newValues
+     };
+   });
+ };
+
  const showToast = (message, type = 'error') => {
    setToast({ message, type });
  };
@@ -87,33 +104,29 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
          dataToUpdate[field.apiKey] = moveInfo[field.apiKey].toISOString().split('T')[0];
        } else if (field.type === 'number') {
          dataToUpdate[field.apiKey] = moveInfo[field.apiKey] === '' ? null : moveInfo[field.apiKey];
+       } else if (field.type === 'multiselect') {
+         // Ensure multiselect fields are properly formatted as arrays
+         dataToUpdate[field.apiKey] = Array.isArray(moveInfo[field.apiKey]) ? moveInfo[field.apiKey] : [];
        } else {
          dataToUpdate[field.apiKey] = moveInfo[field.apiKey] || '';
        }
      });
      
-     // Add transport cost to the data
-     dataToUpdate.transportCost = transportCost;
+     // Add transport cost to the data if it exists
+     if (transportCost) {
+       dataToUpdate.transportCost = transportCost;
+     }
+
+     console.log('Sending data to Pipedrive:', dataToUpdate);
      
-     const token = localStorage.getItem('token');
-     const baseUrl = process.env.REACT_APP_API_URL;
-     const url = `${baseUrl}/moves/${dealId}`;
+     const response = await updateDealDirectly(dealId, dataToUpdate);
+     console.log('Response from Pipedrive:', response);
 
-     
-     const response = await axios.put(
-       url,
-       dataToUpdate,
-       {
-         headers: { 
-           Authorization: `Bearer ${token}`,
-           'Content-Type': 'application/json',
-           'Accept': 'application/json'
-         }
-       }
-     );
+     if (!response || response.success === false) {
+       throw new Error(response?.message || 'Failed to update deal');
+     }
 
-
-     onComplete(response.data);
+     onComplete(response);
      showToast('Umzugsinformationen wurden erfolgreich aktualisiert', 'success');
    } catch (error) {
      console.error('API Error Details:', {
@@ -189,6 +202,24 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
                }
              }}
            />
+         ) : field.type === 'multiselect' ? (
+           <div className="flex flex-wrap gap-2">
+             {field.options.map(option => (
+               <label key={option} className="inline-flex items-center">
+                 <input
+                   type="checkbox"
+                   checked={Array.isArray(moveInfo[field.apiKey]) && moveInfo[field.apiKey].includes(option)}
+                   onChange={() => handleMultiSelectChange(field.apiKey, option)}
+                   className="form-checkbox h-5 w-5 text-primary"
+                 />
+                 <span className="ml-2">
+                   {option === 'B' ? 'Beginn (6-10 Uhr)' : 
+                    option === 'E' ? 'Ende (15-19 Uhr)' : 
+                    option === 'Z' ? 'Zwischen (10-15 Uhr)' : option}
+                 </span>
+               </label>
+             ))}
+           </div>
          ) : (
            <input
              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"

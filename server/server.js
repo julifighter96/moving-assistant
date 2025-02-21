@@ -18,10 +18,12 @@ console.log('ENV check:', {
   dbPath: path.join(__dirname, 'recognition.db')
 });
 
-// Wrap database operations in a promise
+// Add this at the top level, after the imports
+let db; // Global database connection
+
 const initializeDatabase = () => {
   return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) => {
+    db = new sqlite3.Database(path.join(__dirname, 'recognition.db'), (err) => {
       if (err) {
         console.error('Database connection error:', err);
         reject(err);
@@ -291,7 +293,8 @@ const startServer = async () => {
         console.log('Request data:', { 
           roomName, 
           imagesCount: images.length,
-          hasCustomPrompt: !!customPrompt  // Debug log
+          hasCustomPrompt: !!customPrompt,
+          promptLength: customPrompt?.length || 0
         });
 
         console.log(`Starting analysis for ${roomName} with ${images.length} images`);
@@ -316,7 +319,7 @@ const startServer = async () => {
   Gib auch Umzugshinweise und Besonderheiten an.
   
   Format als JSON:
-  {F
+  {
     "items": [{
       "name": string,
       "dimensions": string,
@@ -340,72 +343,115 @@ const startServer = async () => {
           }]
         });
 
+        console.log('Received response from Claude:', {
+          status: 'success',
+          contentLength: message.content?.length || 0
+        });
+
         // Parse und validiere Claude's Antwort
         if (!message.content || !Array.isArray(message.content) || !message.content[0] || !message.content[0].text) {
+          console.error('Invalid Claude response structure:', message);
           throw new Error('Invalid response format from Claude');
         }
      
         let initialResults;
-    try {
-      // Versuche den JSON-Teil aus der Antwort zu extrahieren
-      const text = message.content[0].text;
-      console.log('Raw Claude response:', text); // Debug-Log
-      
-      const jsonMatch = text.match(/{[\s\S]*}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in response');
-      }
-      
-      initialResults = JSON.parse(jsonMatch[0]);
-      
-      if (!initialResults.items || !Array.isArray(initialResults.items)) {
-        throw new Error('Invalid JSON structure');
-      }
-
-      console.log('Parsed results:', initialResults); // Debug-Log
-    } catch (parseError) {
-      console.error('Error parsing Claude response:', parseError);
-      throw new Error('Failed to parse AI response');
-    }
-
-        // Verbessere mit gelernten Erkennungen
-        const imageFeatures = await Promise.all(
-          images.map(image => extractImageFeatures(image))
-        );
-
-        const improvedItems = await Promise.all(initialResults.items.map(async (item) => {
-          const similarItems = await findSimilarItems(imageFeatures[0], item.name, roomName);
+        try {
+          // Versuche den JSON-Teil aus der Antwort zu extrahieren
+          const text = message.content[0].text;
+          console.log('Raw Claude response text length:', text.length);
           
-          if (similarItems.length > 0) {
-            const bestMatch = similarItems.sort((a, b) => b.similarityScore - a.similarityScore)[0];
-            
-            if (bestMatch.similarityScore > 0.8) {
-              return {
-                ...item,
-                name: bestMatch.correctedName,
-                volume: bestMatch.correctedVolume,
-                dimensions: bestMatch.correctedDimensions,
-                confidence: bestMatch.similarityScore * 100,
-                matched: true
-              };
-            }
+          // Clean the response text to ensure valid JSON
+          const cleanedText = text.replace(/```json\s*|\s*```/g, '').trim();
+          console.log('Cleaned response text:', cleanedText.substring(0, 200) + '...');
+          
+          const jsonMatch = cleanedText.match(/{[\s\S]*}/);
+          if (!jsonMatch) {
+            console.error('No JSON found in response:', cleanedText);
+            throw new Error('No JSON found in response');
           }
           
-          return { ...item, confidence: 85 };
-        }));
+          const jsonText = jsonMatch[0];
+          console.log('Extracted JSON text:', jsonText.substring(0, 200) + '...');
+          
+          initialResults = JSON.parse(jsonText);
+          
+          if (!initialResults.items || !Array.isArray(initialResults.items)) {
+            console.error('Invalid JSON structure:', initialResults);
+            throw new Error('Invalid JSON structure');
+          }
 
-        const totalVolume = improvedItems.reduce((sum, item) => 
-          sum + (item.volume * (item.count || 1)), 0
-        );
+          console.log('Successfully parsed results:', {
+            itemsCount: initialResults.items.length,
+            hasSummary: !!initialResults.summary,
+            hasMovingTips: !!initialResults.movingTips
+          });
+        } catch (parseError) {
+          console.error('Error parsing Claude response:', {
+            error: parseError.message,
+            type: parseError.name,
+            stack: parseError.stack
+          });
+          throw new Error(`Failed to parse AI response: ${parseError.message}`);
+        }
 
-        const finalResults = {
-          ...initialResults,
-          items: improvedItems,
-          totalVolume,
-          improved: true
-        };
+        // Verbessere mit gelernten Erkennungen
+        try {
+          const imageFeatures = await Promise.all(
+            images.map(image => extractImageFeatures(image))
+          );
 
-        res.json(finalResults);
+          const improvedItems = await Promise.all(initialResults.items.map(async (item) => {
+            try {
+              const similarItems = await findSimilarItems(imageFeatures[0], item.name, roomName);
+              
+              if (similarItems && similarItems.length > 0) {
+                const bestMatch = similarItems.sort((a, b) => b.similarityScore - a.similarityScore)[0];
+                
+                if (bestMatch.similarityScore > 0.8) {
+                  return {
+                    ...item,
+                    name: bestMatch.correctedName,
+                    volume: bestMatch.correctedVolume,
+                    dimensions: bestMatch.correctedDimensions,
+                    confidence: bestMatch.similarityScore * 100,
+                    matched: true
+                  };
+                }
+              }
+              
+              return { ...item, confidence: 85 };
+            } catch (error) {
+              console.error('Error processing item:', error);
+              return { ...item, confidence: 85 }; // Return original item on error
+            }
+          }));
+
+          const totalVolume = improvedItems.reduce((sum, item) => 
+            sum + (item.volume * (item.count || 1)), 0
+          );
+
+          const finalResults = {
+            ...initialResults,
+            items: improvedItems,
+            totalVolume,
+            improved: true
+          };
+
+          res.json(finalResults);
+        } catch (error) {
+          // If database enhancement fails, return the original results
+          console.error('Error enhancing results with database:', error);
+          const totalVolume = initialResults.items.reduce((sum, item) => 
+            sum + (item.volume * (item.count || 1)), 0
+          );
+          
+          res.json({
+            ...initialResults,
+            items: initialResults.items.map(item => ({ ...item, confidence: 85 })),
+            totalVolume,
+            improved: false
+          });
+        }
 
   } catch (error) {
         console.error('Analysis error:', error);
@@ -415,6 +461,98 @@ const startServer = async () => {
     });
   }
 });
+
+    // Voice Analysis Route
+    app.post(['/api/analyze-voice', '/api/analyze-voice/'], async (req, res) => {
+      console.log('Voice analyze endpoint hit', { body: req.body });
+      try {
+        const { text, roomName, customPrompt } = req.body;
+
+        if (!text) {
+          return res.status(400).json({ error: 'No text provided' });
+        }
+
+        console.log('Request data:', { 
+          roomName, 
+          textLength: text.length,
+          hasCustomPrompt: !!customPrompt
+        });
+
+        // Process with Claude
+        const message = await client.messages.create({
+          model: "claude-3-sonnet-20240229",
+          max_tokens: 1500,
+          messages: [{
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Du bist ein Experte für Umzüge und Möbel. Analysiere die folgende Sprachbeschreibung eines ${roomName}s und extrahiere alle genannten Möbelstücke mit ihren Eigenschaften.
+
+Sprachbeschreibung:
+${text}
+
+Für jeden genannten Gegenstand bestimme:
+1. Den genauen Namen auf Deutsch
+2. Realistische Standardmaße (L x B x H in cm)
+3. Das entsprechende Volumen in m³
+4. Eine kurze Beschreibung mit typischen Eigenschaften
+
+Berücksichtige dabei:
+- Verwende realistische Standardmaße für typische Möbelstücke dieser Art
+- Berechne das Volumen in m³ basierend auf den Maßen
+- Füge eine passende Beschreibung hinzu, auch wenn sie nicht explizit genannt wurde
+- Berechne das Gesamtvolumen aller Möbel
+
+Antworte im folgenden JSON-Format:
+{
+  "items": [{
+    "name": string,
+    "length": number,
+    "width": number,
+    "height": number,
+    "volume": number,
+    "description": string
+  }],
+  "totalVolume": number,
+  "summary": string,
+  "movingTips": string
+}`
+              }
+            ]
+          }]
+        });
+
+        let analysisResults;
+        try {
+          const content = message.content[0].text;
+          analysisResults = JSON.parse(content);
+        } catch (parseError) {
+          console.error('Error parsing Claude response:', parseError);
+          return res.status(500).json({ error: 'Error parsing analysis results' });
+        }
+
+        // Calculate total volume
+        const totalVolume = analysisResults.items.reduce((sum, item) => 
+          sum + (item.volume * (item.count || 1)), 0
+        );
+
+        const finalResults = {
+          ...analysisResults,
+          totalVolume,
+          improved: true
+        };
+
+        res.json(finalResults);
+
+      } catch (error) {
+        console.error('Voice analysis error:', error);
+        res.status(500).json({ 
+          error: 'Error during voice analysis',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined 
+        });
+      }
+    });
 
     // Recognition Routes
     app.post('/api/recognition/feedback', async (req, res) => {
@@ -955,23 +1093,35 @@ async function extractImageFeatures(imageData) {
 }
 
 async function findSimilarItems(imageFeatures, itemName, roomName) {
+  if (!db) {
+    console.error('Database connection not initialized');
+    return []; // Return empty array instead of failing
+  }
+
   return new Promise((resolve, reject) => {
     db.all(`
       SELECT r.*, f.featureVector
       FROM recognitions r
-      JOIN image_features f ON r.imageHash = f.imageHash
+      LEFT JOIN image_features f ON r.imageHash = f.imageHash
       WHERE r.roomName = ? AND (r.originalName = ? OR r.correctedName = ?)
       ORDER BY r.timestamp DESC
       LIMIT 5
     `, [roomName, itemName, itemName], (err, rows) => {
-      if (err) reject(err);
-      else {
-        const itemsWithScores = rows.map(row => ({
-          ...row,
-          similarityScore: calculateSimilarity(imageFeatures.features, 
-            JSON.parse(row.featureVector || '{}'))
-        }));
-        resolve(itemsWithScores);
+      if (err) {
+        console.error('Database query error:', err);
+        resolve([]); // Return empty array on error instead of rejecting
+      } else {
+        try {
+          const itemsWithScores = rows.map(row => ({
+            ...row,
+            similarityScore: calculateSimilarity(imageFeatures.features, 
+              JSON.parse(row.featureVector || '{}'))
+          }));
+          resolve(itemsWithScores);
+        } catch (error) {
+          console.error('Error processing similarity scores:', error);
+          resolve([]); // Return empty array on processing error
+        }
       }
     });
   });

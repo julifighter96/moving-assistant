@@ -94,6 +94,10 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
 
     const handleAcceptOffer = async () => {
       try {
+        console.log('inspectionData:', inspectionData);
+        console.log('additionalInfo:', inspectionData.additionalInfo);
+        console.log('combinedData:', combinedData);
+
         const offerDetails = {
           rooms: inspectionData.rooms,
           additionalInfo: inspectionData.additionalInfo,
@@ -110,32 +114,118 @@ Gewicht Details:
 Möbelkosten: ${furnitureCost.toFixed(2)} €
 Materialkosten: ${materialCost.toFixed(2)} €
 Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
+
+        console.log('summarySection:', summarySection);
+
+        // Box quantities section
+        let boxSection = '';
+        if (inspectionData.additionalInfo) {
+          const umzugskartons = inspectionData.additionalInfo.find(
+            f => f.name === 'Anzahl Umzugskartons' && f.type === 'number'
+          )?.value || 0;
+          
+          const porzellankartons = inspectionData.additionalInfo.find(
+            f => f.name === 'Anzahl Porzellankartons' && f.type === 'number'
+          )?.value || 0;
+          
+          console.log('Found box quantities from additionalInfo:', {
+            umzugskartons,
+            porzellankartons,
+            additionalInfo: inspectionData.additionalInfo
+          });
+          
+          if (umzugskartons > 0 || porzellankartons > 0) {
+            boxSection = '\nKartons:\n';
+            if (umzugskartons > 0) boxSection += `- Umzugskartons: ${umzugskartons} Stück\n`;
+            if (porzellankartons > 0) boxSection += `- Porzellankartons: ${porzellankartons} Stück\n`;
+          }
+        }
+
+        console.log('Generated boxSection:', boxSection);
+        
+        // Services section
+        const servicesSection = inspectionData.additionalInfo ? `
+Zusätzliche Dienstleistungen:
+${inspectionData.additionalInfo
+  .filter(field => {
+    console.log('Processing service field:', field);
+    return (field.type === 'select' || (field.type === 'number' && field.name !== 'Anzahl Umzugskartons' && field.name !== 'Anzahl Porzellankartons'));
+  })
+  .map(field => {
+    if (field.type === 'number') {
+      return field.value > 0 ? `${field.name}: ${field.value} Stück` : null;
+    }
+    return field.value !== 'Nein' ? `${field.name}: ${field.value}` : null;
+  })
+  .filter(Boolean)
+  .join('\n')}
+
+Mitarbeiterinformationen:
+${inspectionData.additionalInfo
+  .filter(field => {
+    console.log('Processing staff info field:', field);
+    return field.type === 'select' || (field.type === 'number' && field.name !== 'Anzahl Umzugskartons' && field.name !== 'Anzahl Porzellankartons');
+  })
+  .map(field => {
+    if (field.type === 'number' && field.value > 0) {
+      return `- ${field.value}x ${field.name}`;
+    }
+    if (field.value === 'Ja (Gesamt)') {
+      return `- ${field.name} komplett`;
+    }
+    if (field.value === 'Ja (Glas + Porzellan)') {
+      return `- ${field.name} nur Glas und Porzellan`;
+    }
+    return null;
+  })
+  .filter(Boolean)
+  .join('\n')}` : '';
+
+        console.log('Generated servicesSection:', servicesSection);
      
         // Packmaterial Sektion
-        const packingSection = Object.entries(combinedData.packMaterials)
+        const packMaterialsArray = Object.entries(combinedData.packMaterials)
           .filter(([_, quantity]) => quantity > 0)
-          .map(([name, quantity]) => `${name}: ${quantity}`)
+          .map(([name, quantity]) => `${name}: ${quantity}`);
+
+        console.log('Pack materials from combinedData:', packMaterialsArray);
+
+        const boxQuantitiesArray = inspectionData.additionalInfo
+          ?.filter(field => 
+            (field.name === 'Anzahl Umzugskartons' || field.name === 'Anzahl Porzellankartons') && 
+            field.type === 'number' &&
+            field.value > 0
+          )
+          .map(field => `${field.name.replace('Anzahl ', '')}: ${field.value} Stück`) || [];
+
+        console.log('Box quantities for packing section:', boxQuantitiesArray);
+
+        const packingSection = [...packMaterialsArray, ...boxQuantitiesArray]
+          .filter(Boolean)
           .join('\n');
+
+        console.log('Final packingSection:', packingSection);
      
         // Räume mit Möbeln und Notizen
         const roomsSection = Object.entries(inspectionData.rooms)
-  .map(([roomName, roomData]) => {
-    const roomItems = roomData.items
-      .filter(item => item.quantity > 0)
-      .map(item => {
-        let itemStr = `  - ${item.name} (${item.quantity}x)`;
-        const options = [];
-        if (item.demontiert) options.push('Demontiert');
-        if (item.duebelarbeiten) options.push('Dübelarbeiten');
-        if (item.remontiert) options.push('Remontiert');
-        if (item.elektro) options.push('Elektro');
+          .map(([roomName, roomData]) => {
+            console.log(`Processing room: ${roomName}`, roomData);
+            const roomItems = roomData.items
+              .filter(item => item.quantity > 0)
+              .map(item => {
+                let itemStr = `  - ${item.name} (${item.quantity}x)`;
+                const options = [];
+                if (item.demontiert) options.push('Demontiert');
+                if (item.duebelarbeiten) options.push('Dübelarbeiten');
+                if (item.remontiert) options.push('Remontiert');
+                if (item.elektro) options.push('Elektro');
 
-        if (options.length > 0) {
-          itemStr += ` [${options.join(', ')}]`;
-        }
-        return itemStr;
-      })
-      .join('\n');
+                if (options.length > 0) {
+                  itemStr += ` [${options.join(', ')}]`;
+                }
+                return itemStr;
+              })
+              .join('\n');
      
             const roomNote = roomData.notes ? `\nNotizen:\n${roomData.notes}` : '';
             
@@ -144,13 +234,26 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
           })
           .filter(section => section)
           .join('\n');
+
+        console.log('Generated roomsSection:', roomsSection);
      
         const noteContent = [
           summarySection,
-          '\nPackmaterialien:',
+          servicesSection,
+          boxSection,
+          packingSection ? '\nPackmaterialien:\n' + packingSection : '',
+          roomsSection
+        ].filter(Boolean).join('\n');
+
+        console.log('All sections before joining:', {
+          summarySection,
+          servicesSection,
+          boxSection,
           packingSection,
           roomsSection
-        ].join('\n');
+        });
+
+        console.log('Final noteContent:', noteContent);
      
         await updateDealForOffer(dealId, offerDetails);
         await addNoteToDeal(dealId, noteContent);
@@ -158,6 +261,12 @@ Gesamtkosten: ${totalCost.toFixed(2)} €\n`;
         onComplete();
       } catch (error) {
         console.error('Fehler beim Verarbeiten des Angebots:', error);
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          additionalInfo: inspectionData.additionalInfo,
+          combinedData
+        });
         showToast(`Es gab einen Fehler beim Verarbeiten des Angebots: ${error.message}`);
       }
      };

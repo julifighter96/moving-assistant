@@ -1,6 +1,6 @@
 // src/components/AIAnalysisTab.js
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Camera, Loader, X, Video } from 'lucide-react';
+import { Upload, Camera, Loader, X, Video, Mic } from 'lucide-react';
 import { recognitionService } from '../services/recognitionService';
 import AIFeedbackDisplay from './AIFeedbackDisplay';
 
@@ -9,6 +9,11 @@ const AnalysisResults = ({ results, onApplyResults }) => {
     const [editableResults, setEditableResults] = useState(results);
     const [editingItem, setEditingItem] = useState(null);
   
+    // Update editableResults when results prop changes
+    useEffect(() => {
+      setEditableResults(results);
+    }, [results]);
+
     // Aktualisiert das Gesamtvolumen basierend auf allen Items
     const updateTotalVolume = (items) => {
       const newTotal = items.reduce((sum, item) => sum + (item.volume * (item.count || 1)), 0);
@@ -162,7 +167,9 @@ const AnalysisResults = ({ results, onApplyResults }) => {
                 <p className="text-gray-600 text-sm mt-1">{item.description}</p>
               </div>
               <div className="text-right">
-                <div className="text-sm text-gray-500">{item.dimensions}</div>
+                <div className="text-sm text-gray-500">
+                  {item.length}x{item.width}x{item.height} cm
+                </div>
                 <div className="text-sm font-medium">
                   {item.volume.toFixed(2)} m³
                 </div>
@@ -210,7 +217,7 @@ const AnalysisResults = ({ results, onApplyResults }) => {
         <div>
           <h3 className="text-lg font-medium mb-3">Erkannte Gegenstände</h3>
           <div className="grid gap-4">
-            {editableResults.items.map((item, index) => (
+            {editableResults.items && editableResults.items.map((item, index) => (
               editingItem === index ? (
                 <ItemEditor
                   key={index}
@@ -223,7 +230,6 @@ const AnalysisResults = ({ results, onApplyResults }) => {
                 <ItemDisplay
                   key={index}
                   item={item}
-                  index={index}
                   onEdit={() => setEditingItem(index)}
                   onDelete={() => handleDeleteItem(index)}
                 />
@@ -247,21 +253,20 @@ const AnalysisResults = ({ results, onApplyResults }) => {
         </div>
   
         {/* Übernehmen Button */}
-        {onApplyResults && (
-          <button
-            onClick={() => onApplyResults(editableResults)}
-            className="w-full mt-4 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors"
-          >
-            Analyseergebnisse in Standardansicht übernehmen
-          </button>
-        )}
+        <button
+          onClick={() => onApplyResults(editableResults)}
+          className="w-full mt-4 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors"
+        >
+          Analyseergebnisse in Standardansicht übernehmen
+        </button>
       </div>
     );
   };
 
 const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   const [files, setFiles] = useState([]);
-  const [mediaType, setMediaType] = useState('photo'); // Hier neuer state
+  const [activeMode, setActiveMode] = useState('photo');
+  const [mediaType, setMediaType] = useState('photo');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeInput, setActiveInput] = useState('upload');
   const [stream, setStream] = useState(null);
@@ -270,6 +275,11 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [analysisResults, setAnalysisResults] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [speechError, setSpeechError] = useState(null);
+  const recognitionRef = useRef(null);
+
   // Cleanup function for stream
   useEffect(() => {
     return () => {
@@ -278,6 +288,209 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
       }
     };
   }, [stream]);
+
+  useEffect(() => {
+    // Initialize speech recognition
+    if ('webkitSpeechRecognition' in window) {
+      const recognition = new window.webkitSpeechRecognition();
+      recognition.continuous = true;  // Changed to true to keep recording
+      recognition.interimResults = true;
+      recognition.lang = 'de-DE';
+
+      let recordingTimeout;  // Timer für automatisches Stoppen
+
+      recognition.onstart = () => {
+        console.log('Speech recognition started');
+        setIsListening(true);
+        setSpeechError(null);
+        setTranscript('');
+        
+        // Stoppe die Aufnahme nach 2 Minuten
+        recordingTimeout = setTimeout(() => {
+          if (recognition) {
+            console.log('Stopping recording after timeout');
+            recognition.stop();
+          }
+        }, 120000); // 2 Minuten = 120000ms
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setSpeechError(`Fehler bei der Spracherkennung: ${event.error}`);
+        setIsListening(false);
+        clearTimeout(recordingTimeout);
+      };
+
+      recognition.onend = () => {
+        console.log('Speech recognition ended');
+        setIsListening(false);
+        clearTimeout(recordingTimeout);
+      };
+
+      recognition.onresult = (event) => {
+        console.log('Speech recognition result:', event);
+        let finalTranscript = '';
+        let lastResultTimestamp = Date.now();
+        
+        // Sammle alle finalen Ergebnisse
+        for (let i = 0; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript + ' ';
+          }
+        }
+        
+        // Aktualisiere das aktuelle Transkript mit dem letzten Zwischenergebnis
+        const lastResult = event.results[event.results.length - 1];
+        const currentTranscript = lastResult[0].transcript;
+        
+        console.log('Current transcript:', currentTranscript);
+        setTranscript(currentTranscript);
+
+        // Wenn wir ein finales Ergebnis haben
+        if (lastResult.isFinal) {
+          // Starte einen Timer, der nach 1 Sekunde ohne neue Ergebnisse die Aufnahme stoppt
+          setTimeout(() => {
+            const timeSinceLastResult = Date.now() - lastResultTimestamp;
+            if (timeSinceLastResult >= 1000) {
+              console.log('No new results for 1 second, stopping recording');
+              recognitionRef.current?.stop();
+              processVoiceInput(finalTranscript.trim());
+            }
+          }, 1000);
+        }
+      };
+
+      recognitionRef.current = recognition;
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      setError('Spracherkennung wird von Ihrem Browser nicht unterstützt');
+      return;
+    }
+
+    if (isListening) {
+      setTranscript(''); // Reset transcript when starting new recording
+      recognitionRef.current.start();
+    } else {
+      recognitionRef.current.start();
+    }
+  };
+
+  const processVoiceInput = async (text) => {
+    try {
+      console.log('Starting voice input processing with text:', text);
+      setIsAnalyzing(true);
+
+      const requestData = {
+        text,
+        roomName,
+        customPrompt: `Analysiere diese Sprachbeschreibung eines ${roomName}s und identifiziere alle genannten Möbelstücke.
+Für jeden genannten Gegenstand gib an:
+1. Name auf Deutsch
+2. Geschätzte Maße (L x B x H in cm)
+3. Geschätztes Volumen in m³
+4. Standard-Beschreibung
+
+Format als JSON:
+{
+  "items": [{
+    "name": string,
+    "length": number,
+    "width": number,
+    "height": number,
+    "volume": number,
+    "description": string
+  }],
+  "totalVolume": number,
+  "summary": string,
+  "movingTips": string
+}`
+      };
+
+      console.log('Sending request to API with data:', requestData);
+
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/analyze-voice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        throw new Error(`API Error: ${errorText}`);
+      }
+
+      const newResults = await response.json();
+      console.log('Received new results from API:', newResults);
+      
+      setAnalysisResults(prevResults => {
+        console.log('Previous results:', prevResults);
+        
+        if (prevResults) {
+          // Merge items and avoid duplicates
+          const existingItems = prevResults.items || [];
+          const newItems = newResults.items || [];
+          
+          console.log('Existing items:', existingItems);
+          console.log('New items to add:', newItems);
+          
+          // Combine items arrays
+          const mergedItems = [...existingItems, ...newItems];
+          console.log('Merged items:', mergedItems);
+          
+          // Calculate new total volume
+          const totalVolume = mergedItems.reduce((sum, item) => 
+            sum + (item.volume * (item.count || 1)), 0
+          );
+          console.log('New total volume:', totalVolume);
+
+          // Combine summaries and tips
+          const summary = prevResults.summary 
+            ? `${prevResults.summary}\n${newResults.summary}` 
+            : newResults.summary;
+            
+          const movingTips = prevResults.movingTips 
+            ? `${prevResults.movingTips}\n${newResults.movingTips}` 
+            : newResults.movingTips;
+
+          const result = {
+            items: mergedItems,
+            totalVolume,
+            summary,
+            movingTips
+          };
+          
+          console.log('Returning merged results:', result);
+          return result;
+        }
+        
+        console.log('No previous results, returning new results:', newResults);
+        return newResults;
+      });
+
+    } catch (err) {
+      console.error('Error in processVoiceInput:', err);
+      setError(err.message || 'Fehler bei der Analyse der Spracherkennung');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const [customPrompt, setCustomPrompt] = useState(
     `Analysiere diese Bilder eines ${roomName}s und identifiziere alle Möbelstücke. 
@@ -332,88 +545,33 @@ const AIAnalysisTab = ({ roomName, onAnalysisComplete }) => {
     }
   };
 
-  // Füge diese UI-Komponente vor dem Analysis Button ein:
-  {/* Prompt Editor */}
-  <div className="space-y-2">
-    <div className="flex justify-between items-center">
-      <label className="text-sm font-medium text-gray-700">Analyse-Prompt anpassen</label>
-      <button
-        onClick={() => setCustomPrompt(`Analysiere diese Bilder eines ${roomName}s und identifiziere alle Möbelstücke. 
-  Für jeden Gegenstand gib an:
-  1. Name auf Deutsch
-  2. Exakte Maße in Zentimetern:
-     - Länge (L)
-     - Breite (B) 
-     - Höhe (H)
-  3. Geschätztes Volumen in m³
-  4. Kurze Beschreibung (Material, Farbe, Zustand)
-  
-  Berechne auch das Gesamtvolumen aller Möbel.
-  Gib auch Umzugshinweise und Besonderheiten an.
-  
-  
-  Format als JSON:
-  {
-    "items": [{
-      "name": string, 
-      "length": number, 
-      "width": number, 
-      "height": number,
-      "volume": number,
-      "description": string
-    }],
-    "totalVolume": number,   // Gesamtvolumen in m³
-    "summary": string,       // Zusammenfassung des Raums
-    "movingTips": string    // Umzugshinweise
-  }`)}
-        className="text-sm text-blue-600 hover:text-blue-800"
-      >
-        Zurücksetzen
-      </button>
-    </div>
-    <div className="relative">
-      <textarea
-        value={customPrompt}
-        onChange={(e) => setCustomPrompt(e.target.value)}
-        className="w-full h-48 p-3 border rounded-lg font-mono text-sm resize-y"
-        placeholder="Geben Sie hier Ihren angepassten Prompt ein..."
-      />
-    </div>
-    <p className="text-xs text-gray-500">
-      Tipp: Passen Sie den Prompt an, um spezifischere oder andere Informationen zu erhalten. 
-      Behalten Sie das JSON-Format bei.
-    </p>
-  </div>
+  const handleFileUpload = (event) => {
+    try {
+      const selectedFiles = Array.from(event.target.files).filter(file => {
+        const isValidType = file.type.startsWith('image/');
+        const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB for images
+        return isValidType && isValidSize;
+      });
 
-const handleFileUpload = (event) => {
-  try {
-    const selectedFiles = Array.from(event.target.files).filter(file => {
-      const isValidType = mediaType === 'photo' ? 
-        file.type.startsWith('image/') : 
-        file.type.startsWith('video/');
-      const isValidSize = file.size <= (mediaType === 'photo' ? 10 : 50) * 1024 * 1024; // 10MB for images, 50MB for videos
-      return isValidType && isValidSize;
-    });
+      if (selectedFiles.length === 0) {
+        setError('Bitte nur Bilder bis 10MB auswählen');
+        return;
+      }
 
-    if (selectedFiles.length === 0) {
-      setError(`Bitte nur ${mediaType === 'photo' ? 'Bilder' : 'Videos'} bis ${mediaType === 'photo' ? '10MB' : '50MB'} auswählen`);
-      return;
+      setFiles(prev => [
+        ...prev,
+        ...selectedFiles.map(file => ({
+          id: Date.now() + Math.random(),
+          file,
+          preview: URL.createObjectURL(file),
+          type: 'photo'
+        }))
+      ]);
+      setError(null);
+    } catch (err) {
+      setError('Fehler beim Laden der Dateien');
     }
-
-    setFiles(prev => [
-      ...prev,
-      ...selectedFiles.map(file => ({
-        id: Date.now() + Math.random(),
-        file,
-        preview: URL.createObjectURL(file),
-        type: mediaType
-      }))
-    ]);
-    setError(null);
-  } catch (err) {
-    setError('Fehler beim Laden der Dateien');
-  }
-};
+  };
 
   const handleCameraCapture = async () => {
     try {
@@ -485,14 +643,27 @@ const handleFileUpload = (event) => {
   const handleAnalyze = async () => {
     let mediaData = [];
     setIsAnalyzing(true);
+    setError(null); // Clear previous errors
     
     try {
+      // Validate files before processing
+      if (files.length === 0) {
+        throw new Error('Bitte wählen Sie mindestens ein Bild aus.');
+      }
+
+      console.log('Starting analysis with files:', {
+        count: files.length,
+        types: files.map(f => f.type),
+        sizes: files.map(f => f.file.size)
+      });
+
       const mediaPromises = files.map(async (file) => {
         return new Promise((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve({
             type: file.type === 'photo' ? 'image' : 'video',
-            data: reader.result
+            data: reader.result,
+            size: file.file.size
           });
           reader.readAsDataURL(file.file);
         });
@@ -507,7 +678,14 @@ const handleFileUpload = (event) => {
         customPrompt: customPrompt || ''
       };
 
-  
+      console.log('Prepared analysis request:', {
+        imageCount: requestData.images.length,
+        videoCount: requestData.videos.length,
+        roomName: requestData.roomName,
+        promptLength: requestData.customPrompt.length,
+        totalDataSize: mediaData.reduce((sum, m) => sum + m.size, 0)
+      });
+
       const response = await fetch(`${process.env.REACT_APP_API_URL}/analyze`, {
         method: 'POST',
         headers: {
@@ -516,28 +694,84 @@ const handleFileUpload = (event) => {
         },
         body: JSON.stringify(requestData)
       });
-  
+
+      let errorData;
+      const responseText = await response.text();
+      
+      console.log('Received response:', {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get('content-type'),
+        responseLength: responseText.length
+      });
+      
+      try {
+        errorData = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse response as JSON:', {
+          error: e.message,
+          responseText: responseText.substring(0, 200) + '...'
+        });
+        errorData = { error: responseText || 'Keine Details verfügbar' };
+      }
+
       if (!response.ok) {
-        const errorText = await response.text();
         console.error('API Error Response:', {
           status: response.status,
           statusText: response.statusText,
-          body: errorText,
+          errorData,
           headers: Object.fromEntries(response.headers)
         });
-        throw new Error(`API Error: ${errorText}`);
+
+        // Benutzerfreundliche Fehlermeldungen basierend auf Status und Fehlerdetails
+        let errorMessage;
+        switch (response.status) {
+          case 500:
+            if (errorData.details?.includes('db is not defined')) {
+              errorMessage = 'Datenbankverbindung fehlgeschlagen. Bitte kontaktieren Sie den Support.';
+            } else if (errorData.details?.includes('Failed to parse AI response')) {
+              errorMessage = 'Die KI-Analyse konnte nicht verarbeitet werden. Bitte versuchen Sie es mit einem anderen Bild.';
+            } else {
+              errorMessage = 'Server-Fehler: ' + (errorData.details || 'Bitte versuchen Sie es später erneut.');
+            }
+            break;
+          case 413:
+            errorMessage = 'Die Bilder sind zu groß. Bitte verwenden Sie kleinere Dateien.';
+            break;
+          case 401:
+            errorMessage = 'Authentifizierungsfehler. Bitte melden Sie sich erneut an.';
+            break;
+          default:
+            errorMessage = errorData.error || errorData.details || 'Ein unerwarteter Fehler ist aufgetreten';
+        }
+        throw new Error(errorMessage);
       }
-  
-      const analysisResults = await response.json();
-      setAnalysisResults(analysisResults);
+
+      // Validate the response data structure
+      if (!errorData || typeof errorData !== 'object') {
+        console.error('Invalid response data structure:', errorData);
+        throw new Error('Ungültiges Antwortformat vom Server');
+      }
+
+      if (!Array.isArray(errorData.items)) {
+        console.error('Missing or invalid items array in response:', errorData);
+        throw new Error('Keine Gegenstände in der Analyse gefunden');
+      }
+
+      setAnalysisResults(errorData);
+      setError(null);
       
     } catch (err) {
       console.error('Analysis error details:', {
         message: err.message,
         mediaTypes: mediaData.map(m => m.type),
-        apiUrl: process.env.REACT_APP_API_URL
+        apiUrl: process.env.REACT_APP_API_URL,
+        stack: err.stack
       });
-      setError(err.message || 'Fehler bei der Analyse');
+      
+      // Benutzerfreundliche Fehlermeldung setzen
+      setError(err.message || 'Fehler bei der Analyse. Bitte versuchen Sie es später erneut.');
+      setAnalysisResults(null);
     } finally {
       setIsAnalyzing(false);
     }
@@ -545,241 +779,253 @@ const handleFileUpload = (event) => {
 
   return (
     <div className="space-y-6">
-      {/* Input Selection */}
+      {/* Input Selection with Voice Button */}
       <div className="flex space-x-4 mb-4">
-  <button
-    onClick={() => setMediaType('photo')}
-    className={`flex-1 py-2 px-4 rounded-lg ${
-      mediaType === 'photo' ? 'bg-primary text-white' : 'bg-gray-100'
-    }`}
-  >
-    <Camera className="w-4 h-4 inline mr-2" />
-    Fotos
-  </button>
-  <button
-    onClick={() => setMediaType('video')}
-    className={`flex-1 py-2 px-4 rounded-lg ${
-      mediaType === 'video' ? 'bg-primary text-white' : 'bg-gray-100'
-    }`}
-  >
-    <Video className="w-4 h-4 inline mr-2" />
-    Videos
-  </button>
-</div>
+        <button
+          onClick={() => {
+            setActiveMode('photo');
+            setMediaType('photo');
+          }}
+          className={`flex-1 py-2 px-4 rounded-lg ${
+            activeMode === 'photo' ? 'bg-primary text-white' : 'bg-gray-100'
+          }`}
+        >
+          <Camera className="w-4 h-4 inline mr-2" />
+          Fotos
+        </button>
+        <button
+          onClick={() => {
+            setActiveMode('voice');
+            toggleListening();
+          }}
+          className={`flex-1 py-2 px-4 rounded-lg ${
+            activeMode === 'voice' ? 'bg-red-500 text-white' : 'bg-gray-100'
+          }`}
+        >
+          <Mic className={`w-4 h-4 inline mr-2 ${isListening ? 'animate-pulse' : ''}`} />
+          {isListening ? 'Aufnahme stoppen' : 'Spracherkennung'}
+        </button>
+      </div>
 
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-  {files.map(file => (
-    <div key={file.id} className="relative group min-h-[300px] max-h-[400px] w-full">
-      {file.type === 'photo' ? (
-        <img
-          src={file.preview}
-          alt="Vorschau"
-          className="w-full h-full object-contain bg-gray-100 rounded-lg"
-          onClick={() => setSelectedImage(file)}
-        />
-      ) : (
-        <video
-          src={file.preview}
-          className="w-full h-full object-contain bg-gray-100 rounded-lg"
-          controls
-        />
+      {/* Voice Recognition Status */}
+      {activeMode === 'voice' && (
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <h3 className="font-medium text-blue-900 mb-2">
+            {isAnalyzing ? (
+              <span className="flex items-center">
+                <Loader className="w-5 h-5 animate-spin mr-2" />
+                Analysiere Sprachaufnahme...
+              </span>
+            ) : (
+              `Spracherkennung ${isListening ? 'aktiv' : 'gestoppt'}`
+            )}
+          </h3>
+          <p className="text-blue-700">
+            {isAnalyzing ? (
+              'Ihre Sprachaufnahme wird gerade analysiert...'
+            ) : isListening ? (
+              transcript || 'Sprechen Sie jetzt...'
+            ) : (
+              'Klicken Sie auf Spracherkennung um fortzufahren'
+            )}
+          </p>
+        </div>
       )}
-      <button
-        onClick={() => removeFile(file.id)}
-        className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-colors"
-      >
-        <X className="w-4 h-4" />
-      </button>
-    </div>
-  ))}
-</div>
 
-      {/* Error Display */}
-      {error && (
+      {/* Speech Error Display */}
+      {speechError && (
         <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg flex items-center">
           <X className="w-5 h-5 mr-2" />
-          {error}
+          {speechError}
         </div>
       )}
 
-      {/* Camera View */}
-      {activeInput === 'camera' && stream && (
-        <div className="relative rounded-lg overflow-hidden">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            className="w-full h-[400px] object-cover"
-          />
-          <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-4">
-            <button
-              onClick={handleCapture}
-              className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-dark"
-            >
-              Foto aufnehmen
-            </button>
-            <button
-              onClick={stopCamera}
-              className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700"
-            >
-              Abbrechen
-            </button>
+      {/* Only show upload and preview area when in photo mode */}
+      {activeMode === 'photo' && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {files.map(file => (
+              <div key={file.id} className="relative group min-h-[300px] max-h-[400px] w-full">
+                <img
+                  src={file.preview}
+                  alt="Vorschau"
+                  className="w-full h-full object-contain bg-gray-100 rounded-lg"
+                  onClick={() => setSelectedImage(file)}
+                />
+                <button
+                  onClick={() => removeFile(file.id)}
+                  className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
           </div>
-        </div>
-      )}
 
-      {/* Upload Area */}
-      {activeInput === 'upload' && (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
-         <input
-  type="file"
-  accept={mediaType === 'photo' ? "image/*" : "video/*"}
-  multiple
-  onChange={handleFileUpload}
-  className="hidden"
-  id="file-upload"
-/>
-          <label
-            htmlFor="file-upload"
-            className="cursor-pointer block text-center"
-          >
-            <Upload className="mx-auto h-12 w-12 text-gray-400" />
-            <p className="mt-2 text-sm text-gray-600">
-              Klicken zum Hochladen oder Dateien hierher ziehen
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              Maximal 10MB pro Bild
-            </p>
-          </label>
-        </div>
-      )}
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg flex items-center">
+              <X className="w-5 h-5 mr-2" />
+              {error}
+            </div>
+          )}
 
-      {/* Preview Area */}
-      {/* Im AIAnalysisTab, ersetzen Sie den Preview-Bereich */}
-     
-{/* Preview Area */}
-{files.length > 0 && (
-  <div className="space-y-4">
-    <div className="flex items-center justify-between">
-      <h3 className="font-medium">
-        Hochgeladene Fotos ({files.length})
-      </h3>
-      <button
-        onClick={clearAllFiles}
-        className="text-red-500 text-sm hover:text-red-700"
-      >
-        Alle löschen
-      </button>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {files.map(file => (
-        <div key={file.id} className="relative group min-h-[300px] max-h-[400px] w-full">
-          <img
-            src={file.preview}
-            alt="Vorschau"
-            className="w-full h-full object-contain bg-gray-100 rounded-lg"
-            onClick={() => setSelectedImage(file)}
-          />
-          <button
-            onClick={() => removeFile(file.id)}
-            className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+          {/* Camera View */}
+          {activeInput === 'camera' && stream && (
+            <div className="relative rounded-lg overflow-hidden">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="w-full h-[400px] object-cover"
+              />
+              <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-4">
+                <button
+                  onClick={handleCapture}
+                  className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-dark"
+                >
+                  Foto aufnehmen
+                </button>
+                <button
+                  onClick={stopCamera}
+                  className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700"
+                >
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+          )}
 
-{/* Modal für Vollbild-Ansicht */}
-{selectedImage && (
-  <div 
-    className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
-    onClick={() => setSelectedImage(null)}
-  >
-    <div className="relative max-w-full max-h-full">
-      <img
-        src={selectedImage.preview}
-        alt="Vollbild Vorschau"
-        className="max-h-[90vh] w-auto max-w-[90vw] object-contain rounded-lg"
-        onClick={(e) => e.stopPropagation()}
-      />
-      <button
-        onClick={() => setSelectedImage(null)}
-        className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-colors"
-      >
-        <X className="w-6 h-6" />
-      </button>
-    </div>
-  </div>
-)}
+          {/* Upload Area */}
+          {activeInput === 'upload' && (
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileUpload}
+                className="hidden"
+                id="file-upload"
+              />
+              <label
+                htmlFor="file-upload"
+                className="cursor-pointer block text-center"
+              >
+                <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                <p className="mt-2 text-sm text-gray-600">
+                  Klicken zum Hochladen oder Bilder hierher ziehen
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Maximal 10MB pro Bild
+                </p>
+              </label>
+            </div>
+          )}
 
-<div className="space-y-2">
-      <div className="flex justify-between items-center">
-        <label className="text-sm font-medium text-gray-700">Analyse-Prompt anpassen</label>
-        <button
-      onClick={() => setCustomPrompt(`Analysiere diese Bilder eines ${roomName}s und identifiziere alle Möbelstücke. 
-Für jeden Gegenstand gib an:
-1. Name auf Deutsch
-2. Geschätzte Maße (L x B x H in cm)
-3. Geschätztes Volumen in m³
-4. Kurze Beschreibung (Material, Farbe, Zustand)
+          {/* Preview Area */}
+          {files.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium">
+                  Hochgeladene Fotos ({files.length})
+                </h3>
+                <button
+                  onClick={clearAllFiles}
+                  className="text-red-500 text-sm hover:text-red-700"
+                >
+                  Alle löschen
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {files.map(file => (
+                  <div key={file.id} className="relative group min-h-[300px] max-h-[400px] w-full">
+                    <img
+                      src={file.preview}
+                      alt="Vorschau"
+                      className="w-full h-full object-contain bg-gray-100 rounded-lg"
+                      onClick={() => setSelectedImage(file)}
+                    />
+                    <button
+                      onClick={() => removeFile(file.id)}
+                      className="absolute top-2 right-2 p-2 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-Berechne auch das Gesamtvolumen aller Möbel.
-Gib auch Umzugshinweise und Besonderheiten an.
-
-Format als JSON:
-{
-  "items": [{
-    "name": string,
-    "dimensions": string,
-    "volume": number,
-    "description": string
-  }],
-  "totalVolume": number,
-  "summary": string,
-  "movingTips": string
-}`)}
-      className="text-sm text-blue-600 hover:text-blue-800"
-    >
-      Zurücksetzen
-    </button>
-  </div>
-  <div className="relative">
-    <textarea
-      value={customPrompt}
-      onChange={(e) => setCustomPrompt(e.target.value)}
-      className="w-full h-48 p-3 border rounded-lg font-mono text-sm resize-y"
-      placeholder="Gebe hier den angepassten Prompt ein..."
-    />
-  </div>
-  <p className="text-xs text-gray-500">
-    
-    Behalte immer das JSON-Format bei.
-  </p>
-</div>
-
-      {/* Analysis Button */}
-      <button
-        disabled={isAnalyzing || files.length === 0}
-        className="w-full bg-primary text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        onClick={() => {    
-          handleAnalyze();
-        }}
+          {/* Analysis Prompt Editor */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-medium text-gray-700">Analyse-Prompt anpassen</label>
+              <button
+                onClick={() => setCustomPrompt(`Analysiere diese Bilder eines ${roomName}s und identifiziere alle Möbelstücke. 
+    Für jeden Gegenstand gib an:
+    1. Name auf Deutsch
+    2. Exakte Maße in Zentimetern:
+         - Länge (L)
+         - Breite (B) 
+         - Höhe (H)
+      3. Geschätztes Volumen in m³
+      4. Kurze Beschreibung (Material, Farbe, Zustand)
       
-      >
-        {isAnalyzing ? (
-          <>
-            <Loader className="w-5 h-5 animate-spin" />
-            Analysiere mit Open AI...
-          </>
-        ) : (
-          'KI-Analyse starten'
-        )}
-      </button>
+      Berechne auch das Gesamtvolumen aller Möbel.
+      Gib auch Umzugshinweise und Besonderheiten an.
+      
+      Format als JSON:
+      {
+        "items": [{
+          "name": string, 
+          "length": number, 
+          "width": number, 
+          "height": number,
+          "volume": number,
+          "description": string
+        }],
+        "totalVolume": number,   // Gesamtvolumen in m³
+        "summary": string,       // Zusammenfassung des Raums
+        "movingTips": string    // Umzugshinweise
+      }`)}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Zurücksetzen
+              </button>
+            </div>
+            <div className="relative">
+              <textarea
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                className="w-full h-48 p-3 border rounded-lg font-mono text-sm resize-y"
+                placeholder="Gebe hier den angepassten Prompt ein..."
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Behalte immer das JSON-Format bei.
+            </p>
+          </div>
 
-      {/* Analysis Results - Jetzt mit onApplyResults */}
+          {/* Analysis Button */}
+          <button
+            disabled={isAnalyzing || files.length === 0}
+            className="w-full bg-primary text-white py-3 rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            onClick={handleAnalyze}
+          >
+            {isAnalyzing ? (
+              <>
+                <Loader className="w-5 h-5 animate-spin" />
+                Analysiere mit Open AI...
+              </>
+            ) : (
+              'KI-Analyse starten'
+            )}
+          </button>
+        </>
+      )}
+
+      {/* Analysis Results */}
       {analysisResults && (
         <AnalysisResults 
           results={analysisResults} 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import RoomPhotoCapture from './RoomPhotoCapture';
 import { adminService } from '../services/adminService';
 
-const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) => {
+const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, allExistingItems = [] }) => {
   const [items, setItems] = useState(initialData.items || []);
   const [packMaterials, setPackMaterials] = useState(initialData.packMaterials || []);
   const [newPackMaterial, setNewPackMaterial] = useState({ name: '', quantity: 0 });
@@ -19,62 +19,64 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem }) =
     height: 0,
     weight: 0  // Add weight field
   });
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [prices, setPrices] = useState([]);
 
-useEffect(() => {
-  const loadPrices = async () => {
-    try {
-      const loadedPrices = await adminService.getPrices();
-      setPrices(loadedPrices);
-    } catch (err) {
-      console.error('Error loading prices:', err);
-    }
-  };
-  loadPrices();
-}, []);
+  useEffect(() => {
+    const loadPrices = async () => {
+      try {
+        const loadedPrices = await adminService.getPrices();
+        setPrices(loadedPrices);
+      } catch (err) {
+        console.error('Error loading prices:', err);
+      }
+    };
+    loadPrices();
+  }, []);
   
 
-const [weightPerCubicMeter, setWeightPerCubicMeter] = useState(200);
+  const [weightPerCubicMeter, setWeightPerCubicMeter] = useState(200);
 
-// Füge diesen useEffect hinzu um den konfigurierten Wert zu laden
-useEffect(() => {
-  const fetchWeightConfig = async () => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/admin/prices`);
-      const prices = await response.json();
-      const weightConfig = prices.find(p => p.name === 'Gewicht pro m³ (kg)');
-      if (weightConfig) {
-        setWeightPerCubicMeter(weightConfig.price);
+  // Füge diesen useEffect hinzu um den konfigurierten Wert zu laden
+  useEffect(() => {
+    const fetchWeightConfig = async () => {
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/admin/prices`);
+        const prices = await response.json();
+        const weightConfig = prices.find(p => p.name === 'Gewicht pro m³ (kg)');
+        if (weightConfig) {
+          setWeightPerCubicMeter(weightConfig.price);
+        }
+      } catch (error) {
+        console.error('Error loading weight configuration:', error);
       }
-    } catch (error) {
-      console.error('Error loading weight configuration:', error);
-    }
-  };
-  fetchWeightConfig();
-}, []);
+    };
+    fetchWeightConfig();
+  }, []);
 
 
 
-const totalVolume = useMemo(() => {
-  const itemsVolume = items.reduce((total, item) => {
-    const itemVolume = (item.length * item.width * item.height) / 1000000; // cm³ to m³
-    return total + itemVolume * item.quantity;
-  }, 0);
+  const totalVolume = useMemo(() => {
+    const itemsVolume = items.reduce((total, item) => {
+      const itemVolume = (item.length * item.width * item.height) / 1000000; // cm³ to m³
+      return total + itemVolume * item.quantity;
+    }, 0);
 
-  const packMaterialsVolume = packMaterials.reduce((total, material) => {
-    // Prüfen ob material ein Karton ist
-    if (['Umzugskartons (Standard)', 'Bücherkartons (Bücher&Geschirr)', 'Kleiderkisten'].includes(material.name)) {
-      const priceConfig = prices?.find(p => p.name === material.name);
-      if (priceConfig?.length && priceConfig?.width && priceConfig?.height) {
-        const materialVolume = (priceConfig.length * priceConfig.width * priceConfig.height) / 1000000;
-        return total + materialVolume * material.quantity;
+    const packMaterialsVolume = packMaterials.reduce((total, material) => {
+      // Prüfen ob material ein Karton ist
+      if (['Umzugskartons (Standard)', 'Bücherkartons (Bücher&Geschirr)', 'Kleiderkisten'].includes(material.name)) {
+        const priceConfig = prices?.find(p => p.name === material.name);
+        if (priceConfig?.length && priceConfig?.width && priceConfig?.height) {
+          const materialVolume = (priceConfig.length * priceConfig.width * priceConfig.height) / 1000000;
+          return total + materialVolume * material.quantity;
+        }
       }
-    }
-    return total;
-  }, 0);
+      return total;
+    }, 0);
 
-  return itemsVolume + packMaterialsVolume;
-}, [items, packMaterials, prices]);
+    return itemsVolume + packMaterialsVolume;
+  }, [items, packMaterials, prices]);
 
   // Update local state when initialData changes
   useEffect(() => {
@@ -83,25 +85,25 @@ const totalVolume = useMemo(() => {
     setNotes(initialData.notes || '');
   }, [initialData]);
 
-// Aktualisiere die bestehende Gewichtsberechnung
-const estimatedWeight = useMemo(() => {
-  const customWeights = items.reduce((total, item) => {
-    if (item.weight) {
-      return total + (item.weight * item.quantity);
-    }
-    return total;
-  }, 0);
+  // Aktualisiere die bestehende Gewichtsberechnung
+  const estimatedWeight = useMemo(() => {
+    const customWeights = items.reduce((total, item) => {
+      if (item.weight) {
+        return total + (item.weight * item.quantity);
+      }
+      return total;
+    }, 0);
 
-  const volumeBasedWeight = items.reduce((total, item) => {
-    if (!item.weight) {
-      const itemVolume = (item.length * item.width * item.height) / 1000000; // cm³ to m³
-      return total + (itemVolume * weightPerCubicMeter * item.quantity);
-    }
-    return total;
-  }, 0);
+    const volumeBasedWeight = items.reduce((total, item) => {
+      if (!item.weight) {
+        const itemVolume = (item.length * item.width * item.height) / 1000000; // cm³ to m³
+        return total + (itemVolume * weightPerCubicMeter * item.quantity);
+      }
+      return total;
+    }, 0);
 
-  return customWeights + volumeBasedWeight;
-}, [items, weightPerCubicMeter]);
+    return customWeights + volumeBasedWeight;
+  }, [items, weightPerCubicMeter]);
 
   // Update parent component whenever data changes
   useEffect(() => {
@@ -186,6 +188,32 @@ const estimatedWeight = useMemo(() => {
       setNewPackMaterial({ name: '', quantity: 0 });
     }
   }, [packMaterials, newPackMaterial, onAddItem]);
+
+  // Filter suggestions based on input
+  const filterSuggestions = (input) => {
+    if (!input) {
+      setSearchResults([]);
+      return;
+    }
+    
+    const filteredItems = allExistingItems.filter(item => 
+      item.name.toLowerCase().startsWith(input.toLowerCase()) &&
+      !items.some(existingItem => existingItem.name === item.name)
+    );
+    
+    setSearchResults(filteredItems);
+    setShowSuggestions(true);
+  };
+
+  // Handle item selection from suggestions
+  const handleSelectSuggestion = (selectedItem) => {
+    setNewItem({
+      ...selectedItem,
+      quantity: 0
+    });
+    setShowSuggestions(false);
+    setSearchResults([]);
+  };
 
   const renderItemList = useCallback((itemList, stateUpdater, showVolume = false) => {
     const isPackagingMaterial = (name) => 
@@ -331,14 +359,42 @@ const estimatedWeight = useMemo(() => {
         {renderItemList(items, setItems, true)}
     
 <div className="space-y-2">
-  <div className="flex gap-2 items-center">
-    <input
-      type="text"
-      value={newItem.name}
-      onChange={(e) => setNewItem({...newItem, name: e.target.value})}
-      placeholder="Gegenstand Name"
-      className="flex-grow p-2 border border-gray-300 rounded-md"
-    />
+  <div className="flex gap-2 items-center relative">
+    <div className="flex-grow relative">
+      <input
+        type="text"
+        value={newItem.name}
+        onChange={(e) => {
+          setNewItem({...newItem, name: e.target.value});
+          filterSuggestions(e.target.value);
+        }}
+        onFocus={() => {
+          if (newItem.name) {
+            filterSuggestions(newItem.name);
+          }
+        }}
+        placeholder="Gegenstand Name"
+        className="w-full p-2 border border-gray-300 rounded-md"
+      />
+      {showSuggestions && searchResults.length > 0 && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+          {searchResults.map((suggestion, index) => (
+            <div
+              key={index}
+              className="p-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center"
+              onClick={() => handleSelectSuggestion(suggestion)}
+            >
+              <span>{suggestion.name}</span>
+              <span className="text-sm text-gray-500">
+                {suggestion.length}×{suggestion.width}×{suggestion.height}cm
+                {suggestion.weight ? ` • ${suggestion.weight}kg` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+    
     <div className="flex items-center gap-1">
       <div className="relative flex-1">
         <label className="absolute -top-2 left-2 bg-white px-1 text-xs text-gray-600">
@@ -379,17 +435,17 @@ const estimatedWeight = useMemo(() => {
         />
       </div>
       <div className="relative flex-1">
-  <label className="absolute -top-2 left-2 bg-white px-1 text-xs text-gray-600">
-    Gewicht
-  </label>
-  <input
-    type="number"
-    value={newItem.weight}
-    onChange={(e) => setNewItem({...newItem, weight: parseInt(e.target.value) || ''})}
-    placeholder="kg"
-    className="w-24 p-2 border border-gray-300 rounded-md text-center"
-  />
-</div>
+        <label className="absolute -top-2 left-2 bg-white px-1 text-xs text-gray-600">
+          Gewicht
+        </label>
+        <input
+          type="number"
+          value={newItem.weight}
+          onChange={(e) => setNewItem({...newItem, weight: parseInt(e.target.value) || ''})}
+          placeholder="kg"
+          className="w-24 p-2 border border-gray-300 rounded-md text-center"
+        />
+      </div>
     </div>
     <button
       onClick={handleAddItem}

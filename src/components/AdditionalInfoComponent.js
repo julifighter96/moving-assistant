@@ -5,7 +5,6 @@ const INITIAL_ADDITIONAL_INFO = [
   {
     category: 'Umzugstechnische Details',
     fields: [
-      { name: 'HVZ', apiKey: '78050c086c106b0e9f655eb0b92ceb1ae1825378', options: ['B', 'E', 'Z'], value: [], multiple: true },
       { name: 'Möbellift', apiKey: '705d07fa2683d46703fdaa8a8dea0b82dcc48e47', options: ['B', 'E', 'Z'], value: [], multiple: true },
     ]
   },
@@ -45,6 +44,20 @@ const INITIAL_ADDITIONAL_INFO = [
         options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
         value: 'Nein'
       },
+      {
+        name: 'Anzahl Umzugskartons',
+        apiKey: 'umzugskartons_anzahl',
+        type: 'number',
+        value: 0,
+        min: 0
+      },
+      {
+        name: 'Anzahl Porzellankartons',
+        apiKey: 'porzellankartons_anzahl',
+        type: 'number',
+        value: 0,
+        min: 0
+      }
     ]
   }
 ];
@@ -115,6 +128,23 @@ const AdditionalInfoComponent = ({ onComplete }) => {
               </option>
             ))}
           </select>
+        </div>
+      );
+    }
+
+    if (field.type === 'number') {
+      return (
+        <div className="mb-4">
+          <label className="block mb-2 font-medium text-gray-700">
+            {field.name}
+          </label>
+          <input
+            type="number"
+            value={field.value}
+            min={field.min || 0}
+            onChange={(e) => handleInfoChange(categoryIndex, fieldIndex, parseInt(e.target.value) || 0)}
+            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+          />
         </div>
       );
     }

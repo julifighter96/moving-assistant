@@ -542,6 +542,19 @@ function App() {
     }, 3000);
   };
 
+  // Add this new function to collect all items from all rooms
+  const getAllExistingItems = useCallback(() => {
+    const allItems = [];
+    Object.values(roomsData).forEach(roomData => {
+      roomData.items.forEach(item => {
+        if (!allItems.some(existingItem => existingItem.name === item.name)) {
+          allItems.push(item);
+        }
+      });
+    });
+    return allItems;
+  }, [roomsData]);
+
   return (
     <LoginWrapper>
     <div className="min-h-screen bg-neutral-50">
@@ -703,82 +716,71 @@ function App() {
     
     {/* Main Content Area */}
     <div className="col-span-8">
-      <div className="bg-white rounded-lg shadow-sm">
-        <div className="border-b border-gray-200">
-          <div className="flex items-center justify-between p-6">
-            <div>
-              <h2 className="text-xl font-semibold">{currentRoom}</h2>
-              <p className="text-gray-500 mt-1">Inventar und Fotos für diesen Raum</p>
-            </div>
-          </div>
-          <div className="px-6">
-            <div className="flex border-b">
-              <button
-                onClick={() => setActiveTab('standard')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'standard'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Standard
-              </button>
-              <button
-                onClick={() => setActiveTab('ai')}
-                className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors flex items-center ${
-                  activeTab === 'ai'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                KI-Analyse
-                <span className="ml-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                  Beta
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <div className="p-6">
-          {activeTab === 'standard' ? (
-            <RoomItemsSelector
-              key={`${currentRoom}-standard`}
-              roomName={currentRoom}
-              onUpdateRoom={handleUpdateRoomData}
-              initialData={roomsData[currentRoom]}
-              onAddItem={handleAddItem}
-            />
-          ) : (
-            <AIAnalysisTab
-              key={`${currentRoom}-ai`}
-              roomName={currentRoom}
-              onAnalysisComplete={(analysisData) => {
-                handleUpdateRoomData(currentRoom, {
-                  items: analysisData.items.map(item => ({
-                    name: item.name,
-                    quantity: 1,
-                    // Convert cm to m for internal storage
-                    width: Math.round(item.width) ,
-                    height: Math.round(item.height) ,
-                    length: Math.round(item.length) ,
-                    volume: (item.length * item.width * item.height), // cm³ to m³
-                    demontiert: false,
-                    duebelarbeiten: false,
-                    description: item.description
-                  })),
-                  totalVolume: analysisData.totalVolume,
-                  estimatedWeight: analysisData.totalVolume * 200,
-                  analysisNotes: analysisData.description
-                });
+      <div className="flex justify-between items-center mb-6">
+        <button
+          onClick={() => setActiveTab('standard')}
+          className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'standard'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Standard
+        </button>
+        <button
+          onClick={() => setActiveTab('ai')}
+          className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors flex items-center ${
+            activeTab === 'ai'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          KI-Analyse
+          <span className="ml-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+            Beta
+          </span>
+        </button>
+      </div>
+      
+      <div className="p-6">
+        {activeTab === 'standard' ? (
+          <RoomItemsSelector
+            key={`${currentRoom}-standard`}
+            roomName={currentRoom}
+            onUpdateRoom={handleUpdateRoomData}
+            initialData={roomsData[currentRoom]}
+            onAddItem={handleAddItem}
+            allExistingItems={getAllExistingItems()}
+          />
+        ) : (
+          <AIAnalysisTab
+            key={`${currentRoom}-ai`}
+            roomName={currentRoom}
+            onAnalysisComplete={(analysisData) => {
+              handleUpdateRoomData(currentRoom, {
+                items: analysisData.items.map(item => ({
+                  name: item.name,
+                  quantity: 1,
+                  // Convert cm to m for internal storage
+                  width: Math.round(item.width) ,
+                  height: Math.round(item.height) ,
+                  length: Math.round(item.length) ,
+                  volume: (item.length * item.width * item.height), // cm³ to m³
+                  demontiert: false,
+                  duebelarbeiten: false,
+                  description: item.description
+                })),
+                totalVolume: analysisData.totalVolume,
+                estimatedWeight: analysisData.totalVolume * 200,
+                analysisNotes: analysisData.description
+              });
                               
-                setActiveTab('standard');
-                setShowPopup(true);
-                setPopupMessage('KI-Analyse erfolgreich abgeschlossen!');
-              }}
-            />
-          )}
-        </div>
+              setActiveTab('standard');
+              setShowPopup(true);
+              setPopupMessage('KI-Analyse erfolgreich abgeschlossen!');
+            }}
+          />
+        )}
       </div>
     </div>
   </div>

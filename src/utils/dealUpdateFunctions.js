@@ -13,6 +13,8 @@ const API_MAPPING = {
   'Auspackservice': '0085f40bb50ba7748922f9723a9ac4e91e1149cf',
   'Einpackservice': '05ab4ce4f91858459aad9bf20644e99b5d0619b1',
   'Anmerkungen für Personal': 'e587fe207006060c97d76f97a01351b08e850a95',
+  'Umzugskartons': 'umzugskartons_anzahl',
+  'Porzellankartons': 'porzellankartons_anzahl'
 };
 
 const OPTION_IDS = {
@@ -236,6 +238,30 @@ const formatDealData = (inspectionData) => {
       detailsText += `Packmaterialien:\n${packMaterials.join('\n')}\n\n`;
     }
 
+    // Add box quantities from additionalInfo if they exist
+    if (inspectionData.additionalInfo) {
+      const umzugskartons = inspectionData.additionalInfo.find(
+        f => f.name === 'Anzahl Umzugskartons' && f.type === 'number'
+      )?.value || 0;
+      
+      const porzellankartons = inspectionData.additionalInfo.find(
+        f => f.name === 'Anzahl Porzellankartons' && f.type === 'number'
+      )?.value || 0;
+      
+      if (umzugskartons > 0 || porzellankartons > 0) {
+        detailsText += `Kartons:\n`;
+        if (umzugskartons > 0) {
+          detailsText += `- Umzugskartons: ${umzugskartons} Stück\n`;
+          formattedData[API_MAPPING['Umzugskartons']] = umzugskartons;
+        }
+        if (porzellankartons > 0) {
+          detailsText += `- Porzellankartons: ${porzellankartons} Stück\n`;
+          formattedData[API_MAPPING['Porzellankartons']] = porzellankartons;
+        }
+        detailsText += '\n';
+      }
+    }
+
     if (inspectionData.rooms) {
       const roomNotes = Object.entries(inspectionData.rooms)
         .filter(([_, roomData]) => roomData.notes && roomData.notes.trim())
@@ -244,24 +270,27 @@ const formatDealData = (inspectionData) => {
   
       if (roomNotes) {
         detailsText += `\nRaum-spezifische Anmerkungen:\n${roomNotes}\n\n`;
-        const existingNotes = formattedData[API_MAPPING['Anmerkungen für Personal']] || '';
-        formattedData[API_MAPPING['Anmerkungen für Personal']] = 
-          existingNotes ? 
-          `${existingNotes}\n\nRaum-spezifische Anmerkungen:\n${roomNotes}` : 
-          `Raum-spezifische Anmerkungen:\n${roomNotes}`;
       }
-     
     }
-   
 
     // Add additional information
     if (inspectionData.additionalInfo) {
       const additionalDetails = [];
 
-      // Add HVZ info
-      const hvzInfo = inspectionData.additionalInfo.find(info => info.name === 'HVZ');
-      if (hvzInfo && Array.isArray(hvzInfo.value) && hvzInfo.value.length > 0) {
-        additionalDetails.push(`HVZ: ${hvzInfo.value.join(', ')}`);
+      // Process HVZ info
+      const hvzInfo = inspectionData.additionalInfo.find(category => 
+        category.category === 'Umzugstechnische Details' && 
+        category.fields.some(f => f.name === 'HVZ')
+      );
+      
+      if (hvzInfo) {
+        const hvzField = hvzInfo.fields.find(f => f.name === 'HVZ');
+        if (hvzField && Array.isArray(hvzField.value) && hvzField.value.length > 0) {
+          additionalDetails.push(`HVZ: ${hvzField.value.join(', ')}`);
+          // Set the HVZ field with option IDs
+          const hvzOptionIds = hvzField.value.map(label => OPTION_IDS['HVZ']?.[label]).filter(Boolean);
+          formattedData[API_MAPPING['HVZ']] = hvzOptionIds;
+        }
       }
 
       // Add Möbellift info

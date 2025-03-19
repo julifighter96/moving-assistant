@@ -9,7 +9,14 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
   const [items, setItems] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [newRoom, setNewRoom] = useState('');
-  const [newItem, setNewItem] = useState({ name: '', width: '', length: '', height: '' });
+  const [newItem, setNewItem] = useState({ 
+    name: '', 
+    width: '', 
+    length: '', 
+    height: '', 
+    setupTime: '', 
+    dismantleTime: '' 
+  });
   const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -27,9 +34,15 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
 
   const loadRooms = async () => {
     try {
-      const rooms = await adminService.getRooms();
-      setRooms(rooms);
-      onUpdateRooms(rooms);
+      const loadedRooms = await adminService.getRooms();
+      // Sicherstellen, dass die Raumdaten korrekt formatiert sind
+      const formattedRooms = loadedRooms.map(room => ({
+        id: room.id,
+        name: String(room.name || '')
+      }));
+      
+      setRooms(formattedRooms);
+      onUpdateRooms(formattedRooms);
       setError(null);
     } catch (error) {
       setError('Fehler beim Laden der Räume');
@@ -68,8 +81,18 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
   const handleAddItem = async () => {
     if (!newItem.name || !selectedRoom) return;
     try {
-      await adminService.addItem(selectedRoom, newItem);
-      setNewItem({ name: '', width: '', length: '', height: '' });
+      await adminService.addItem({
+        ...newItem,
+        room: selectedRoom
+      });
+      setNewItem({ 
+        name: '', 
+        width: '', 
+        length: '', 
+        height: '', 
+        setupTime: '', 
+        dismantleTime: '' 
+      });
       await loadItems(selectedRoom);
     } catch (error) {
       setError('Fehler beim Hinzufügen des Gegenstands');
@@ -79,7 +102,7 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
 
   const handleUpdateItem = async (item) => {
     try {
-      await adminService.updateItem(selectedRoom, item);
+      await adminService.updateItem(item.id, item);
       setEditingItem(null);
       await loadItems(selectedRoom);
     } catch (error) {
@@ -195,7 +218,7 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
                     Gegenstände für {selectedRoom}
                   </h2>
                   
-                  <div className="grid grid-cols-5 gap-4">
+                  <div className="grid grid-cols-6 gap-4">
                     <input
                       type="text"
                       value={newItem.name}
@@ -217,6 +240,20 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
                       placeholder="Länge (cm)"
                       className="p-2 border rounded"
                     />
+                    <input
+                      type="number"
+                      value={newItem.setupTime}
+                      onChange={(e) => setNewItem({...newItem, setupTime: e.target.value})}
+                      placeholder="Aufbauzeit (min)"
+                      className="p-2 border rounded"
+                    />
+                    <input
+                      type="number"
+                      value={newItem.dismantleTime}
+                      onChange={(e) => setNewItem({...newItem, dismantleTime: e.target.value})}
+                      placeholder="Abbauzeit (min)"
+                      className="p-2 border rounded"
+                    />
                     <button
                       onClick={handleAddItem}
                       disabled={!newItem.name}
@@ -227,16 +264,18 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
                   </div>
 
                   <div className="mt-4">
-                    <div className="grid grid-cols-5 gap-4 px-4 py-2 bg-gray-100 rounded-t-lg font-medium">
+                    <div className="grid grid-cols-7 gap-4 px-4 py-2 bg-gray-100 rounded-t-lg font-medium">
                       <div className="col-span-2">Name</div>
                       <div>Breite (cm)</div>
                       <div>Länge (cm)</div>
+                      <div>Aufbauzeit (min)</div>
+                      <div>Abbauzeit (min)</div>
                       <div>Aktionen</div>
                     </div>
 
                     <div className="space-y-2">
                       {items.map((item) => (
-                        <div key={item.id} className="grid grid-cols-5 gap-4 p-4 bg-white rounded-lg items-center">
+                        <div key={item.id} className="grid grid-cols-7 gap-4 p-4 bg-white rounded-lg items-center">
                           {editingItem?.id === item.id ? (
                             <>
                               <input
@@ -255,6 +294,18 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
                                 type="number"
                                 value={editingItem.length || ''}
                                 onChange={(e) => setEditingItem({...editingItem, length: e.target.value})}
+                                className="p-2 border rounded"
+                              />
+                              <input
+                                type="number"
+                                value={editingItem.setupTime || ''}
+                                onChange={(e) => setEditingItem({...editingItem, setupTime: e.target.value})}
+                                className="p-2 border rounded"
+                              />
+                              <input
+                                type="number"
+                                value={editingItem.dismantleTime || ''}
+                                onChange={(e) => setEditingItem({...editingItem, dismantleTime: e.target.value})}
                                 className="p-2 border rounded"
                               />
                               <div className="flex gap-2">
@@ -277,6 +328,8 @@ const AdminPanel = ({ onUpdateRooms, onUpdateItems }) => {
                               <div className="col-span-2 font-medium">{item.name}</div>
                               <div>{item.width || '-'}</div>
                               <div>{item.length || '-'}</div>
+                              <div>{item.setupTime || '-'}</div>
+                              <div>{item.dismantleTime || '-'}</div>
                               <div>
                                 <button
                                   onClick={() => setEditingItem(item)}

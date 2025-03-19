@@ -222,14 +222,23 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
     return (
       <div className="space-y-2">
         {itemList.map((item, index) => {
+          // Sicherstellen, dass item ein Objekt ist
+          if (!item || typeof item !== 'object') {
+            console.error('Invalid item in RoomItemsSelector:', item);
+            return null;
+          }
+          
+          // Stelle sicher, dass item.name ein String ist
+          const itemName = item.name ? String(item.name) : 'Unbenannt';
+          
           // Hole die Maße aus den prices wenn es ein Packmaterial ist
-          const priceConfig = isPackagingMaterial(item.name) ? prices?.find(p => p.name === item.name) : null;
+          const priceConfig = isPackagingMaterial(itemName) ? prices?.find(p => p.name === itemName) : null;
   
           return (
-            <div key={item.name} className="flex items-center justify-between p-4 bg-white rounded-lg">
-              <span className="text-lg">{item.name}</span>
+            <div key={itemName + index} className="flex items-center justify-between p-4 bg-white rounded-lg">
+              <span className="text-lg">{itemName}</span>
               <div className="flex items-center gap-4">
-                {editingItem?.name === item.name ? (
+                {editingItem?.name === itemName ? (
                   <>
                     <input
                       type="number"

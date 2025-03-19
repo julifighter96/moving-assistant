@@ -131,6 +131,7 @@ const initializeDatabase = () => {
           width REAL DEFAULT 0,
           length REAL DEFAULT 0,
           height REAL DEFAULT 0,
+          type TEXT DEFAULT 'material',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`
       ];
@@ -151,8 +152,8 @@ const initializeDatabase = () => {
         db.run('CREATE INDEX IF NOT EXISTS idx_features_hash ON image_features(imageHash)');
         
         resolve(db);
+      });
     });
-  });
   });
 };
 
@@ -670,35 +671,42 @@ Antworte im folgenden JSON-Format:
 
     app.get('/api/admin/items', (req, res) => {
       const { room } = req.query;
-      console.log('GET /api/admin/items called with room:', room);
-
+      
       if (!room) {
-        console.log('No room parameter provided');
-        return res.status(400).json([]);
+        return res.status(400).json({ error: 'Room parameter is required' });
       }
-
-      const query = 'SELECT * FROM admin_items WHERE room = ?';
-      console.log('Executing query:', query, 'with room:', room);
-
-      db.all(query, [room], (err, rows) => {
-      if (err) {
-          console.error('Database error fetching items:', err);
-        return res.status(500).json({ error: err.message });
-      }
+      
+      db.all('SELECT * FROM admin_items WHERE room = ? ORDER BY name', [room], (err, rows) => {
+        if (err) {
+          console.error('Error fetching items:', err);
+          return res.status(500).json({ error: err.message });
+        }
         
-        console.log(`Found ${rows?.length || 0} items for room ${room}:`, rows);
-        res.json(rows || []);
-  });
-});
+        // Convert snake_case column names to camelCase for frontend
+        const formattedRows = rows.map(row => ({
+          id: row.id,
+          name: row.name,
+          width: row.width,
+          length: row.length,
+          height: row.height,
+          volume: row.volume,
+          room: row.room,
+          setupTime: row.setup_time || 0,  // Konvertierung von setup_time zu setupTime
+          dismantleTime: row.dismantle_time || 0  // Konvertierung von dismantle_time zu dismantleTime
+        }));
+        
+        res.json(formattedRows);
+      });
+    });
 
     app.post('/api/admin/items', async (req, res) => {
       console.log('Received item data:', req.body);
-      const { name, width, length, height, room } = req.body;
+      const { name, width, length, height, room, setupTime, dismantleTime } = req.body;
       const volume = (width * length * height) / 1000000; // Convert from cm³ to m³
       
       db.run(
-        'INSERT INTO admin_items (name, width, length, height, volume, room) VALUES (?, ?, ?, ?, ?, ?)',
-        [name, width, length, height, volume, room],
+        'INSERT INTO admin_items (name, width, length, height, volume, room, setup_time, dismantle_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [name, width || 0, length || 0, height || 0, volume || 0, room, setupTime || 0, dismantleTime || 0],
         function(err) {
     if (err) {
             console.error('Error inserting item:', err);
@@ -711,7 +719,9 @@ Antworte im folgenden JSON-Format:
             length, 
             height,
             volume,
-            room 
+            room,
+            setupTime: setupTime || 0,
+            dismantleTime: dismantleTime || 0
           });
         }
       );
@@ -719,11 +729,11 @@ Antworte im folgenden JSON-Format:
 
     app.put('/api/admin/items/:id', (req, res) => {
   const { id } = req.params;
-      const { name, width, length, height, volume } = req.body;
+      const { name, width, length, height, volume, setupTime, dismantleTime } = req.body;
 
   db.run(
-        'UPDATE admin_items SET name = ?, width = ?, length = ?, height = ?, volume = ? WHERE id = ?',
-        [name, width, length, height, volume, id],
+        'UPDATE admin_items SET name = ?, width = ?, length = ?, height = ?, volume = ?, setup_time = ?, dismantle_time = ? WHERE id = ?',
+        [name, width || 0, length || 0, height || 0, volume || 0, setupTime || 0, dismantleTime || 0, id],
     function(err) {
       if (err) {
             console.error('Error updating item:', err);
@@ -732,11 +742,39 @@ Antworte im folgenden JSON-Format:
       if (this.changes === 0) {
             return res.status(404).json({ error: 'Item not found' });
       }
-          res.json({ id: parseInt(id), name, width, length, height, volume });
+          res.json({ 
+      id: parseInt(id),
+      name,
+      width: width || 0,
+      length: length || 0,
+      height: height || 0,
+      volume: volume || 0,
+      setupTime: setupTime || 0,
+      dismantleTime: dismantleTime || 0
+    });
     }
   );
 });
 
+    // Check if a price with a specific name exists
+    app.get('/api/admin/prices/check', authenticateToken, (req, res) => {
+      const { name } = req.query;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'Name parameter is required' });
+      }
+      
+      db.get('SELECT id FROM admin_prices WHERE name = ?', [name], (err, row) => {
+        if (err) {
+          console.error('Database error:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+        
+        res.json({ exists: !!row });
+      });
+    });
+
+    // Die allgemeine Route für alle Preise
     app.get('/api/admin/prices', (req, res) => {
       db.all('SELECT * FROM admin_prices ORDER BY created_at ASC', [], (err, rows) => {
     if (err) {
@@ -1064,6 +1102,54 @@ Antworte im folgenden JSON-Format:
     app.get('/manifest.json', (req, res) => {
       res.set('Content-Type', 'application/manifest+json');
       res.sendFile(path.join(__dirname, '..', 'build', 'manifest.json'));
+    });
+
+    // Update the admin_prices table to include type field
+    db.run(`
+      ALTER TABLE admin_prices ADD COLUMN type TEXT DEFAULT 'material'
+    `, (err) => {
+      // If the column already exists, this will error but we can ignore it
+      console.log('Added type column to admin_prices table or it already exists');
+    });
+
+    // Add new price
+    app.post('/api/admin/prices', authenticateToken, (req, res) => {
+      const { name, price, width, length, height, type } = req.body;
+
+      db.run(
+        'INSERT INTO admin_prices (name, price, width, length, height, type) VALUES (?, ?, ?, ?, ?, ?)',
+        [name, price, width || 0, length || 0, height || 0, type || 'material'],
+        function(err) {
+          if (err) {
+            console.error('Error inserting price:', err);
+            return res.status(500).json({ error: err.message });
+          }
+          res.status(201).json({ 
+            id: this.lastID,
+            name,
+            price,
+            width: width || 0,
+            length: length || 0,
+            height: height || 0,
+            type: type || 'material'
+          });
+        }
+      );
+    });
+
+    // Alter table to add setup_time and dismantle_time columns
+    db.run(`
+      ALTER TABLE admin_items ADD COLUMN setup_time INTEGER DEFAULT 0
+    `, (err) => {
+      // If the column already exists, this will error but we can ignore it
+      console.log('Added setup_time column to admin_items table or it already exists');
+    });
+
+    db.run(`
+      ALTER TABLE admin_items ADD COLUMN dismantle_time INTEGER DEFAULT 0
+    `, (err) => {
+      // If the column already exists, this will error but we can ignore it
+      console.log('Added dismantle_time column to admin_items table or it already exists');
     });
 
 const PORT = process.env.PORT || 3001;

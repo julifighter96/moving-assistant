@@ -14,6 +14,7 @@ const PriceConfiguration = () => {
   const [editingLoadingTime, setEditingLoadingTime] = useState(null);
   const [editingNoParkingZone, setEditingNoParkingZone] = useState(null);
   const [activeTab, setActiveTab] = useState('materials');
+  const [toast, setToast] = useState(null);
 
   const loadPrices = async () => {
     try {
@@ -145,6 +146,35 @@ const PriceConfiguration = () => {
     }
   };
 
+  const handleDeletePrice = async (priceId) => {
+    if (!priceId) return;
+    
+    // Bestätigungsdialog
+    if (!window.confirm('Möchten Sie diesen Stundensatz wirklich löschen?')) {
+      return;
+    }
+    
+    try {
+      // Lösche den Preiseintrag über die API
+      await adminService.deletePrice(priceId);
+      
+      // Lade alle Preisdaten neu
+      await loadPrices();
+      
+      // Erfolgsmeldung
+      setToast({
+        message: 'Stundensatz erfolgreich gelöscht',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Fehler beim Löschen des Stundensatzes:', error);
+      setToast({
+        message: `Fehler beim Löschen: ${error.message || 'Unbekannter Fehler'}`,
+        type: 'error'
+      });
+    }
+  };
+
   if (loading && !prices.length && !hourlyRates.length && !loadingTimes.length && !noParkingZones.length) {
     return (
       <div className="flex justify-center items-center p-8">
@@ -159,6 +189,20 @@ const PriceConfiguration = () => {
 
   return (
     <div className="space-y-6">
+      {toast && (
+        <div className={`fixed top-4 right-4 p-4 rounded-md shadow-md ${
+          toast.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+        }`}>
+          {toast.message}
+          <button 
+            className="ml-2 text-gray-500 hover:text-gray-700"
+            onClick={() => setToast(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="bg-red-50 border-l-4 border-red-400 p-4">
           <div className="flex">
@@ -331,16 +375,16 @@ const PriceConfiguration = () => {
 
       {activeTab === 'hourly_rates' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center">
             <h3 className="text-lg font-medium text-gray-900">Stundensätze</h3>
             <button
               onClick={handleAddHourlyRate}
-              className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-dark"
             >
-              Stundensatz hinzufügen
+              Neuer Stundensatz
             </button>
           </div>
-
+          
           {Array.isArray(hourlyRates) && hourlyRates.length > 0 ? (
             hourlyRates.map((rate) => (
               <div
@@ -411,17 +455,29 @@ const PriceConfiguration = () => {
                         
                         <div className="mt-2 text-sm text-gray-500">
                           <p className="font-medium text-primary">
-                            {rate.price.toFixed(2)} € / Stunde
+                            {rate.price.toFixed(2)} €/h
                           </p>
                         </div>
                       </div>
                       
-                      <button
-                        onClick={() => setEditingHourlyRate(rate)}
-                        className="p-2 text-gray-400 hover:text-primary rounded-full hover:bg-gray-50"
-                      >
-                        <Edit className="h-5 w-5" />
-                      </button>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleDeletePrice(rate.id)}
+                          className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-50"
+                          title="Stundensatz löschen"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setEditingHourlyRate(rate)}
+                          className="p-2 text-gray-400 hover:text-primary rounded-full hover:bg-gray-50"
+                          title="Stundensatz bearbeiten"
+                        >
+                          <Edit className="h-5 w-5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

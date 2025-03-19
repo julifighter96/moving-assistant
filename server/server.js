@@ -133,6 +133,14 @@ const initializeDatabase = () => {
           height REAL DEFAULT 0,
           type TEXT DEFAULT 'material',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS employee_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          hourly_rate REAL NOT NULL DEFAULT 0,
+          description TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`
       ];
       
@@ -150,6 +158,30 @@ const initializeDatabase = () => {
         db.run('CREATE INDEX IF NOT EXISTS idx_inspection_photos ON inspection_photos(inspection_id)');
         db.run('CREATE INDEX IF NOT EXISTS idx_recognitions_hash ON recognitions(imageHash)');
         db.run('CREATE INDEX IF NOT EXISTS idx_features_hash ON image_features(imageHash)');
+        
+        // Füge Standardmitarbeitertypen hinzu, wenn die Tabelle leer ist
+        db.get("SELECT COUNT(*) as count FROM employee_types", (err, result) => {
+          if (err) {
+            console.error('Error checking employee_types table:', err);
+          } else if (result.count === 0) {
+            const defaultTypes = [
+              { name: 'Umzugshelfer', hourly_rate: 25, description: 'Standard-Umzugshelfer für Transportaufgaben' },
+              { name: 'Fachkraft für Möbelmontage', hourly_rate: 35, description: 'Spezialist für Auf- und Abbau von Möbeln' },
+              { name: 'Elektrofachkraft', hourly_rate: 45, description: 'Spezialist für Elektroinstallationen' },
+              { name: 'Fahrer', hourly_rate: 30, description: 'LKW-Fahrer für den Transport' }
+            ];
+            
+            defaultTypes.forEach(type => {
+              db.run(
+                'INSERT INTO employee_types (name, hourly_rate, description) VALUES (?, ?, ?)',
+                [type.name, type.hourly_rate, type.description],
+                err => {
+                  if (err) console.error('Error inserting default employee type:', err);
+                }
+              );
+            });
+          }
+        });
         
         resolve(db);
       });
@@ -1150,6 +1182,62 @@ Antworte im folgenden JSON-Format:
     `, (err) => {
       // If the column already exists, this will error but we can ignore it
       console.log('Added dismantle_time column to admin_items table or it already exists');
+    });
+
+    // API-Endpunkt zum Abrufen der Mitarbeitertypen
+    app.get('/api/admin/employee-types', authenticateToken, (req, res) => {
+      db.all('SELECT * FROM employee_types ORDER BY name', (err, rows) => {
+        if (err) {
+          console.error('Error fetching employee types:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        
+        // Snake_case zu camelCase konvertieren
+        const formattedRows = rows.map(row => ({
+          id: row.id,
+          name: row.name,
+          hourlyRate: row.hourly_rate,
+          description: row.description,
+          createdAt: row.created_at
+        }));
+        
+        res.json(formattedRows);
+      });
+    });
+
+    // Löschen eines Preiseintrags
+    app.delete('/api/admin/prices/:id', (req, res) => {
+      const id = req.params.id;
+      
+      // Zuerst überprüfen, ob der Preis existiert
+      db.get('SELECT * FROM admin_prices WHERE id = ?', [id], (err, row) => {
+        if (err) {
+          console.error('Fehler bei der Suche nach dem Preiseintrag:', err);
+          return res.status(500).json({ error: 'Datenbankfehler' });
+        }
+        
+        if (!row) {
+          return res.status(404).json({ error: 'Preiseintrag nicht gefunden' });
+        }
+        
+        // Preiseintrag löschen
+        db.run('DELETE FROM admin_prices WHERE id = ?', [id], function(err) {
+          if (err) {
+            console.error('Fehler beim Löschen des Preiseintrags:', err);
+            return res.status(500).json({ error: 'Fehler beim Löschen des Eintrags' });
+          }
+          
+          if (this.changes === 0) {
+            return res.status(404).json({ error: 'Preiseintrag konnte nicht gelöscht werden' });
+          }
+          
+          return res.status(200).json({ 
+            success: true, 
+            message: 'Preiseintrag erfolgreich gelöscht',
+            id: id
+          });
+        });
+      });
     });
 
 const PORT = process.env.PORT || 3001;

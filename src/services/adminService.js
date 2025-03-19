@@ -159,5 +159,36 @@ export const adminService = {
       console.error('Error checking if price exists:', error);
       return false; // Assume it doesn't exist if there's an error
     }
+  },
+
+  async getEmployeeTypes() {
+    try {
+      const response = await axios.get(`${API_URL}/admin/employee-types`, getAuthHeaders());
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('Error fetching employee types:', error);
+      return [];
+    }
+  },
+
+  // Füge Methode zum Löschen eines Preiseintrags hinzu
+  async deletePrice(priceId) {
+    try {
+      const response = await fetch(`${API_URL}/admin/prices/${priceId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Fehler beim Löschen des Preiseintrags:', error);
+      throw error;
+    }
   }
 };

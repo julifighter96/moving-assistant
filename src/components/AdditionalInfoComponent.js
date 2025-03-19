@@ -1,7 +1,24 @@
 import React, { useState, useCallback } from 'react';
-import { Package, Truck, Home, Clock } from 'lucide-react';
+import { Package, Truck, Home, Clock, MapPin } from 'lucide-react';
 
 const INITIAL_ADDITIONAL_INFO = [
+  {
+    category: 'Adressinformationen',
+    fields: [
+      {
+        name: 'Abholadresse',
+        apiKey: 'pickupAddress',
+        type: 'text',
+        value: ''
+      },
+      {
+        name: 'Lieferadresse',
+        apiKey: 'deliveryAddress',
+        type: 'text',
+        value: ''
+      }
+    ]
+  },
   {
     category: 'Umzugstechnische Details',
     fields: [
@@ -63,6 +80,7 @@ const INITIAL_ADDITIONAL_INFO = [
 ];
 
 const CategoryIcons = {
+  'Adressinformationen': MapPin,
   'Umzugstechnische Details': Truck,
   'Packmaterialien': Package,
   'Umgebungsbedingungen': Home,
@@ -107,10 +125,36 @@ const AdditionalInfoComponent = ({ onComplete }) => {
 
   const handleSubmit = useCallback(() => {
     const flattenedInfo = additionalInfo.flatMap(category => category.fields);
+    
+    const pickupAddressField = flattenedInfo.find(field => field.apiKey === 'pickupAddress');
+    const deliveryAddressField = flattenedInfo.find(field => field.apiKey === 'deliveryAddress');
+    
+    console.log("Adressdaten werden gespeichert:", {
+      pickupAddress: pickupAddressField?.value || '',
+      deliveryAddress: deliveryAddressField?.value || ''
+    });
+    
     onComplete(flattenedInfo);
   }, [additionalInfo, onComplete]);
 
   const renderField = useCallback((field, categoryIndex, fieldIndex) => {
+    if (field.type === 'text') {
+      return (
+        <div className="mb-4">
+          <label className="block mb-2 font-medium text-gray-700">
+            {field.name}
+          </label>
+          <input
+            type="text"
+            value={field.value}
+            onChange={(e) => handleInfoChange(categoryIndex, fieldIndex, e.target.value)}
+            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+            placeholder={field.name}
+          />
+        </div>
+      );
+    }
+
     if (field.type === 'select') {
       return (
         <div className="mb-4">

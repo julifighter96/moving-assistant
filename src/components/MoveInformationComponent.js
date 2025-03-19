@@ -54,13 +54,28 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
          } else if (field.type === 'number' && dealData[field.apiKey]) {
            initialInfo[field.apiKey] = parseInt(dealData[field.apiKey], 10);
          } else if (field.type === 'multiselect') {
-           // Ensure we have an array for multiselect fields
            initialInfo[field.apiKey] = Array.isArray(dealData[field.apiKey]) ? dealData[field.apiKey] : [];
          } else {
            initialInfo[field.apiKey] = dealData[field.apiKey] || '';
          }
        });
        setMoveInfo(initialInfo);
+       
+       // Speichere Adressen im SessionStorage für andere Komponenten
+       const pickupAddress = dealData['07c3da8804f7b96210e45474fba35b8691211ddd'];
+       const deliveryAddress = dealData['9cb4de1018ec8404feeaaaf7ee9b293c78c44281'];
+       
+       if (pickupAddress || deliveryAddress) {
+         try {
+           console.log("Speichere Adressen im SessionStorage:", { origin: pickupAddress, destination: deliveryAddress });
+           sessionStorage.setItem('movingAddresses', JSON.stringify({
+             origin: pickupAddress || '',
+             destination: deliveryAddress || ''
+           }));
+         } catch (e) {
+           console.error("Fehler beim Speichern der Adressen im SessionStorage:", e);
+         }
+       }
      } catch (err) {
        console.error('Error fetching deal data:', err);
        setError('Fehler beim Laden der Daten. Bitte versuchen Sie es erneut.');
@@ -124,6 +139,18 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
 
      if (!response || response.success === false) {
        throw new Error(response?.message || 'Failed to update deal');
+     }
+
+     // Speichere aktuelle Adressen im SessionStorage
+     const pickupAddress = moveInfo['07c3da8804f7b96210e45474fba35b8691211ddd'];
+     const deliveryAddress = moveInfo['9cb4de1018ec8404feeaaaf7ee9b293c78c44281'];
+     
+     if (pickupAddress || deliveryAddress) {
+       console.log("Aktualisiere Adressen im SessionStorage:", { origin: pickupAddress, destination: deliveryAddress });
+       sessionStorage.setItem('movingAddresses', JSON.stringify({
+         origin: pickupAddress || '',
+         destination: deliveryAddress || ''
+       }));
      }
 
      onComplete(response);

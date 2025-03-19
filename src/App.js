@@ -17,6 +17,7 @@ import AdminPanel from './components/AdminPanel';
 import InspectionOverview from './components/InspectionOverview';
 import MovingTruckSimulator, { TRUCK_DIMENSIONS, autoPackItems } from './components/MovingTruckSimulator';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import MovingCalculation from './components/MovingCalculation';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -74,6 +75,7 @@ const STEPS = [
   { label: 'Umzugsinformationen', status: 'pending' },
   { label: 'Räume & Gegenstände', status: 'pending' },
   { label: 'Zusätzliche Details', status: 'pending' },
+  { label: 'Umzugsberechnung', status: 'pending' },
   { label: 'Angebot erstellen', status: 'pending' },
   { label: 'Beladungssimulation', status: 'pending' },
   { label: 'Administration', status: 'pending', id: 'admin' }
@@ -233,6 +235,13 @@ function App() {
   const [volumeReductions, setVolumeReductions] = useState({});
   
   const { user } = useAuth();
+
+  const [calculationData, setCalculationData] = useState({
+    totalVolume: 0,
+    packingTime: 0,
+    unpackingTime: 0,
+    totalDuration: 0
+  });
 
   useEffect(() => {
     const loadConfiguration = async () => {
@@ -801,22 +810,47 @@ function App() {
               {currentStep === 4 && (
                 <div className="bg-white rounded-lg shadow-sm">
                   <div className="p-6 border-b border-gray-200">
-                    <h2 className="text-xl font-semibold">Angebot erstellen</h2>
-                    <p className="text-gray-500 mt-1">Überprüfen und finalisieren Sie das Angebot</p>
+                    <h2 className="text-xl font-semibold">Umzugsberechnung</h2>
+                    <p className="text-gray-500 mt-1">Volumen und Zeitaufwand für den Umzug</p>
                   </div>
                   <div className="p-6">
-                    <OfferComponent 
-                        inspectionData={{ rooms: roomsData, additionalInfo, moveInfo }}
-                        dealId={selectedDealId}
-                        onComplete={handleOfferComplete}
-                        setCurrentStep={setCurrentStep}
-                        volumeReductions={volumeReductions}
-                        onVolumeReductionChange={handleVolumeReductionChange}
+                    <MovingCalculation 
+                      roomsData={roomsData}
+                      additionalInfo={additionalInfo}
+                      onComplete={(calculationData) => {
+                        // Speichere die berechneten Daten
+                        setCalculationData(calculationData);
+                        // Gehe zum nächsten Schritt
+                        setCurrentStep(5);
+                      }}
                     />
                   </div>
                 </div>
               )}
 {currentStep === 5 && (
+  <div className="bg-white rounded-lg shadow-sm">
+    <div className="p-6 border-b border-gray-200">
+      <h2 className="text-xl font-semibold">Angebot erstellen</h2>
+      <p className="text-gray-500 mt-1">Überprüfen und finalisieren Sie das Angebot</p>
+    </div>
+    <div className="p-6">
+      <OfferComponent 
+        inspectionData={{ 
+          rooms: roomsData, 
+          additionalInfo, 
+          moveInfo,
+          calculationData // Füge die berechneten Daten hinzu
+        }}
+        dealId={selectedDealId}
+        onComplete={handleOfferComplete}
+        setCurrentStep={setCurrentStep}
+        volumeReductions={volumeReductions}
+        onVolumeReductionChange={handleVolumeReductionChange}
+      />
+    </div>
+  </div>
+)}
+{currentStep === 6 && (
   <div className="bg-white rounded-lg shadow-sm">
     <div className="p-6 border-b border-gray-200">
       <h2 className="text-xl font-semibold">3D Beladungssimulation</h2>

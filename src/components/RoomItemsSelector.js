@@ -17,7 +17,9 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
     width: 0, 
     length: 0, 
     height: 0,
-    weight: 0  // Add weight field
+    weight: 0,  // Add weight field
+    setupTime: 0,
+    dismantleTime: 0
   });
   const [searchResults, setSearchResults] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -165,7 +167,9 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
         height: 0,
         weight: 0,
         demontiert: false, 
-        duebelarbeiten: false 
+        duebelarbeiten: false,
+        setupTime: 0,
+        dismantleTime: 0
       });
     }
   }, [items, newItem, onAddItem]);
@@ -206,13 +210,17 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
   };
 
   // Handle item selection from suggestions
-  const handleSelectSuggestion = (selectedItem) => {
+  const handleSelectSuggestion = (suggestion) => {
     setNewItem({
-      ...selectedItem,
-      quantity: 0
+      ...newItem,
+      name: suggestion.name,
+      width: parseFloat(suggestion.width) || 0,
+      length: parseFloat(suggestion.length) || 0,
+      height: parseFloat(suggestion.height) || 0,
+      setupTime: parseInt(suggestion.setupTime) || 0,
+      dismantleTime: parseInt(suggestion.dismantleTime) || 0,
     });
     setShowSuggestions(false);
-    setSearchResults([]);
   };
 
   const renderItemList = useCallback((itemList, stateUpdater, showVolume = false) => {

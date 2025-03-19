@@ -1053,6 +1053,19 @@ Antworte im folgenden JSON-Format:
       res.sendFile(path.join(__dirname, '..', 'build', 'index.html'));
     });
 
+    // Update the service worker endpoint to properly serve the file
+    app.get('/service-worker.js', (req, res) => {
+      res.set('Content-Type', 'application/javascript');
+      res.set('Service-Worker-Allowed', '/');
+      res.sendFile(path.join(__dirname, '..', 'build', 'service-worker.js'));
+    });
+
+    // Similarly for manifest.json
+    app.get('/manifest.json', (req, res) => {
+      res.set('Content-Type', 'application/manifest+json');
+      res.sendFile(path.join(__dirname, '..', 'build', 'manifest.json'));
+    });
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);

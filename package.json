@@ -35,7 +35,9 @@
     "build": "env-cmd -f .env.production react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "deploy": "deploy.bat"
+    "deploy": "deploy.bat",
+    "prepare-icons": "npm install --no-save sharp && node src/copyLogos.js",
+    "prebuild": "npm run prepare-icons"
   },
   "eslintConfig": {
     "extends": [

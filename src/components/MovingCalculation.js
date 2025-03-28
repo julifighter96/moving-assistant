@@ -561,48 +561,48 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-center text-gray-900">
+    <div className="w-full">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        <div className="p-6 pb-4 border-b border-gray-100">
+          <h2 className="text-2xl font-bold text-center text-gray-800">
             Umzugsberechnung
           </h2>
         </div>
         
-        <div className="p-6">
+        <div className="p-4 lg:p-6">
           {loading ? (
-            <div className="text-center py-20">
-              <div className="animate-spin h-10 w-10 mb-4 mx-auto border-4 border-primary border-t-transparent rounded-full"></div>
-              <p className="text-gray-600">Berechne Umzugsdetails...</p>
+            <div className="text-center py-24">
+              <div className="animate-spin h-12 w-12 mb-6 mx-auto border-4 border-primary border-t-transparent rounded-full"></div>
+              <p className="text-gray-600 text-lg">Berechne Umzugsdetails...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Linke Spalte: Umzugsdetails und Fahrtzeit */}
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {/* 1. Umzugsvolumen */}
-                <div className="bg-white shadow rounded-lg p-5 border border-gray-100">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                    <Package className="h-5 w-5 text-primary mr-2" />
+                <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <Package className="h-5 w-5 text-primary mr-3" />
                     Umzugsvolumen
                   </h3>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">Gesamtvolumen</span>
-                      <span>{totalVolume.toFixed(2)} m³</span>
+                  <div className="bg-gray-50 p-5 rounded-lg">
+                    <div className="flex justify-between items-center py-2">
+                      <span className="font-medium text-gray-700">Gesamtvolumen</span>
+                      <span className="text-lg font-semibold text-primary">{totalVolume.toFixed(2)} m³</span>
                     </div>
                   </div>
                 </div>
                 
                 {/* 2. Adresseingabe und Fahrtzeit */}
-                <div className="bg-white shadow rounded-lg p-5 border border-gray-100">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                    <Truck className="h-5 w-5 text-primary mr-2" />
+                <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <Truck className="h-5 w-5 text-primary mr-3" />
                     Transportdetails
                   </h3>
-                  <div className="flex flex-col gap-4">
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
                           Start-Adresse
                         </label>
                         <input
@@ -610,7 +610,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                           type="text"
                           value={locations.origin}
                           onChange={(e) => setLocations(prev => ({...prev, origin: e.target.value}))}
-                          className="w-full p-2 border rounded-md"
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
                           placeholder="Beladeadresse..."
                           ref={(input) => {
                             if (input && !input.getAttribute('data-autocomplete-initialized') && window.google) {
@@ -630,7 +630,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
                           Ziel-Adresse
                         </label>
                         <input
@@ -638,7 +638,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                           type="text"
                           value={locations.destination}
                           onChange={(e) => setLocations(prev => ({...prev, destination: e.target.value}))}
-                          className="w-full p-2 border rounded-md"
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
                           placeholder="Entladeadresse..."
                           ref={(input) => {
                             if (input && !input.getAttribute('data-autocomplete-initialized') && window.google) {
@@ -660,56 +660,56 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                     </div>
 
                     {isCalculatingRoute ? (
-                      <div className="flex items-center justify-center py-2">
+                      <div className="flex items-center justify-center py-4 bg-gray-50 rounded-lg">
                         <div className="animate-spin h-5 w-5 mr-2 border-2 border-primary border-t-transparent rounded-full"></div>
                         <span>Berechne Route...</span>
                       </div>
                     ) : routeDetails ? (
-                      <div className="bg-white p-4 rounded-md shadow-sm border border-gray-100">
-                        <h4 className="font-medium mb-3">Komplette Routenplanung:</h4>
+                      <div className="bg-gray-50 p-5 rounded-lg">
+                        <h4 className="font-medium mb-4 text-gray-800">Komplette Routenplanung:</h4>
                         
-                        <div className="text-sm space-y-3">
-                          <div className="flex items-start">
-                            <div className="bg-gray-200 text-gray-700 rounded-full h-6 w-6 flex items-center justify-center mr-3 mt-0.5">1</div>
+                        <div className="space-y-5">
+                          <div className="flex items-start bg-white p-3 rounded-lg shadow-sm">
+                            <div className="bg-primary text-white rounded-full h-7 w-7 flex items-center justify-center mr-3 mt-0.5 flex-shrink-0">1</div>
                             <div className="flex-1">
-                              <p className="font-medium">Office → Beladeadresse</p>
-                              <p className="text-gray-600">{routeDetails.segments[0].distance} • {routeDetails.segments[0].duration}</p>
+                              <p className="font-medium text-gray-800">Office → Beladeadresse</p>
+                              <p className="text-gray-600 mt-1">{routeDetails.segments[0].distance} • {routeDetails.segments[0].duration}</p>
                               <p className="text-xs text-gray-500">{OFFICE_ADDRESS} → {locations.origin}</p>
                             </div>
                           </div>
                           
-                          <div className="flex items-start">
-                            <div className="bg-gray-200 text-gray-700 rounded-full h-6 w-6 flex items-center justify-center mr-3 mt-0.5">2</div>
+                          <div className="flex items-start bg-white p-3 rounded-lg shadow-sm">
+                            <div className="bg-primary text-white rounded-full h-7 w-7 flex items-center justify-center mr-3 mt-0.5 flex-shrink-0">2</div>
                             <div className="flex-1">
-                              <p className="font-medium">Beladeadresse → Entladeadresse</p>
-                              <p className="text-gray-600">{routeDetails.segments[1].distance} • {routeDetails.segments[1].duration}</p>
+                              <p className="font-medium text-gray-800">Beladeadresse → Entladeadresse</p>
+                              <p className="text-gray-600 mt-1">{routeDetails.segments[1].distance} • {routeDetails.segments[1].duration}</p>
                               <p className="text-xs text-gray-500">{locations.origin} → {locations.destination}</p>
                             </div>
                           </div>
                           
-                          <div className="flex items-start">
-                            <div className="bg-gray-200 text-gray-700 rounded-full h-6 w-6 flex items-center justify-center mr-3 mt-0.5">3</div>
+                          <div className="flex items-start bg-white p-3 rounded-lg shadow-sm">
+                            <div className="bg-primary text-white rounded-full h-7 w-7 flex items-center justify-center mr-3 mt-0.5 flex-shrink-0">3</div>
                             <div className="flex-1">
-                              <p className="font-medium">Entladeadresse → Office</p>
-                              <p className="text-gray-600">{routeDetails.segments[2].distance} • {routeDetails.segments[2].duration}</p>
+                              <p className="font-medium text-gray-800">Entladeadresse → Office</p>
+                              <p className="text-gray-600 mt-1">{routeDetails.segments[2].distance} • {routeDetails.segments[2].duration}</p>
                               <p className="text-xs text-gray-500">{locations.destination} → {OFFICE_ADDRESS}</p>
                             </div>
                           </div>
                           
-                          <div className="mt-4 pt-3 border-t border-gray-200">
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium">Gesamtstrecke:</span>
-                              <span className="font-bold">{routeDetails.distance}</span>
+                          <div className="mt-4 pt-4 border-t border-gray-200 bg-white p-4 rounded-lg shadow-sm">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="font-medium text-gray-700">Gesamtstrecke:</span>
+                              <span className="font-bold text-primary">{routeDetails.distance}</span>
                             </div>
-                            <div className="flex justify-between items-center mt-1">
-                              <span className="font-medium">Gesamtfahrzeit:</span>
-                              <span className="font-bold">{routeDetails.duration}</span>
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-gray-700">Gesamtfahrzeit:</span>
+                              <span className="font-bold text-primary">{routeDetails.duration}</span>
                             </div>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-4 text-gray-500">
+                      <div className="text-center py-6 bg-gray-50 rounded-lg text-gray-500">
                         {locations.origin && locations.destination ? 
                           "Route wird berechnet..." : 
                           "Bitte geben Sie die Belade- und Entladeadresse ein"}
@@ -719,67 +719,67 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                 </div>
                 
                 {/* 3. Zeitaufwand */}
-                <div className="bg-white shadow rounded-lg p-5 border border-gray-100">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                    <Clock className="h-5 w-5 text-primary mr-2" />
+                <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <Clock className="h-5 w-5 text-primary mr-3" />
                     Zeitaufwand
                   </h3>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                      <span>Aufbauzeit</span>
-                      <span>{packingTime} Minuten</span>
+                  <div className="bg-gray-50 p-5 rounded-lg">
+                    <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                      <span className="text-gray-700">Aufbauzeit</span>
+                      <span className="font-medium">{packingTime} Minuten</span>
                     </div>
-                    <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                      <span>Abbauzeit</span>
-                      <span>{unpackingTime} Minuten</span>
+                    <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                      <span className="text-gray-700">Abbauzeit</span>
+                      <span className="font-medium">{unpackingTime} Minuten</span>
                     </div>
-                    <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                      <span>Ladezeit</span>
-                      <span>{loadingTime} Minuten</span>
+                    <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                      <span className="text-gray-700">Ladezeit</span>
+                      <span className="font-medium">{loadingTime} Minuten</span>
                     </div>
                     {routeDetails && (
-                      <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                        <span>Fahrtzeit (Hin & Rück)</span>
-                        <span>{Math.round(routeDetails.durationMinutes)} Minuten</span>
+                      <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                        <span className="text-gray-700">Fahrtzeit (Hin & Rück)</span>
+                        <span className="font-medium">{Math.round(routeDetails.durationMinutes)} Minuten</span>
                       </div>
                     )}
-                    <div className="flex justify-between items-center py-2 mt-2 font-bold">
-                      <span>Gesamtzeit</span>
-                      <span>{totalDuration} Minuten</span>
+                    <div className="flex justify-between items-center py-3 mt-1 bg-white rounded-lg p-3 shadow-sm">
+                      <span className="font-semibold text-gray-800">Gesamtzeit</span>
+                      <span className="font-bold text-lg text-primary">{totalDuration} Minuten</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Packmaterialien */}
-                <div className="bg-white shadow rounded-lg p-5 border border-gray-100">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                    <Package className="h-5 w-5 text-primary mr-2" />
+                <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <Package className="h-5 w-5 text-primary mr-3" />
                     Packmaterialien
                   </h3>
                   
                   {Object.entries(packMaterials).length > 0 ? (
-                    <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="bg-gray-50 p-5 rounded-lg">
                       {Object.entries(packMaterials).map(([name, quantity]) => (
-                        <div key={name} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
+                        <div key={name} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-0">
                           <div>
-                            <span>{name}</span>
+                            <span className="text-gray-700">{name}</span>
                             {materialPrices[name] ? (
                               <p className="text-sm text-gray-500">
                                 à {materialPrices[name].toFixed(2)}€
                               </p>
                             ) : null}
                           </div>
-                          <span className="font-medium">{quantity}x</span>
+                          <span className="font-semibold">{quantity}x</span>
                         </div>
                       ))}
                       
-                      <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-300">
-                        <span className="font-medium">Materialkosten:</span>
-                        <span className="font-bold">{materialCosts.toFixed(2)}€</span>
+                      <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-300 bg-white rounded-lg p-3 shadow-sm">
+                        <span className="font-semibold text-gray-800">Materialkosten:</span>
+                        <span className="font-bold text-primary">{materialCosts.toFixed(2)}€</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-gray-50 p-4 rounded-lg text-center text-gray-500">
+                    <div className="bg-gray-50 p-6 rounded-lg text-center text-gray-500">
                       Keine Packmaterialien ausgewählt
                     </div>
                   )}
@@ -787,20 +787,20 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
               </div>
               
               {/* Rechte Spalte: Personalkosten und Gesamtkosten */}
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {/* 4. Personalaufwand */}
-                <div className="bg-white shadow rounded-lg p-5 border border-gray-100">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                    <Users className="h-5 w-5 text-primary mr-2" />
+                <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <Users className="h-5 w-5 text-primary mr-3" />
                     Personalaufwand
                   </h3>
                   
-                  <h4 className="font-medium mb-3 text-gray-700">Team Zusammenstellung</h4>
-                  <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="font-medium mb-4 text-gray-700">Team Zusammenstellung</h4>
+                  <div className="bg-gray-50 p-5 rounded-lg">
                     {employeeTypes.map(type => (
-                      <div key={type.id} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
+                      <div key={type.id} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-0">
                         <div>
-                          <span className="font-medium">{type.name}</span>
+                          <span className="font-medium text-gray-800">{type.name}</span>
                           <p className="text-sm text-gray-500">
                             Stundensatz: {type.price.toFixed(2)}€/h
                           </p>
@@ -808,14 +808,14 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                         <div className="flex items-center">
                           <button 
                             onClick={() => handleEmployeeChange(type.id, -1)}
-                            className="p-1 rounded-md bg-gray-200 hover:bg-gray-300"
+                            className="p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
                           >
                             <Minus size={16} />
                           </button>
-                          <span className="mx-3 w-8 text-center">{selectedEmployees[type.id] || 0}</span>
+                          <span className="mx-3 w-8 text-center font-semibold">{selectedEmployees[type.id] || 0}</span>
                           <button 
                             onClick={() => handleEmployeeChange(type.id, 1)}
-                            className="p-1 rounded-md bg-gray-200 hover:bg-gray-300"
+                            className="p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
                           >
                             <Plus size={16} />
                           </button>
@@ -823,14 +823,14 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                       </div>
                     ))}
                     
-                    <div className="flex justify-between items-center mt-4 pt-2 border-t border-gray-300">
-                      <div className="flex items-center">
+                    <div className="flex justify-between items-center mt-5 pt-3 border-t border-gray-300 bg-white p-4 rounded-lg shadow-sm">
+                      <div className="flex items-center text-gray-800">
                         <Users className="mr-2 h-5 w-5 text-primary" />
-                        <span className="font-medium">Gesamtteam</span>
+                        <span className="font-semibold">Gesamtteam</span>
                       </div>
                       <div>
-                        <span className="font-bold">{getTotalEmployees()} Personen</span>
-                        <span className="ml-2 text-sm text-gray-500">
+                        <span className="font-bold text-primary">{getTotalEmployees()} Personen</span>
+                        <span className="ml-2 text-sm text-gray-600">
                           (~{getTimePerEmployee()} Min./Person)
                         </span>
                       </div>
@@ -839,63 +839,54 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                 </div>
                 
                 {/* 5. Kostenrechnung */}
-                <div className="bg-white shadow rounded-lg p-5 border border-gray-100">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-primary mr-3" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.736 6.979a1 1 0 10-1.472 1.342L8.6 9.979 6.5 12.088a1 1 0 101.414 1.414L10 11.414l2.086 2.088a1 1 0 001.414-1.414l-2.086-2.088 1.336-1.658a1 1 0 10-1.472-1.342L9.414 8.979l-1.658-1.658a.997.997 0 00-.02-.02z" clipRule="evenodd" />
                     </svg>
                     Kostenübersicht
                   </h3>
-                  <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="bg-gray-50 p-5 rounded-lg">
                     {employeeTypes.map(type => {
                       const typeData = laborCosts.byType[type.id] || { count: 0, hourlyRate: 0, hours: 0, cost: 0 };
                       if (typeData.count === 0) return null;
                       
                       return (
-                        <div key={`cost-${type.id}`} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
+                        <div key={`cost-${type.id}`} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-0">
                           <div>
-                            <span className="font-medium">{type.name}</span>
+                            <span className="font-medium text-gray-800">{type.name}</span>
                             <p className="text-sm text-gray-500">
                               {typeData.count} × {typeData.hourlyRate.toFixed(2)}€/h × {typeData.hours.toFixed(1)}h
                             </p>
                           </div>
-                          <div className="font-bold text-right">
+                          <div className="font-bold text-right text-gray-800">
                             {typeData.cost.toFixed(2)}€
                           </div>
                         </div>
                       );
                     })}
                     
-                    <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                      <span className="font-medium">Personalkosten</span>
-                      <span>{laborCosts.total.toFixed(2)}€</span>
+                    <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                      <span className="font-medium text-gray-700">Personalkosten</span>
+                      <span className="font-semibold">{laborCosts.total.toFixed(2)}€</span>
                     </div>
 
                     {materialCosts > 0 && (
-                      <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                        <span className="font-medium">Materialkosten</span>
-                        <span>{materialCosts.toFixed(2)}€</span>
+                      <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                        <span className="font-medium text-gray-700">Materialkosten</span>
+                        <span className="font-semibold">{materialCosts.toFixed(2)}€</span>
                       </div>
                     )}
 
-                    <div className="flex justify-between items-center py-2 mt-2 font-bold">
-                      <span>Gesamtpreis</span>
-                      <span className="text-lg">{(laborCosts.total + materialCosts).toFixed(2)}€</span>
+                    <div className="flex justify-between items-center py-4 mt-3 bg-primary bg-opacity-10 rounded-lg p-4">
+                      <span className="font-bold text-gray-900">Gesamtpreis</span>
+                      <span className="text-xl font-bold text-primary">{(laborCosts.total + materialCosts).toFixed(2)}€</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
-          
-          <div className="mt-8 flex justify-end">
-            <button
-              onClick={handleContinue}
-              className="bg-primary text-white px-6 py-3 rounded-md hover:bg-primary-dark font-medium"
-            >
-              Weiter zum Angebot
-            </button>
-          </div>
         </div>
       </div>
     </div>

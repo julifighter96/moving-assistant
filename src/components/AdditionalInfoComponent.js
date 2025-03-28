@@ -3,23 +3,6 @@ import { Package, Truck, Home, Clock, MapPin } from 'lucide-react';
 
 const INITIAL_ADDITIONAL_INFO = [
   {
-    category: 'Adressinformationen',
-    fields: [
-      {
-        name: 'Abholadresse',
-        apiKey: 'pickupAddress',
-        type: 'text',
-        value: ''
-      },
-      {
-        name: 'Lieferadresse',
-        apiKey: 'deliveryAddress',
-        type: 'text',
-        value: ''
-      }
-    ]
-  },
-  {
     category: 'Umzugstechnische Details',
     fields: [
       { name: 'Möbellift', apiKey: '705d07fa2683d46703fdaa8a8dea0b82dcc48e47', options: ['B', 'E', 'Z'], value: [], multiple: true },
@@ -80,10 +63,9 @@ const INITIAL_ADDITIONAL_INFO = [
 ];
 
 const CategoryIcons = {
-  'Adressinformationen': MapPin,
   'Umzugstechnische Details': Truck,
   'Packmaterialien': Package,
-  'Umgebungsbedingungen': Home,
+  'Umgebungsbedingungen': MapPin,
   'Zusätzliche Dienstleistungen': Clock
 };
 
@@ -126,13 +108,7 @@ const AdditionalInfoComponent = ({ onComplete }) => {
   const handleSubmit = useCallback(() => {
     const flattenedInfo = additionalInfo.flatMap(category => category.fields);
     
-    const pickupAddressField = flattenedInfo.find(field => field.apiKey === 'pickupAddress');
-    const deliveryAddressField = flattenedInfo.find(field => field.apiKey === 'deliveryAddress');
-    
-    console.log("Adressdaten werden gespeichert:", {
-      pickupAddress: pickupAddressField?.value || '',
-      deliveryAddress: deliveryAddressField?.value || ''
-    });
+    console.log("Zusätzliche Informationen werden gespeichert:", flattenedInfo);
     
     onComplete(flattenedInfo);
   }, [additionalInfo, onComplete]);

@@ -27,12 +27,39 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
 
   Object.values(inspectionData.rooms || {}).forEach(room => {
     room.items.forEach(item => {
+      // Debug-Ausgabe für Service-Flags
+      console.log(`Item ${item.name} Services:`, {
+        demontiert: !!item.demontiert,
+        remontiert: !!item.remontiert,
+        duebelarbeiten: !!item.duebelarbeiten,
+        elektro: !!item.elektro
+      });
+      
       if (!combinedData.items[item.name]) {
-        combinedData.items[item.name] = { ...item, quantity: 0 };
+        // Stelle sicher, dass alle Service-Flags übernommen werden
+        combinedData.items[item.name] = { 
+          ...item, 
+          quantity: 0,
+          demontiert: !!item.demontiert,
+          remontiert: !!item.remontiert,
+          duebelarbeiten: !!item.duebelarbeiten,
+          elektro: !!item.elektro
+        };
       }
+      // Update Service-Flags auch bei bestehenden Items
+      else {
+        combinedData.items[item.name].demontiert = combinedData.items[item.name].demontiert || !!item.demontiert;
+        combinedData.items[item.name].remontiert = combinedData.items[item.name].remontiert || !!item.remontiert;
+        combinedData.items[item.name].duebelarbeiten = combinedData.items[item.name].duebelarbeiten || !!item.duebelarbeiten;
+        combinedData.items[item.name].elektro = combinedData.items[item.name].elektro || !!item.elektro;
+      }
+
       combinedData.items[item.name].quantity += item.quantity;
       if (item.demontiert) combinedData.demontageCount += item.quantity;
       if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
+      // Zähle auch remontiert und elektro
+      if (item.remontiert) combinedData.remontiertCount = (combinedData.remontiertCount || 0) + item.quantity;
+      if (item.elektro) combinedData.elektroCount = (combinedData.elektroCount || 0) + item.quantity;
       
       // Berechne das Volumen OHNE Reduktion
       const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
@@ -340,7 +367,7 @@ ${inspectionData.additionalInfo
                     <div className="flex justify-between items-center">
                       <div>
                         <span className="font-medium text-gray-900">{name}</span>
-                        {(item.demontiert || item.duebelarbeiten) && (
+                        {(item.demontiert || item.duebelarbeiten || item.remontiert || item.elektro) && (
                           <div className="mt-1 flex gap-2">
                             {item.demontiert && (
                               <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">
@@ -350,6 +377,16 @@ ${inspectionData.additionalInfo
                             {item.duebelarbeiten && (
                               <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">
                                 Dübelarbeiten
+                              </span>
+                            )}
+                            {item.remontiert && (
+                              <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                                Remontiert
+                              </span>
+                            )}
+                            {item.elektro && (
+                              <span className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded-full">
+                                Elektro
                               </span>
                             )}
                           </div>

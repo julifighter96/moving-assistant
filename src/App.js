@@ -189,8 +189,8 @@ const StepNavigation = ({ currentStep, totalSteps, onStepChange }) => {
           {currentStep === 1 && "Umzugsinformationen"}
           {currentStep === 2 && "Räume & Gegenstände"}
           {currentStep === 3 && "Zusätzliche Informationen"}
-          {currentStep === 4 && "Angebot erstellen"}
-          {currentStep === 5 && "Beladungssimulation"}
+          {currentStep === 4 && "Umzugsberechnung"}
+          {currentStep === 5 && "Angebot erstellen"}
         </span>
       </div>
       <button 
@@ -564,6 +564,16 @@ function App() {
     return allItems;
   }, [roomsData]);
 
+  // Navigation für den nächsten Schritt
+  const goToNextStep = () => {
+    setCurrentStep(prevStep => Math.min(7, prevStep + 1)); // Verhindert Überschreitung der max Schritte
+  };
+
+  // Navigation für den vorherigen Schritt
+  const goToPreviousStep = () => {
+    setCurrentStep(prevStep => Math.max(1, prevStep - 1));
+  };
+
   return (
     <LoginWrapper>
     <div className="min-h-screen bg-neutral-50">
@@ -627,7 +637,7 @@ function App() {
           {/* Back/Forward Controls - nur anzeigen, wenn weder admin noch route aktiv ist */}
           {currentStep !== 'admin' && currentStep !== 'route-planner' && (
             <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex justify-between items-center">
-              <button 
+              <button
                 onClick={() => handleStepChange(currentStep - 1)} 
                 disabled={currentStep === 0}
                 className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
@@ -636,24 +646,27 @@ function App() {
               </button>
               <div className="flex flex-col items-center">
                 <span className="text-lg font-medium">
-                  {currentStep === 4 ? 'Angebot erstellen' :
-                   currentStep === 5 ? 'Beladungssimulation' :
+                  {currentStep === 4 ? 'Umzugsberechnung' :
+                   currentStep === 5 ? 'Angebot erstellen' :
+                   currentStep === 6 ? 'Beladungssimulation' :
                    `Schritt ${currentStep + 1} von ${STEPS.length - 1}`}
                 </span>
                 <span className="text-sm text-gray-500">
-                  {currentStep === 4 ? 'Überprüfen und finalisieren Sie das Angebot' :
-                   currentStep === 5 ? 'Planen Sie die optimale Beladung des Umzugswagens' :
+                  {currentStep === 4 ? 'Volumen und Zeitaufwand für den Umzug' :
+                   currentStep === 5 ? 'Überprüfen und finalisieren Sie das Angebot' :
+                   currentStep === 6 ? 'Planen Sie die optimale Beladung des Umzugswagens' :
                    STEPS.find(step => step.id === currentStep)?.label}
                 </span>
               </div>
-              <button 
-                onClick={() => handleStepChange(currentStep + 1)} 
-                disabled={currentStep === STEPS.length - 2 || currentStep === 'admin' || currentStep === 4 || currentStep === 5}
-                className={`h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px] ${
-                  currentStep === 4 || currentStep === 5 ? 'invisible' : ''
-                }`}
+              <button
+                onClick={goToNextStep}
+                disabled={currentStep === STEPS.length - 2 || currentStep === 'admin'}
+                className="h-12 px-6 bg-primary text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed text-lg flex items-center justify-center min-w-[120px]"
               >
-                Weiter
+                {currentStep === 3 ? 'Zur Berechnung' : 
+                 currentStep === 4 ? 'Zum Angebot' : 
+                 currentStep === 5 ? 'Zur Beladung' : 
+                 currentStep === 6 ? 'Abschließen' : 'Weiter'}
               </button>
             </div>
           )}
@@ -817,12 +830,7 @@ function App() {
                     <MovingCalculation 
                       roomsData={roomsData}
                       additionalInfo={additionalInfo}
-                      onComplete={(calculationData) => {
-                        // Speichere die berechneten Daten
-                        setCalculationData(calculationData);
-                        // Gehe zum nächsten Schritt
-                        setCurrentStep(5);
-                      }}
+                      onComplete={goToNextStep}
                     />
                   </div>
                 </div>

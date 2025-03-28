@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import RoomPhotoCapture from './RoomPhotoCapture';
 import { adminService } from '../services/adminService';
+import { Info, ChevronDown } from 'lucide-react';
 
 const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, allExistingItems = [] }) => {
   const [items, setItems] = useState(initialData.items || []);
@@ -24,6 +25,9 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
   const [searchResults, setSearchResults] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [prices, setPrices] = useState([]);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [detailedItem, setDetailedItem] = useState(null);
+  const [openServiceDropdown, setOpenServiceDropdown] = useState(null);
 
   useEffect(() => {
     const loadPrices = async () => {
@@ -150,6 +154,7 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
       const newItems = prevItems.map((item, i) => 
         i === index ? { ...item, [field]: !item[field] } : item
       );
+      console.log(`Service "${field}" for item at index ${index} changed to: ${!prevItems[index][field]}`);
       return newItems;
     });
   }, []);
@@ -243,128 +248,140 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
           const priceConfig = isPackagingMaterial(itemName) ? prices?.find(p => p.name === itemName) : null;
   
           return (
-            <div key={itemName + index} className="flex items-center justify-between p-4 bg-white rounded-lg">
-              <span className="text-lg">{itemName}</span>
-              <div className="flex items-center gap-4">
-                {editingItem?.name === itemName ? (
-                  <>
-                    <input
-                      type="number"
-                      value={editingItem.width}
-                      onChange={(e) => setEditingItem({...editingItem, width: parseFloat(e.target.value)})}
-                      className="w-20 p-2 border rounded"
-                      placeholder="Breite (cm)"
-                    />
-                    <input
-                      type="number"
-                      value={editingItem.length}
-                      onChange={(e) => setEditingItem({...editingItem, length: parseFloat(e.target.value)})}
-                      className="w-20 p-2 border rounded"
-                      placeholder="Länge (cm)"
-                    />
-                    <input
-                      type="number"
-                      value={editingItem.height}
-                      onChange={(e) => setEditingItem({...editingItem, height: parseFloat(e.target.value)})}
-                      className="w-20 p-2 border rounded"
-                      placeholder="Höhe (cm)"
-                    />
-                    <input
-                      type="number"
-                      value={editingItem.weight}
-                      onChange={(e) => setEditingItem({...editingItem, weight: parseFloat(e.target.value)})}
-                      className="w-20 p-2 border rounded"
-                      placeholder="Gewicht (kg)"
-                    />
-                    <button onClick={() => handleSaveEdit(index)} className="px-3 py-1 bg-green-500 text-white rounded">
-                      Speichern
-                    </button>
-                    <button onClick={() => setEditingItem(null)} className="px-3 py-1 bg-gray-500 text-white rounded">
-                      Abbrechen
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {/* Zeige die Maße entweder aus dem Item selbst oder aus priceConfig */}
-                    {(item.length || priceConfig) && (
-                      <span>
-                      {priceConfig ? 
-                        `${priceConfig.length}x${priceConfig.width}x${priceConfig.height}cm` : 
-                        `${item.length}x${item.width}x${item.height}cm${item.weight ? ` • ${item.weight}kg` : ''}`
-                      }
-                    </span>
-                    )}
-                    <div className="flex items-center space-x-4">
-                      <button
-                        className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"
-                        onClick={() => handleQuantityChange(index, -1, stateUpdater)}
-                      >
-                        -
-                      </button>
-                      <span className="w-8 text-center">{item.quantity}</span>
-                      <button
-                        className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"
-                        onClick={() => handleQuantityChange(index, 1, stateUpdater)}
-                      >
-                        +
-                      </button>
+            <div className="p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <span className="font-medium">{itemName}</span>
+                  <button className="ml-2 text-blue-500 hover:text-blue-700" onClick={() => showItemDetails(item)}>
+                    <Info size={16} />
+                  </button>
+                  
+                  {/* Service-Tags */}
+                  {(item.demontiert || item.remontiert || item.duebelarbeiten || item.elektro) && (
+                    <div className="flex ml-2 gap-1">
+                      {item.demontiert && <span className="px-1 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">D</span>}
+                      {item.remontiert && <span className="px-1 py-0.5 bg-green-100 text-green-800 text-xs rounded">R</span>}
+                      {item.duebelarbeiten && <span className="px-1 py-0.5 bg-orange-100 text-orange-800 text-xs rounded">DÜ</span>}
+                      {item.elektro && <span className="px-1 py-0.5 bg-purple-100 text-purple-800 text-xs rounded">E</span>}
                     </div>
-                    {showVolume && (
-  <div className="space-y-2">
-    <div className="flex gap-4">
-      <label className="flex items-center min-w-[120px]">
-        <input
-          type="checkbox"
-          checked={item.demontiert}
-          onChange={() => handleCheckboxChange(index, 'demontiert')}
-          className="mr-2"
-        />
-        Demontiert
-      </label>
-      <label className="flex items-center min-w-[120px]">
-        <input
-          type="checkbox"
-          checked={item.duebelarbeiten}
-          onChange={() => handleCheckboxChange(index, 'duebelarbeiten')}
-          className="mr-2"
-        />
-        Dübelarbeiten
-      </label>
-    </div>
-    <div className="flex gap-4">
-      <label className="flex items-center min-w-[120px]">
-        <input
-          type="checkbox"
-          checked={item.remontiert}
-          onChange={() => handleCheckboxChange(index, 'remontiert')}
-          className="mr-2"
-        />
-        Remontiert
-      </label>
-      <label className="flex items-center min-w-[120px]">
-        <input
-          type="checkbox"
-          checked={item.elektro}
-          onChange={() => handleCheckboxChange(index, 'elektro')}
-          className="mr-2"
-        />
-        Elektro
-      </label>
-    </div>
-  </div>
-)}
-                    <button onClick={() => setEditingItem(item)} className="px-3 py-1 text-blue-600">
-                      Bearbeiten
+                  )}
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center">
+                    <button
+                      className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"
+                      onClick={() => handleQuantityChange(index, -1, stateUpdater)}
+                    >
+                      -
                     </button>
-                  </>
-                )}
+                    <span className="w-8 text-center">{item.quantity}</span>
+                    <button
+                      className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"
+                      onClick={() => handleQuantityChange(index, 1, stateUpdater)}
+                    >
+                      +
+                    </button>
+                  </div>
+                  
+                  {/* Service-Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setOpenServiceDropdown(openServiceDropdown === item.id ? null : item.id)}
+                      className="px-3 py-1 border border-gray-300 rounded-md flex items-center text-sm"
+                    >
+                      <span>Services</span>
+                      <ChevronDown size={14} className="ml-1" />
+                    </button>
+                    {openServiceDropdown === item.id && (
+                      <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 p-2 w-48">
+                        <div className="space-y-2">
+                          <label className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={item.demontiert}
+                              onChange={(e) => {
+                                e.stopPropagation(); // Stop event propagation
+                                handleCheckboxChange(index, 'demontiert');
+                              }}
+                              className="mr-2"
+                            />
+                            <span>Demontiert</span>
+                          </label>
+                          
+                          <label className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={item.remontiert}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                handleCheckboxChange(index, 'remontiert');
+                              }}
+                              className="mr-2"
+                            />
+                            <span>Remontiert</span>
+                          </label>
+                          
+                          <label className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={item.duebelarbeiten}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                handleCheckboxChange(index, 'duebelarbeiten');
+                              }}
+                              className="mr-2"
+                            />
+                            <span>Dübelarbeiten</span>
+                          </label>
+                          
+                          <label className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={item.elektro}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                handleCheckboxChange(index, 'elektro');
+                              }}
+                              className="mr-2"
+                            />
+                            <span>Elektro</span>
+                          </label>
+                        </div>
+                        
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <button 
+                            className="w-full text-center text-sm text-blue-600"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Stop event propagation
+                              setOpenServiceDropdown(null);
+                            }}
+                          >
+                            Schließen
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <button onClick={() => setEditingItem(item)} className="px-3 py-1 text-blue-600 text-sm">
+                    Bearbeiten
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
     );
-  }, [editingItem, handleQuantityChange, handleCheckboxChange, prices]); 
+  }, [editingItem, handleQuantityChange, handleCheckboxChange, prices, openServiceDropdown]); 
+
+  // Neue Methode zur Anzeige der Details
+  const showItemDetails = (item) => {
+    setDetailedItem(item);
+    setShowDetailModal(true);
+  };
+
   return (
     <div className="bg-white rounded-lg overflow-hidden shadow-lg">
       <div className="bg-blue-600 text-white p-4">
@@ -519,6 +536,49 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
           roomName={roomName}
         />
       </div>
+
+      {/* Modal für Detailansicht */}
+      {showDetailModal && detailedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold mb-4">{detailedItem.name}</h3>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Maße:</span>
+                <span>{detailedItem.length}×{detailedItem.width}×{detailedItem.height} cm</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-gray-600">Volumen:</span>
+                <span>{((detailedItem.length * detailedItem.width * detailedItem.height) / 1000000).toFixed(2)} m³</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-gray-600">Gewicht:</span>
+                <span>{detailedItem.weight || "-"} kg</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-gray-600">Aufbauzeit:</span>
+                <span>{detailedItem.setupTime || 0} min</span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-gray-600">Abbauzeit:</span>
+                <span>{detailedItem.dismantleTime || 0} min</span>
+              </div>
+            </div>
+            
+            <button 
+              className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              onClick={() => setShowDetailModal(false)}
+            >
+              Schließen
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

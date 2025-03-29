@@ -10,6 +10,7 @@ const INITIAL_ROOMS_AND_ITEMS = require('./initialData');
 require('dotenv').config({ path: __dirname + '/.env' });
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 
 // Logging für Debugging
 console.log('ENV check:', {
@@ -1238,6 +1239,62 @@ Antworte im folgenden JSON-Format:
           });
         });
       });
+    });
+
+    // Pipeline-API Proxy Endpunkt
+    app.get('/api/projects', async (req, res) => {
+      try {
+        const response = await axios.get('https://api.pipedrive.com/v1/projects', {
+          params: {
+            ...req.query,
+            api_token: process.env.PIPEDRIVE_API_TOKEN
+          }
+        });
+        res.json(response.data);
+      } catch (error) {
+        console.error('Error proxying Pipedrive API:', error);
+        res.status(error.response?.status || 500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    // Proxy-Endpunkt für Deals
+    app.get('/api/deals', async (req, res) => {
+      try {
+        const response = await axios.get('https://api.pipedrive.com/v1/deals', {
+          params: {
+            ...req.query,
+            api_token: process.env.PIPEDRIVE_API_TOKEN
+          }
+        });
+        res.json(response.data);
+      } catch (error) {
+        console.error('Error proxying Pipedrive API:', error);
+        res.status(error.response?.status || 500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    // Proxy-Endpunkt für einzelne Deals
+    app.get('/api/deals/:id', async (req, res) => {
+      try {
+        const response = await axios.get(`https://api.pipedrive.com/v1/deals/${req.params.id}`, {
+          params: {
+            api_token: process.env.PIPEDRIVE_API_TOKEN
+          }
+        });
+        res.json(response.data);
+      } catch (error) {
+        console.error('Error proxying Pipedrive API:', error);
+        res.status(error.response?.status || 500).json({
+          success: false,
+          error: error.message
+        });
+      }
     });
 
 const PORT = process.env.PORT || 3001;

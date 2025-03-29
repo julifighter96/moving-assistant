@@ -18,6 +18,8 @@ import InspectionOverview from './components/InspectionOverview';
 import MovingTruckSimulator, { TRUCK_DIMENSIONS, autoPackItems } from './components/MovingTruckSimulator';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import MovingCalculation from './components/MovingCalculation';
+import TourPlanner from './components/TourPlanner';
+import RouteNavigation from './components/RouteNavigation';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -71,14 +73,15 @@ const DEFAULT_PACK_MATERIALS = [
 ];
 
 const STEPS = [
-  { label: 'Deal auswählen', status: 'pending' },
-  { label: 'Umzugsinformationen', status: 'pending' },
-  { label: 'Räume & Gegenstände', status: 'pending' },
-  { label: 'Zusätzliche Details', status: 'pending' },
-  { label: 'Umzugsberechnung', status: 'pending' },
-  { label: 'Angebot erstellen', status: 'pending' },
-  { label: 'Beladungssimulation', status: 'pending' },
-  { label: 'Administration', status: 'pending', id: 'admin' }
+  { id: 0, label: 'Wählen Sie einen Deal zum Start', path: '/deal-selection' },
+  { id: 1, label: 'Grundlegende Umzugsinformationen', path: '/move-information' },
+  { id: 2, label: 'Räume und Inventar', path: '/rooms-and-items' },
+  { id: 3, label: 'Zusätzliche Details', path: '/additional-details' },
+  { id: 4, label: 'Umzugsberechnung', path: '/calculation' },
+  { id: 5, label: 'Angebot erstellen', path: '/offer-creation' },
+  { id: 6, label: 'Beladungssimulation', path: '/loading-simulation' },
+  { id: 'tour-planner', label: 'Tourenplanung', path: '/tour-planner' },
+  { id: 'admin', label: 'Admin', path: '/admin' }
 ];
 
 const TabletHeader = ({ currentDeal, onAdminClick, onHomeClick, onInspectionsClick, onRouteClick }) => {
@@ -307,7 +310,7 @@ function App() {
   const [popupMessage, setPopupMessage] = useState('');
 
   const handleRouteClick = () => {
-    setCurrentStep('route-planner');
+    setCurrentStep('route-selection');
   };
   const handleStartInspection = useCallback((deal) => {
     setSelectedDealId(deal.id);
@@ -586,7 +589,7 @@ function App() {
       <main className="pt-20 px-6 pb-6">
         <div className="max-w-none mx-auto">
           {/* Step Progress - nur anzeigen, wenn weder admin noch route aktiv ist */}
-          {currentStep !== 'admin' && currentStep !== 'route-planner' && (
+          {currentStep !== 'admin' && currentStep !== 'route-selection' && (
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
               <div className="flex justify-between">
                 {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
@@ -635,7 +638,7 @@ function App() {
           )}
 
           {/* Back/Forward Controls - nur anzeigen, wenn weder admin noch route aktiv ist */}
-          {currentStep !== 'admin' && currentStep !== 'route-planner' && (
+          {currentStep !== 'admin' && currentStep !== 'route-selection' && (
             <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex justify-between items-center">
               <button
                 onClick={() => handleStepChange(currentStep - 1)} 
@@ -904,17 +907,19 @@ function App() {
   </div>
 ) : null}
 
+{currentStep === 'route-selection' && (
+  <RouteNavigation 
+    onSelect={(plannerType) => setCurrentStep(plannerType)} 
+  />
+)}
+
 {currentStep === 'route-planner' && <DailyRoutePlanner />}
 
-
-
-<button 
-  type="button"
-  onClick={() => handleRouteClick && handleRouteClick()}
-  className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
->
- 
-</button>
+{currentStep === 'tour-planner' && (
+  <div className="bg-white rounded-lg shadow-sm">
+    <TourPlanner />
+  </div>
+)}
 
 {currentStep === 'inspections' && (
   <InspectionOverview />

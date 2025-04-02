@@ -19,6 +19,21 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
     }),
   }));
 
+  // Funktion zum Extrahieren des Objekt-Typs und Setzen eines Icons
+  const getObjectTypeIcon = (title) => {
+    if (!title) return null;
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes('piano')) {
+      return <span title="Piano" className="ml-2">🎹</span>; // Klavier-Emoji
+    } else if (lowerTitle.includes('flügel')) {
+      // Kein direktes Flügel-Emoji, wir nehmen wieder Klavier oder einen Text
+      return <span title="Flügel" className="ml-2">🎹<span className="text-xs font-semibold">F</span></span>; // Klavier + F
+    }
+    return null; // Kein Typ gefunden
+  };
+
+  const objectIcon = getObjectTypeIcon(deal.title);
+
   return (
     <div
       ref={isDraggable ? drag : null}
@@ -28,7 +43,10 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
     >
       <div className="flex justify-between items-start">
         <div className="flex-1">
-          <h3 className="font-medium text-gray-900">{deal.title}</h3>
+          <h3 className="font-medium text-gray-900 flex items-center">
+            <span>{deal.title}</span>
+            {objectIcon}
+          </h3>
           
           <div className="mt-2 space-y-1 text-sm">
             {deal.projectStartDate && (

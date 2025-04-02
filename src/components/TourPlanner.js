@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { MapPin, Calendar, Truck, X, Clock, Search, ChevronRight, Globe } from 'lucide-react';
+import { MapPin, Calendar, Truck, X, Clock, Search, ChevronRight, Globe, Milestone, Building, Home } from 'lucide-react';
 import axios from 'axios';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { de } from 'date-fns/locale';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
@@ -93,12 +93,14 @@ const TourArea = ({ isOver, drop, tourDeals, onRemoveDeal, selectedDate, handleS
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold flex items-center">
           <Truck className="mr-2 h-5 w-5 text-primary" />
-          Tour für {format(selectedDate, 'dd. MMMM yyyy', { locale: de })}
+          {/* Prüfe, ob selectedDate gültig ist, bevor formatiert wird */}
+          Geplante Tour für {selectedDate && isValid(selectedDate) ? format(selectedDate, 'dd.MM.yyyy', { locale: de }) : 'Datum auswählen'}
         </h3>
         
         <button
           onClick={handleSaveTour}
           className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
+          disabled={!selectedDate || !isValid(selectedDate)}
         >
           Tour speichern
         </button>
@@ -154,7 +156,7 @@ const TourArea = ({ isOver, drop, tourDeals, onRemoveDeal, selectedDate, handleS
   );
 };
 
-// Hauptkomponente mit innerem Inhalt
+// Definiere TourPlannerContent als eigenständige Komponente
 const TourPlannerContent = () => {
   const [allDeals, setAllDeals] = useState([]);
   const [filteredDeals, setFilteredDeals] = useState([]);
@@ -162,20 +164,26 @@ const TourPlannerContent = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [tours, setTours] = useState({});
-  const [currentTourName, setCurrentTourName] = useState(format(selectedDate, 'yyyy-MM-dd'));
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const [optimizedRoute, setOptimizedRoute] = useState(null);
+  const [loadingRoute, setLoadingRoute] = useState(false);
+  const [directionsService, setDirectionsService] = useState(null);
 
   // Drop-Zone für die Tour
   const [{ isOver }, drop] = useDrop({
     accept: 'deal',
     drop: (item) => {
-      // Direkt die aktuelle tourDeals verwenden, nicht die geschlossene Variable
-      const dealExists = tourDeals.some(d => d.id === item.deal.id);
-      if (!dealExists) {
-        setTourDeals(prev => [...prev, item.deal]);
-      }
+      console.log("Deal gedropped:", item.deal?.title || item.deal?.id);
+      setTourDeals(prevTourDeals => {
+        const dealExists = prevTourDeals.some(d => d.id === item.deal.id);
+        if (!dealExists) {
+          console.log("Füge Deal zur Tour hinzu:", item.deal.id);
+          return [...prevTourDeals, item.deal];
+        }
+        console.log("Deal existiert bereits in der Tour:", item.deal.id);
+        return prevTourDeals;
+      });
     },
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
@@ -183,131 +191,85 @@ const TourPlannerContent = () => {
   });
 
   // Regionen Definition
-  const REGIONS = [
+  const REGIONS = useMemo(() => [
     { id: 'all', name: 'Alle Regionen', phase_id: null },
     { id: 'nord', name: 'Norden', phase_id: 19 },
     { id: 'sued', name: 'Süden', phase_id: 21 },
     { id: 'ost', name: 'Osten', phase_id: 22 },
     { id: 'west', name: 'Westen', phase_id: 23 },
     { id: 'ka', name: 'Karlsruhe', phase_id: 20 },
-  ];
+  ], []);
 
-  // Regionname aus phase_id ermitteln
-  const getRegionNameFromPhaseId = (phaseId) => {
-    if (!phaseId) return 'Unbekannt';
-    const region = REGIONS.find(r => r.phase_id === parseInt(phaseId));
-    return region ? region.name : 'Unbekannt';
+  const OFFICE_ADDRESS = "Greschbachstraße 15, 76229 Karlsruhe";
+  const OFFICE_POSTAL_PREFIX = OFFICE_ADDRESS.match(/\b(\d{2})\d{3}\b/)?.[1] || "76";
+
+  // Hilfsfunktion: Region (PLZ-Präfix) aus Adresse extrahieren
+  const getRegionFromAddress = (address) => {
+    if (!address) return null;
+    const match = address.match(/\b(\d{2})\d{3}\b/);
+    return match ? match[1] : null;
   };
 
-  // Hilfsfunktion zur Verarbeitung von Projektdaten
-  const processProjects = async (projectsData, resultArray, apiToken) => {
-    // Deal-Cache für diese Session
-    const dealCache = {};
-    
+  // Hilfsfunktion: Distanz-Score einer Region zum Büro (vereinfacht)
+  const getRegionDistanceScore = (regionPrefix) => {
+    if (!regionPrefix) return Infinity;
+    return Math.abs(parseInt(regionPrefix, 10) - parseInt(OFFICE_POSTAL_PREFIX, 10));
+  };
+
+  // Regionname aus phase_id ermitteln
+  const getRegionNameFromPhaseId = useCallback((phaseId) => {
+    const region = REGIONS.find(r => r.phase_id === phaseId);
+    return region ? region.name : 'Unbekannt';
+  }, [REGIONS]);
+
+  // Hilfsfunktion zur Verarbeitung von Projektdaten (Adressen extrahieren)
+  const processProjects = useCallback(async (projectsData, resultArray, apiToken) => {
     console.log("processProjects aufgerufen mit", projectsData.length, "Projekten");
-    
-    // Sammeln aller Deal-IDs aus den Projekten
-    const allDealIds = [];
-    projectsData.forEach(project => {
-      if (project.deal_ids && project.deal_ids.length > 0) {
-        allDealIds.push(project.deal_ids[0]);
-      }
-    });
-    
-    console.log(`Gefundene Deal-IDs für Projekte:`, allDealIds.length);
-    
-    // Direkte Verarbeitung jedes Projekts mit seinem Deal
+
     for (const project of projectsData) {
       try {
-        console.log(`Verarbeite Projekt: ${project.id} - ${project.title}`);
-        
         if (project.deal_ids && project.deal_ids.length > 0) {
           const dealId = project.deal_ids[0];
-          console.log(`Projekt ${project.id} hat Deal ID: ${dealId}`);
-          
-          // Deal-Details abrufen
           const dealResponse = await fetch(`https://api.pipedrive.com/v1/deals/${dealId}?api_token=${apiToken}`);
           const dealData = await dealResponse.json();
-          
+
           if (dealData.success && dealData.data) {
-            // Durchsuche alle benutzerdefinierten Felder in den Deal-Daten
             let originAddress = '';
             let destinationAddress = '';
             let moveDate = '';
-            
-            // Bekannte Feld-IDs als Fallback
+
             const knownFieldIds = {
               originAddress: '07c3da8804f7b96210e45474fba35b8691211ddd',
               destinationAddress: '9cb4de1018ec8404feeaaaf7ee9b293c78c44281',
               moveDate: '949696aa9d99044db90383a758a74675587ed893'
             };
-            
-            // Durchsuche alle Felder des Deals
-            if (dealData.data) {
-              // Logge alle benutzerdefinierten Felder zum Debugging
-              console.log("Deal-Felder:", Object.keys(dealData.data).filter(key => key.length > 20));
-              
-              // Prüfe zuerst bekannte Feld-IDs
-              if (dealData.data[knownFieldIds.originAddress]) {
-                originAddress = dealData.data[knownFieldIds.originAddress];
-                console.log(`Gefundene Ursprungsadresse über bekannte ID: ${originAddress}`);
-              }
-              
-              if (dealData.data[knownFieldIds.destinationAddress]) {
-                destinationAddress = dealData.data[knownFieldIds.destinationAddress];
-                console.log(`Gefundene Zieladresse über bekannte ID: ${destinationAddress}`);
-              }
-              
-              if (dealData.data[knownFieldIds.moveDate]) {
-                moveDate = dealData.data[knownFieldIds.moveDate];
-                console.log(`Gefundenes Umzugsdatum über bekannte ID: ${moveDate}`);
-              }
-              
-              // Prüfe alle benutzerdefinierten Felder nach Adressinformationen
-              // Falls die bekannten IDs nicht funktionieren
-              if (!originAddress || !destinationAddress) {
-                // Gehe alle möglichen Felder durch und suche nach Adressinformationen
-                for (const [key, value] of Object.entries(dealData.data)) {
-                  // Wenn es ein langes Feld ist (benutzerdefinierte Felder haben lange IDs)
-                  if (key.length > 30 && typeof value === 'string') {
-                    console.log(`Prüfe Feld ${key}: ${value.substring(0, 30)}...`);
-                    
-                    // Einfache Heuristik für Adressen (enthält Straße, Hausnummer, PLZ)
-                    if (
-                      !originAddress && 
-                      (value.includes('straße') || value.includes('str.') || 
-                       value.includes('Str') || /\d{5}/.test(value))
-                    ) {
-                      originAddress = value;
-                      console.log(`Gefundene Ursprungsadresse heuristisch: ${originAddress}`);
-                    } else if (
-                      !destinationAddress && 
-                      (value.includes('straße') || value.includes('str.') || 
-                       value.includes('Str') || /\d{5}/.test(value))
-                    ) {
-                      destinationAddress = value;
-                      console.log(`Gefundene Zieladresse heuristisch: ${destinationAddress}`);
-                    }
+
+            // Versuche bekannte Felder
+            originAddress = dealData.data[knownFieldIds.originAddress] || '';
+            destinationAddress = dealData.data[knownFieldIds.destinationAddress] || '';
+            moveDate = dealData.data[knownFieldIds.moveDate] || '';
+
+            // Heuristik, falls bekannte Felder leer sind (optional, kann zu Fehlern führen)
+            if ((!originAddress || !destinationAddress) && typeof dealData.data === 'object') {
+              for (const [key, value] of Object.entries(dealData.data)) {
+                if (key.length > 30 && typeof value === 'string' && value.trim().length > 5) {
+                  if (!originAddress && (value.toLowerCase().includes('straße') || /\d{5}/.test(value))) {
+                    originAddress = value;
+                  } else if (!destinationAddress && (value.toLowerCase().includes('straße') || /\d{5}/.test(value))) {
+                    destinationAddress = value;
                   }
                 }
               }
             }
-            
-            console.log(`Extrahierte Daten für Deal ${dealId}:`, {
-              originAddress,
-              destinationAddress,
-              moveDate
-            });
-            
-            // Zum Resultarray hinzufügen
+
             resultArray.push({
               id: project.id,
               dealId: dealId,
               title: project.title || dealData.data.title,
               organization: dealData.data.org_name,
               moveDate: moveDate || project.start_date,
-              originAddress: originAddress,
-              destinationAddress: destinationAddress,
+              originAddress: originAddress.trim(),
+              destinationAddress: destinationAddress.trim(),
               value: dealData.data.value,
               currency: dealData.data.currency,
               region: getRegionNameFromPhaseId(project.phase_id),
@@ -315,188 +277,148 @@ const TourPlannerContent = () => {
               projectEndDate: project.end_date
             });
           } else {
-            console.log(`Keine Deal-Daten für ID ${dealId} gefunden`);
+            console.warn(`Keine Deal-Daten für ID ${dealId} gefunden oder API-Fehler.`);
             resultArray.push({
               id: project.id,
               title: project.title,
               region: getRegionNameFromPhaseId(project.phase_id),
               moveDate: project.start_date,
               projectStartDate: project.start_date,
-              projectEndDate: project.end_date
+              projectEndDate: project.end_date,
+              originAddress: '',
+              destinationAddress: ''
             });
           }
         } else {
-          console.log(`Projekt ${project.id} hat keine verknüpften Deals`);
           resultArray.push({
             id: project.id,
             title: project.title,
             region: getRegionNameFromPhaseId(project.phase_id),
             moveDate: project.start_date,
             projectStartDate: project.start_date,
-            projectEndDate: project.end_date
+            projectEndDate: project.end_date,
+            originAddress: '',
+            destinationAddress: ''
           });
         }
-        
-        // Kurze Pause zwischen API-Anfragen
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 50));
       } catch (error) {
         console.error(`Fehler bei der Verarbeitung von Projekt ${project.id}:`, error);
       }
     }
-    
-    console.log(`Verarbeitete Projekte: ${resultArray.length}`);
-  };
+  }, [getRegionNameFromPhaseId]);
 
   // Deal aus der Tour entfernen
   const handleRemoveDeal = (dealId) => {
     setTourDeals(prev => prev.filter(deal => deal.id !== dealId));
+    setOptimizedRoute(null);
   };
 
   // Fetch-Logik mit API-Integration
   const fetchDeals = useCallback(async () => {
     setLoading(true);
-    
-    try {
-      // Laden wir die gespeicherten Tokens aus localStorage
-      const apiToken = '6d56f23ce118508c71e09e0b9ede281e91a2f814'; // Diesen solltest du in einer .env Datei speichern
-      
-      // Cache-Key nur für die Region
-      const cacheKey = `projects_${selectedRegion}`;
-      const cachedProjects = localStorage.getItem(cacheKey);
-      
-      // Wenn gecachte Projekte existieren und nicht älter als 1 Stunde sind, verwenden wir diese
-      if (cachedProjects) {
-        const { data, timestamp } = JSON.parse(cachedProjects);
-        if (Date.now() - timestamp < 60 * 60 * 1000) { // 1 Stunde Cache
-          setAllDeals(data);
-          // Keine Datumsfilterung beim Laden, nur bei der Anzeige
-          filterDeals(data, searchQuery, null);
-          setLoading(false);
-          return;
-        }
-      }
-      
-      let allProjectsWithDetails = [];
-      
-      // Bei "Alle Regionen" alle relevanten Regionen abfragen
-      if (selectedRegion === 'all') {
-        // Alle relevanten Regionen durchlaufen und Projekte laden
-        for (const region of REGIONS) {
-          // Überspringen des "Alle Regionen"-Eintrags
-          if (region.id === 'all' || region.phase_id === null) continue;
-          
-          // Projekte für diese Region laden
-          const regionUrl = `https://api.pipedrive.com/v1/projects?status=open&phase_id=${region.phase_id}&api_token=${apiToken}&limit=100`;
-          console.log(`Anfrage URL für Region ${region.name}:`, regionUrl);
-          const regionResponse = await fetch(regionUrl);
-          const regionData = await regionResponse.json();
-          console.log(`Projekte in Region ${region.name}:`, regionData.data?.length || 0);
-          
-          if (regionData.success && Array.isArray(regionData.data)) {
-            await processProjects(regionData.data, allProjectsWithDetails, apiToken);
-          }
-          
-          // Kurze Pause zwischen API-Anfragen
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      } else {
-        // Nur die ausgewählte Region laden
-        const region = REGIONS.find(r => r.id === selectedRegion);
-        if (region && region.phase_id !== null) {
-          const projectsUrl = `https://api.pipedrive.com/v1/projects?status=open&phase_id=${region.phase_id}&api_token=${apiToken}&limit=100`;
-          console.log(`Anfrage URL für Region ${region.name}:`, projectsUrl);
-          const projectsResponse = await fetch(projectsUrl);
-          const projectsData = await projectsResponse.json();
-          console.log(`Projekte in Region ${region.name}:`, projectsData.data?.length || 0);
-          
-          if (projectsData.success && Array.isArray(projectsData.data)) {
-            await processProjects(projectsData.data, allProjectsWithDetails, apiToken);
-          }
-        }
-      }
-      
-      console.log("Insgesamt geladene Projekte:", allProjectsWithDetails.length);
-      
-      // Speichere die Ergebnisse im localStorage Cache
-      localStorage.setItem(cacheKey, JSON.stringify({
-        data: allProjectsWithDetails,
-        timestamp: Date.now()
-      }));
-      
-      setAllDeals(allProjectsWithDetails);
-      // Alle Projekte geladen, nur bei der Anzeige nach Datum filtern
-      filterDeals(allProjectsWithDetails, searchQuery, null);
-    } catch (error) {
-      console.error('Error fetching deals', error);
-      // Setze leere Arrays im Fehlerfall
-      setAllDeals([]);
-      setFilteredDeals([]);
-    } finally {
+    setAllDeals([]);
+    setFilteredDeals([]);
+    const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
+    if (!apiToken) {
+      console.error("Pipedrive API Token nicht gefunden!");
       setLoading(false);
+      return;
     }
-  }, [selectedRegion, searchQuery, REGIONS]);
+
+    const cacheKeyBase = `projects_tourplanner`;
+    const cacheKey = `${cacheKeyBase}_${selectedRegion}`;
+    const cachedProjects = localStorage.getItem(cacheKey);
+    const cacheDuration = 15 * 60 * 1000;
+
+    if (cachedProjects) {
+      const { data, timestamp } = JSON.parse(cachedProjects);
+      if (Date.now() - timestamp < cacheDuration) {
+        console.log(`Verwende gecachte Projekte für Region: ${selectedRegion}`);
+        setAllDeals(data);
+        filterDeals(data, searchQuery, showDateFilter ? selectedDate : null);
+        setLoading(false);
+        return;
+      } else {
+        console.log(`Cache für Region ${selectedRegion} abgelaufen.`);
+        localStorage.removeItem(cacheKey);
+      }
+    }
+
+    let allProjectsWithDetails = [];
+    console.log(`Starte API-Abfrage für Region: ${selectedRegion}`);
+
+    const regionsToFetch = selectedRegion === 'all'
+      ? REGIONS.filter(r => r.id !== 'all' && r.phase_id !== null)
+      : REGIONS.filter(r => r.id === selectedRegion && r.phase_id !== null);
+
+    if (regionsToFetch.length === 0 && selectedRegion !== 'all') {
+      console.warn(`Keine gültige Phase ID für Region ${selectedRegion} gefunden.`);
+    }
+
+    for (const region of regionsToFetch) {
+      try {
+        const projectsUrl = `https://api.pipedrive.com/v1/projects?status=open&phase_id=${region.phase_id}&api_token=${apiToken}&limit=100`;
+        const projectsResponse = await fetch(projectsUrl);
+        if (!projectsResponse.ok) {
+          throw new Error(`API request failed with status ${projectsResponse.status}`);
+        }
+        const projectsData = await projectsResponse.json();
+
+        if (projectsData.success && Array.isArray(projectsData.data) && projectsData.data.length > 0) {
+          await processProjects(projectsData.data, allProjectsWithDetails, apiToken);
+        } else if (!projectsData.success) {
+          console.warn(`API-Anfrage für Region ${region.name} nicht erfolgreich:`, projectsData.error || 'Unbekannter Fehler');
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error(`Fehler beim Laden der Projekte für Region ${region.name}:`, error);
+      }
+    }
+
+    console.log("Insgesamt geladene Projekte mit Details:", allProjectsWithDetails.length);
+    setAllDeals(allProjectsWithDetails);
+    filterDeals(allProjectsWithDetails, searchQuery, showDateFilter ? selectedDate : null);
+    localStorage.setItem(cacheKey, JSON.stringify({ data: allProjectsWithDetails, timestamp: Date.now() }));
+
+    setLoading(false);
+  }, [selectedRegion, REGIONS, processProjects, searchQuery, selectedDate, showDateFilter]);
 
   // Filtern der Deals nach Datum und Suchbegriff
-  const filterDeals = (deals, query, date) => {
-    if (!Array.isArray(deals)) {
+  const filterDeals = useCallback((dealsToFilter, query, date) => {
+    if (!Array.isArray(dealsToFilter)) {
       setFilteredDeals([]);
       return;
     }
     
-    let filtered = [...deals];
+    let filtered = [...dealsToFilter];
     
     // Nach Datum filtern
-    if (date) {
+    if (date && showDateFilter) {
       const dateString = format(date, 'yyyy-MM-dd');
       filtered = filtered.filter(deal => {
-        if (!deal || !deal.moveDate) return false;
-        
-        // Zuerst versuchen wir das moveDate-Format (aus dem Deal)
-        if (deal.moveDate && deal.moveDate.startsWith(dateString)) {
-          return true;
-        }
-        
-        // Alternativ das Projektdatum prüfen
-        if (deal.projectStartDate === dateString || deal.projectEndDate === dateString) {
-          return true;
-        }
-        
-        // Check if date falls between project start and end date
-        if (deal.projectStartDate && deal.projectEndDate) {
-          const selectedDate = new Date(dateString);
-          const startDate = new Date(deal.projectStartDate);
-          const endDate = new Date(deal.projectEndDate);
-          
-          if (selectedDate >= startDate && selectedDate <= endDate) {
-            return true;
-          }
-        }
-        
-        return false;
+        if (!deal) return false;
+        return (deal.moveDate && deal.moveDate.startsWith(dateString)) ||
+               (deal.projectStartDate === dateString);
       });
     }
     
     // Nach Suchbegriff filtern
     if (query) {
       const lowerQuery = query.toLowerCase();
-      filtered = filtered.filter(deal => 
+      filtered = filtered.filter(deal =>
         (deal && (
-          deal.title?.toLowerCase().includes(lowerQuery) || 
+          deal.title?.toLowerCase().includes(lowerQuery) ||
           deal.organization?.toLowerCase().includes(lowerQuery) ||
           deal.originAddress?.toLowerCase().includes(lowerQuery) ||
-          deal.destinationAddress?.toLowerCase().includes(lowerQuery)
+          deal.destinationAddress?.toLowerCase().includes(lowerQuery) ||
+          deal.dealId?.toString().includes(lowerQuery)
         ))
       );
     }
     
     setFilteredDeals(filtered);
-  };
-
-  // Suche ausführen
-  const handleSearch = (value) => {
-    setSearchQuery(value);
-    filterDeals(allDeals, value, showDateFilter ? selectedDate : null);
-  };
+  }, [showDateFilter]);
 
   // Daten laden, wenn sich Region oder Datum ändert
   useEffect(() => {
@@ -512,205 +434,472 @@ const TourPlannerContent = () => {
 
   // Region ändern
   const handleRegionChange = (regionId) => {
+    console.log("Region geändert auf:", regionId);
     setSelectedRegion(regionId);
+    setTourDeals([]);
+    setOptimizedRoute(null);
   };
 
   // Tour speichern
   const handleSaveTour = () => {
-    const updatedTours = { ...tours, [currentTourName]: tourDeals };
-    setTours(updatedTours);
-    localStorage.setItem('savedTours', JSON.stringify(updatedTours));
-    
-    // Feedback für Benutzer
-    alert('Tour gespeichert');
+    if (!selectedDate || !isValid(selectedDate)) {
+      alert("Bitte wählen Sie ein gültiges Datum aus, um die Tour zu speichern.");
+      return;
+    }
+    const tourName = format(selectedDate, 'yyyy-MM-dd');
+    const currentTours = JSON.parse(localStorage.getItem('savedTours') || '{}');
+    currentTours[tourName] = tourDeals.map(deal => deal.id);
+    localStorage.setItem('savedTours', JSON.stringify(currentTours));
+    alert(`Tour für ${format(selectedDate, 'dd.MM.yyyy', { locale: de })} gespeichert!`);
   };
 
-  // Gespeicherte Touren laden
+  // Hilfsfunktion zum Korrigieren der Wegpunktreihenfolge
+  const fixWaypointOrder = (optimizedOrder, requestWaypoints, allLocations) => {
+    console.log("Korrigiere Wegpunktreihenfolge (falls nötig)...");
+    let correctedOrder = [...optimizedOrder]; // Kopie erstellen
+    const loadedItems = new Set();
+    let orderChanged = false;
+    let indicesToRemove = []; // Indizes, die verschoben werden
+
+    // Erster Durchlauf: Identifiziere Pickups und finde Verletzungen
+    for (let i = 0; i < correctedOrder.length; i++) {
+      const waypointIndexInRequest = correctedOrder[i];
+      const waypointLocation = requestWaypoints[waypointIndexInRequest].location;
+      const locationInfo = allLocations.find(l => l.location === waypointLocation);
+
+      if (!locationInfo) continue;
+
+      if (locationInfo.type === 'pickup') {
+        loadedItems.add(locationInfo.dealId);
+      } else if (locationInfo.type === 'delivery') {
+        if (!loadedItems.has(locationInfo.dealId)) {
+          console.warn(`Verletzung gefunden: Lieferung ${locationInfo.dealId} (${locationInfo.location}) vor Abholung.`);
+          // Finde den Index des Pickups in der *korrigierten* Reihenfolge
+          const pickupLocation = allLocations.find(l => l.dealId === locationInfo.dealId && l.type === 'pickup');
+          if (!pickupLocation) {
+            console.error(`Zugehöriger Pickup für Deal ${locationInfo.dealId} nicht gefunden!`);
+            continue; // Überspringe diese Korrektur
+          }
+          const pickupWaypointIndexInRequest = requestWaypoints.findIndex(wp => wp.location === pickupLocation.location);
+          const pickupIndexInCorrectedOrder = correctedOrder.indexOf(pickupWaypointIndexInRequest);
+
+          if (pickupIndexInCorrectedOrder === -1) {
+             console.error(`Pickup-Index für Deal ${locationInfo.dealId} nicht in korrigierter Order gefunden!`);
+             continue;
+          }
+
+          // Markiere den aktuellen Delivery-Index zum Verschieben
+          indicesToRemove.push({ deliveryIndexInOrder: i, pickupIndexInOrder: pickupIndexInCorrectedOrder });
+          orderChanged = true;
+        }
+      }
+    }
+
+    // Zweiter Durchlauf: Führe die Verschiebungen durch (rückwärts, um Indizes nicht zu stören)
+    indicesToRemove.sort((a, b) => b.deliveryIndexInOrder - a.deliveryIndexInOrder); // Nach Index absteigend sortieren
+
+    for (const { deliveryIndexInOrder, pickupIndexInOrder } of indicesToRemove) {
+       // Entferne die Delivery aus der aktuellen Position
+       const [deliveryWaypointIndex] = correctedOrder.splice(deliveryIndexInOrder, 1);
+
+       // Finde den *neuen* Index des Pickups (könnte sich durch vorherige Splices verschoben haben)
+       const currentPickupIndexInOrder = correctedOrder.indexOf(optimizedOrder[pickupIndexInOrder]); // Suche den ursprünglichen Pickup-Index
+
+       if (currentPickupIndexInOrder === -1) {
+           console.error("Pickup-Index nach Splice nicht mehr gefunden!");
+           // Füge Delivery am Ende wieder hinzu als Fallback
+           correctedOrder.push(deliveryWaypointIndex);
+           continue;
+       }
+
+       // Füge die Delivery nach dem Pickup ein
+       correctedOrder.splice(currentPickupIndexInOrder + 1, 0, deliveryWaypointIndex);
+       console.log(`Delivery (Index ${deliveryWaypointIndex}) verschoben nach Pickup (Index ${optimizedOrder[pickupIndexInOrder]})`);
+    }
+
+
+    if (orderChanged) {
+      console.log("Ursprüngliche Order:", optimizedOrder);
+      console.log("Korrigierte Order:", correctedOrder);
+    } else {
+      console.log("Keine Korrektur der Reihenfolge notwendig.");
+    }
+
+    return { correctedOrder, orderChanged };
+  };
+
+
+  const calculateOptimizedRoute = useCallback(async (deals) => {
+    if (!directionsService || deals.length === 0) {
+      setOptimizedRoute(null);
+      setLoadingRoute(false);
+      return;
+    }
+    setLoadingRoute(true);
+    console.log(`Starte Routenberechnung (Optimieren + Korrigieren) für ${deals.length} Deals.`);
+
+    // 1. Locations sammeln (wie gehabt)
+    const locations = deals.flatMap(deal => {
+      const locs = [];
+      if (deal.originAddress && deal.originAddress.trim()) locs.push({ location: deal.originAddress.trim(), type: 'pickup', dealId: deal.id, title: deal.title });
+      if (deal.destinationAddress && deal.destinationAddress.trim()) locs.push({ location: deal.destinationAddress.trim(), type: 'delivery', dealId: deal.id, title: deal.title });
+      return locs;
+    }).filter(loc => loc.location);
+
+    if (locations.length === 0) { /* ... Fehlerbehandlung ... */ return; }
+    console.log(`Gefundene gültige Locations: ${locations.length}`);
+
+    // 2. Erste Anfrage: Optimieren lassen
+    const initialRequest = {
+      origin: OFFICE_ADDRESS,
+      destination: OFFICE_ADDRESS,
+      waypoints: locations.map(loc => ({ location: loc.location, stopover: true })),
+      optimizeWaypoints: true, // OPTIMIEREN!
+      travelMode: window.google.maps.TravelMode.DRIVING,
+    };
+
+    let finalResult; // Das Ergebnis, das wir am Ende verwenden
+
+    try {
+      console.log("Sende initiale Optimierungsanfrage...");
+      const initialResult = await new Promise((resolve, reject) => {
+        directionsService.route(initialRequest, (result, status) => {
+          if (status === window.google.maps.DirectionsStatus.OK) {
+            resolve(result);
+          } else {
+            reject(new Error(`Initiale Directions request failed: ${status}`));
+          }
+        });
+      });
+      console.log("Initiale Optimierung erfolgreich:", initialResult);
+
+      // 3. Ergebnis prüfen und ggf. korrigieren
+      const optimizedOrder = initialResult.routes[0].waypoint_order;
+      const { correctedOrder, orderChanged } = fixWaypointOrder(
+        optimizedOrder,
+        initialRequest.waypoints, // Die Wegpunkte, auf die sich optimizedOrder bezieht
+        locations // Die Liste mit Typ/DealID Infos
+      );
+
+      // 4. Zweite Anfrage (falls nötig) mit korrigierter Reihenfolge
+      if (orderChanged) {
+        console.log("Reihenfolge wurde korrigiert. Sende zweite Anfrage für korrekte Legs...");
+        const correctedWaypoints = correctedOrder.map(index => initialRequest.waypoints[index]); // Wegpunkte in korrigierter Reihenfolge
+
+        const correctedRequest = {
+          origin: OFFICE_ADDRESS,
+          destination: OFFICE_ADDRESS,
+          waypoints: correctedWaypoints, // Korrigierte Reihenfolge
+          optimizeWaypoints: false, // NICHT MEHR OPTIMIEREN!
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        };
+
+        finalResult = await new Promise((resolve, reject) => {
+          directionsService.route(correctedRequest, (result, status) => {
+            if (status === window.google.maps.DirectionsStatus.OK) {
+              // WICHTIG: Füge die korrigierte Order dem Ergebnis hinzu, da Google sie nicht liefert
+              result.routes[0].waypoint_order = correctedOrder.map((_, i) => i); // Erzeuge eine 0, 1, 2... Sequenz
+              result.corrected_waypoint_order_indices = correctedOrder; // Speichere die originalen Indizes
+              resolve(result);
+            } else {
+              reject(new Error(`Korrigierte Directions request failed: ${status}`));
+            }
+          });
+        });
+        console.log("Zweite Anfrage (korrigierte Route) erfolgreich:", finalResult);
+
+      } else {
+        // Keine Korrektur nötig, verwende das erste Ergebnis
+        finalResult = initialResult;
+        finalResult.routes[0].waypoint_order = optimizedOrder; // Stelle sicher, dass die Order drin ist
+      }
+
+      // 5. Ergebnis verarbeiten (mit finalResult)
+      const route = finalResult.routes[0];
+      const finalWaypointOrder = route.waypoint_order; // Entweder die optimierte oder die 0,1,2... Sequenz
+      const finalRequestWaypoints = finalResult.request.waypoints; // Die Wegpunkte der *letzten* Anfrage
+      const originalLegs = route.legs;
+
+      // Anreichern der Legs
+      const enrichedLegs = originalLegs.map((leg, index) => {
+        let stopType = 'unknown';
+        let dealId = null;
+
+        // Finde den Typ des Wegpunkts am *Ende* dieses Legs
+        // Der Index in finalWaypointOrder bezieht sich auf finalRequestWaypoints
+        if (index < finalWaypointOrder.length) {
+           // Bei korrigierter Route ist finalWaypointOrder [0, 1, 2...], also index = orderedWaypointIndex
+           const orderedWaypointIndex = finalWaypointOrder[index];
+           const legEndLocation = finalRequestWaypoints[orderedWaypointIndex].location;
+           // Finde die Infos in der ursprünglichen 'locations'-Liste
+           const originalLocationInfo = locations.find(l => l.location === legEndLocation);
+           stopType = originalLocationInfo?.type || 'unknown';
+           dealId = originalLocationInfo?.dealId || null;
+        } else if (index === originalLegs.length - 1) {
+           stopType = 'office_return';
+        }
+        return { ...leg, stopType: stopType, dealId: dealId };
+      });
+
+      // Display Legs erstellen
+      const displayLegs = [
+         { /* ... Start-Leg ... */
+            start_address: OFFICE_ADDRESS,
+            end_address: enrichedLegs.length > 0 ? enrichedLegs[0].start_address : OFFICE_ADDRESS,
+            distance: { text: 'Start', value: 0 },
+            duration: { text: '', value: 0 },
+            stopType: 'office_start',
+            dealId: null
+          },
+         ...enrichedLegs
+       ];
+
+      // Custom Waypoint Order für die Anzeige (basierend auf der finalen Reihenfolge)
+      let customWaypointDisplayOrder;
+      if (orderChanged && finalResult.corrected_waypoint_order_indices) {
+          // Nimm die gespeicherten Original-Indizes und hole die Locations aus der *initialen* Anfrage
+          customWaypointDisplayOrder = finalResult.corrected_waypoint_order_indices.map(idx => initialRequest.waypoints[idx].location);
+      } else {
+          // Nimm die optimierte Order und hole die Locations aus der initialen Anfrage
+          customWaypointDisplayOrder = optimizedOrder.map(idx => initialRequest.waypoints[idx].location);
+      }
+
+
+      setOptimizedRoute({
+        ...finalResult,
+        legs: displayLegs,
+        request: finalResult.request, // Die Anfrage, die zu diesen Legs führte
+        custom_waypoint_order: customWaypointDisplayOrder // Korrekte Reihenfolge für Anzeige
+      });
+
+    } catch (error) {
+      console.error("Fehler bei der Routenberechnung:", error);
+      alert(`Routenberechnung fehlgeschlagen: ${error.message}`);
+      setOptimizedRoute(null);
+    } finally {
+      setLoadingRoute(false);
+    }
+  }, [directionsService, OFFICE_ADDRESS]);
+
+  // useEffect Hook, der die Route neu berechnet
   useEffect(() => {
-    const savedTours = localStorage.getItem('savedTours');
-    if (savedTours) {
-      setTours(JSON.parse(savedTours));
+    console.log("useEffect für tourDeals ausgelöst. tourDeals:", tourDeals.length);
+    if (tourDeals.length > 0 && directionsService) {
+      console.log("Bedingungen erfüllt, rufe calculateOptimizedRoute auf.");
+      calculateOptimizedRoute(tourDeals);
+    } else if (tourDeals.length === 0) {
+      console.log("Keine Deals mehr, lösche Route.");
+      setOptimizedRoute(null);
+      setLoadingRoute(false);
+    } else {
+      console.log("Warte auf Directions Service oder keine Deals vorhanden...");
     }
-  }, []);
+    // calculateOptimizedRoute aus Abhängigkeiten entfernt, da fixWaypointOrder jetzt außerhalb ist
+    // und die Funktion selbst durch useCallback memoized ist.
+  }, [tourDeals, directionsService]);
 
-  // Berechnet die Route und öffnet sie in Google Maps
-  const handleCalculateRoute = () => {
-    if (tourDeals.length < 2) {
-      alert('Bitte fügen Sie mindestens zwei Stationen hinzu, um eine Route zu berechnen.');
+  // handleOpenRouteInGoogleMaps muss angepasst werden, um die custom_waypoint_order zu verwenden
+  const handleOpenRouteInGoogleMaps = () => {
+    console.log("Versuche Google Maps zu öffnen. Aktuelle optimizedRoute:", optimizedRoute);
+    // Prüfe auf das Vorhandensein der custom_waypoint_order
+    if (!optimizedRoute || !optimizedRoute.custom_waypoint_order || optimizedRoute.custom_waypoint_order.length === 0) {
+      alert("Route wurde noch nicht berechnet oder ist ungültig.");
+      console.error("OptimizedRoute oder custom_waypoint_order fehlen:", optimizedRoute);
       return;
     }
-    
-    // Erstelle einen Google Maps-Link mit allen Stationen
-    const allAddresses = [];
-    
-    // Sammle alle Adressen von allen Deals in der Tour
-    tourDeals.forEach(deal => {
-      if (deal.originAddress) {
-        allAddresses.push(encodeURIComponent(deal.originAddress));
-      }
-      
-      if (deal.destinationAddress) {
-        allAddresses.push(encodeURIComponent(deal.destinationAddress));
-      }
-    });
-    
-    // Filtere leere Adressen heraus
-    const validAddresses = allAddresses.filter(address => address.trim() !== '');
-    
-    if (validAddresses.length < 2) {
-      alert('Mindestens zwei gültige Adressen werden benötigt, um eine Route zu berechnen.');
-      return;
+
+    try {
+      const origin = OFFICE_ADDRESS;
+      const destination = OFFICE_ADDRESS;
+
+      // Verwende die custom_waypoint_order direkt
+      const waypoints = optimizedRoute.custom_waypoint_order
+        .map(addr => encodeURIComponent(addr)); // Kodiere die Adressen
+
+      const waypointsStr = waypoints.length > 0 ? `&waypoints=${waypoints.join('|')}` : '';
+      // WICHTIG: Füge &dirflg=h hinzu, da wir Google die *korrigierte* Reihenfolge vorgeben!
+      const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointsStr}&travelmode=driving&dirflg=h`;
+
+      console.log("Öffne Google Maps mit URL (korrigierte Reihenfolge):", googleMapsUrl);
+      window.open(googleMapsUrl, '_blank');
+    } catch (error) {
+      console.error("Fehler beim Erstellen der Google Maps URL:", error);
+      alert("Ein Fehler ist beim Erstellen des Google Maps Links aufgetreten.");
     }
-    
-    // Erste Adresse als Startpunkt
-    const origin = validAddresses[0];
-    
-    // Letzte Adresse als Ziel
-    const destination = validAddresses[validAddresses.length - 1];
-    
-    // Alle Adressen dazwischen als Wegpunkte
-    const waypoints = validAddresses.slice(1, validAddresses.length - 1);
-    
-    // Erstelle den Google Maps URL
-    const waypointsStr = waypoints.length > 0 ? `&waypoints=${waypoints.join('|')}` : '';
-    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypointsStr}&travelmode=driving`;
-    
-    // Hinweis, wenn die Route zu viele Wegpunkte enthält (Google Maps Limit ist etwa 10 Wegpunkte)
-    if (waypoints.length > 10) {
-      alert('Hinweis: Ihre Route enthält über 10 Wegpunkte. Google Maps zeigt möglicherweise nicht alle Stationen an.');
-    }
-    
-    // Öffne den Link in einem neuen Tab
-    window.open(googleMapsUrl, '_blank');
   };
+
+  // Google Directions Service Initialisierung
+  useEffect(() => {
+    if (window.google && window.google.maps && !directionsService) {
+      console.log("Initialisiere Google Directions Service...");
+      setDirectionsService(new window.google.maps.DirectionsService());
+    } else if (!window.google || !window.google.maps) {
+      const existingScript = document.getElementById('googleMapsScript');
+      if (!existingScript) {
+        console.log("Lade Google Maps Script...");
+        const script = document.createElement('script');
+        script.id = 'googleMapsScript';
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+          console.log("Google Maps Script geladen.");
+          if (window.google && window.google.maps) {
+            setDirectionsService(new window.google.maps.DirectionsService());
+          }
+        };
+        script.onerror = () => console.error("Fehler beim Laden des Google Maps Scripts.");
+        document.body.appendChild(script);
+      }
+    }
+  }, [directionsService]);
 
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-      <div className="p-6 border-b border-gray-200">
-        <h2 className="text-2xl font-bold text-gray-800">Tourenplanung</h2>
-        <p className="text-gray-500 mt-1">Planen Sie Ihre Umzüge für bestimmte Tage</p>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <h1 className="text-2xl font-bold mb-6">Tourenplanung</h1>
+
+      <div className="mb-6 bg-white p-4 rounded-lg shadow-sm flex flex-wrap gap-4 items-center justify-between">
+        <div className="flex items-center">
+          <label htmlFor="region-selector" className="text-sm font-medium text-gray-700">
+            Region:
+          </label>
+          <select
+            id="region-selector"
+            value={selectedRegion}
+            onChange={(e) => handleRegionChange(e.target.value)}
+            className="ml-2 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {REGIONS.map(region => (
+              <option key={region.id} value={region.id}>
+                {region.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center">
+          <input
+            type="text"
+            placeholder="Aufträge suchen..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <Search className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
+        </div>
       </div>
-      
-      <div className="p-6">
-        <div className="flex flex-col md:flex-row gap-6">
-          {/* Linke Spalte: Verfügbare Aufträge */}
-          <div className="w-full md:w-1/2">
-            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
-                <h3 className="text-lg font-semibold flex items-center">
-                  <Calendar className="mr-2 h-5 w-5 text-primary" />
-                  {showDateFilter 
-                    ? `Aufträge für ${format(selectedDate, 'dd. MMMM yyyy', { locale: de })}`
-                    : 'Alle verfügbaren Aufträge'}
-                </h3>
-                
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="datumFilter"
-                      checked={showDateFilter}
-                      onChange={(e) => {
-                        setShowDateFilter(e.target.checked);
-                        filterDeals(allDeals, searchQuery, e.target.checked ? selectedDate : null);
-                      }}
-                      className="mr-2"
-                    />
-                    <label htmlFor="datumFilter">Datum filtern</label>
-                  </div>
-                  
-                  {showDateFilter && (
-                    <DatePicker
-                      selected={selectedDate}
-                      onChange={(date) => {
-                        setSelectedDate(date);
-                        filterDeals(allDeals, searchQuery, date);
-                      }}
-                      dateFormat="dd.MM.yyyy"
-                      className="p-2 border rounded-md"
-                      locale={de}
-                    />
-                  )}
+
+      <div className="flex flex-col md:flex-row gap-6">
+        <div className="w-full md:w-1/2">
+          <div className="bg-white p-4 rounded-xl shadow-sm h-full flex flex-col">
+            <div className="flex-grow max-h-[calc(100vh-350px)] overflow-y-auto p-1 -m-1">
+              {loading ? (
+                <div className="text-center py-20">
+                  <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
+                  <p className="mt-4 text-gray-500">Lade Aufträge...</p>
                 </div>
+              ) : filteredDeals.length === 0 ? (
+                <div className="text-center py-10 text-gray-500">
+                  Keine Aufträge für die aktuelle Auswahl gefunden.
+                </div>
+              ) : (
+                filteredDeals.map((deal, index) => (
+                  <PipedriveDeal
+                    key={deal.id}
+                    deal={deal}
+                    index={index}
+                    isDraggable={!!(deal.originAddress && deal.destinationAddress)}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="w-full md:w-1/2 flex flex-col gap-6">
+          <TourArea
+            isOver={isOver}
+            drop={drop}
+            tourDeals={tourDeals}
+            onRemoveDeal={handleRemoveDeal}
+            handleSaveTour={handleSaveTour}
+            handleCalculateRoute={handleOpenRouteInGoogleMaps}
+          />
+
+          <div className="bg-white p-4 rounded-xl shadow-sm">
+            <h3 className="text-lg font-semibold mb-3 flex items-center">
+              <Milestone className="mr-2 h-5 w-5 text-primary" />
+              Optimierte Route
+            </h3>
+            {loadingRoute && (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                <p className="text-gray-500 mt-2 text-sm">Berechne Route...</p>
               </div>
-              
-              {/* Regionsfilter */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Region wählen
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {REGIONS.map(region => (
-                    <button
-                      key={region.id}
-                      onClick={() => handleRegionChange(region.id)}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors
-                        ${selectedRegion === region.id
-                          ? 'bg-primary text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                    >
-                      {region.name}
-                    </button>
+            )}
+            {!loadingRoute && !optimizedRoute && tourDeals.length > 0 && (
+              <div className="text-center py-4 text-gray-500 text-sm">
+                Route konnte nicht berechnet werden. Prüfen Sie die Adressen und die Browser-Konsole auf Fehler.
+              </div>
+            )}
+            {!loadingRoute && !optimizedRoute && tourDeals.length === 0 && (
+              <div className="text-center py-4 text-gray-500 text-sm">
+                Fügen Sie Aufträge zur Tour hinzu, um die Route zu berechnen.
+              </div>
+            )}
+            {optimizedRoute && optimizedRoute.legs && (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-sm font-medium bg-gray-50 p-2 rounded">
+                  <span>Gesamt:</span>
+                  <div className="text-right">
+                    {optimizedRoute.routes && optimizedRoute.routes[0] && optimizedRoute.routes[0].legs && (
+                      <>
+                        <div>{(optimizedRoute.routes[0].legs.reduce((sum, leg) => sum + (leg.distance?.value || 0), 0) / 1000).toFixed(1)} km</div>
+                        <div className="text-xs text-gray-500">{Math.round(optimizedRoute.routes[0].legs.reduce((sum, leg) => sum + (leg.duration?.value || 0), 0) / 60)} min Fahrzeit</div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1 max-h-[300px] overflow-y-auto text-sm">
+                  {optimizedRoute.legs.map((leg, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 border-b last:border-b-0">
+                      <div className="flex items-center space-x-2">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${
+                          leg.stopType === 'office_start' ? 'bg-green-500 text-white' :
+                          leg.stopType === 'pickup' ? 'bg-blue-500 text-white' :
+                          leg.stopType === 'delivery' ? 'bg-orange-500 text-white' :
+                          leg.stopType === 'office_return' ? 'bg-green-500 text-white' :
+                          'bg-gray-400 text-white'
+                        }`}>
+                          {leg.stopType === 'office_start' ? 'S' :
+                           leg.stopType === 'pickup' ? <Building size={12}/> :
+                           leg.stopType === 'delivery' ? <Home size={12}/> :
+                           leg.stopType === 'office_return' ? 'Z' :
+                           index}
+                        </span>
+                        <span className="truncate max-w-[180px]" title={leg.start_address}>
+                          {leg.stopType === 'office_start' ? 'Büro' : leg.start_address?.split(',')[0] ?? '?'}
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className="truncate max-w-[180px]" title={leg.end_address}>
+                          {leg.stopType === 'office_return' ? 'Büro' : leg.end_address?.split(',')[0] ?? '?'}
+                        </span>
+                      </div>
+                      <div className="text-right text-xs whitespace-nowrap">
+                        {leg.stopType !== 'office_start' && (
+                          <>
+                            <div>{leg.distance?.text ?? '-'}</div>
+                            <div className="text-gray-500">{leg.duration?.text ?? '-'}</div>
+                          </>
+                        )}
+                        {leg.stopType === 'office_start' && (
+                           <div>Start</div>
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
-              
-              <div className="mb-4">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Aufträge suchen..."
-                    value={searchQuery}
-                    onChange={(e) => handleSearch(e.target.value)}
-                    className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
-                  <Search className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
-                </div>
-              </div>
-              
-              <div className="bg-gray-50 p-4 rounded-lg mb-4">
-                <div className="flex items-center text-sm text-gray-600">
-                  <Clock className="mr-2 h-4 w-4 text-primary" />
-                  <span>{filteredDeals.length} Aufträge gefunden</span>
-                </div>
-              </div>
-              
-              <div className="max-h-[600px] overflow-y-auto p-2">
-                {loading ? (
-                  <div className="text-center py-20">
-                    <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
-                    <p className="mt-4 text-gray-500">Lade Aufträge...</p>
-                  </div>
-                ) : filteredDeals.length === 0 ? (
-                  <div className="text-center py-10 text-gray-500">
-                    Keine Aufträge gefunden für das ausgewählte Datum
-                  </div>
-                ) : (
-                  filteredDeals.map((deal, index) => (
-                    <PipedriveDeal 
-                      key={deal.id} 
-                      deal={deal} 
-                      index={index}
-                      isDraggable={true}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-          
-          {/* Rechte Spalte: Geplante Tour */}
-          <div className="w-full md:w-1/2">
-            <TourArea 
-              isOver={isOver}
-              drop={drop}
-              tourDeals={tourDeals}
-              onRemoveDeal={handleRemoveDeal}
-              selectedDate={selectedDate}
-              handleSaveTour={handleSaveTour}
-              handleCalculateRoute={handleCalculateRoute}
-            />
+            )}
           </div>
         </div>
       </div>
@@ -718,7 +907,7 @@ const TourPlannerContent = () => {
   );
 };
 
-// Hauptkomponente mit DndProvider
+// Hauptkomponente: Stellt nur den DndProvider bereit
 const TourPlanner = () => {
   return (
     <DndProvider backend={HTML5Backend}>

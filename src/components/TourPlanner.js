@@ -8,6 +8,12 @@ import { de } from 'date-fns/locale';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 
+// Konstanten können hier außerhalb bleiben, wenn sie wirklich global sind
+const OFFICE_ADDRESS = "Greschbachstraße 29, 76229 Karlsruhe";
+const SCHLAILE_FIXED_ADDRESS = "Kaiserstraße 175, 76133 Karlsruhe, Deutschland";
+const SCHLAILE_TYPE_DELIVERY = "148";
+const SCHLAILE_TYPE_PICKUP = "149";
+
 // Definiere die PipedriveDeal und TourArea als separate Komponenten außerhalb der Hauptkomponente
 const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
   const [{ isDragging }, drag] = useDrag(() => ({
@@ -46,6 +52,12 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
           <h3 className="font-medium text-gray-900 flex items-center">
             <span>{deal.title}</span>
             {objectIcon}
+            {/* Schlaile Indikator */}
+            {deal.schlaileType && (
+              <span title={`Schlaile ${deal.schlaileType}`} className="ml-2 px-1.5 py-0.5 bg-yellow-200 text-yellow-800 text-xs font-semibold rounded">
+                S
+              </span>
+            )}
           </h3>
           
           <div className="mt-2 space-y-1 text-sm">
@@ -102,29 +114,65 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
 };
 
 // Tour Area Komponente mit Drop Funktionalität
-const TourArea = ({ isOver, drop, tourDeals, onRemoveDeal, selectedDate, handleSaveTour, handleCalculateRoute }) => {
+const TourArea = ({
+  isOver,
+  drop,
+  tourDeals,
+  onRemoveDeal,
+  selectedDate,
+  onDateChange,
+  tourName,
+  onTourNameChange,
+  handleSaveTour,
+  handleCalculateRoute,
+  isSavingTour
+}) => {
   return (
-    <div 
+    <div
       ref={drop}
-      className={`bg-white p-4 rounded-xl border ${isOver ? 'border-primary border-dashed' : 'border-gray-200'} shadow-sm h-full`}
+      className={`bg-white p-4 rounded-xl border ${isOver ? 'border-primary border-dashed' : 'border-gray-200'} shadow-sm h-full flex flex-col`}
     >
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold flex items-center">
-          <Truck className="mr-2 h-5 w-5 text-primary" />
-          {/* Prüfe, ob selectedDate gültig ist, bevor formatiert wird */}
-          Geplante Tour für {selectedDate && isValid(selectedDate) ? format(selectedDate, 'dd.MM.yyyy', { locale: de }) : 'Datum auswählen'}
-        </h3>
-        
-        <button
-          onClick={handleSaveTour}
-          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
-          disabled={!selectedDate || !isValid(selectedDate)}
-        >
-          Tour speichern
-        </button>
+      <div className="mb-4">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
+          <h3 className="text-lg font-semibold flex items-center">
+            <Truck className="mr-2 h-5 w-5 text-primary" />
+            Tourplanung
+          </h3>
+          <button
+            onClick={handleSaveTour}
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            disabled={!selectedDate || !isValid(selectedDate) || tourDeals.length === 0 || isSavingTour}
+          >
+            {isSavingTour ? 'Speichern...' : 'Tour speichern'}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="flex-1 min-w-[150px]">
+            <label htmlFor="tourDate" className="block text-xs font-medium text-gray-500 mb-1">Datum</label>
+            <DatePicker
+              id="tourDate"
+              selected={selectedDate}
+              onChange={onDateChange}
+              dateFormat="dd.MM.yyyy"
+              locale={de}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+              wrapperClassName="w-full"
+            />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label htmlFor="tourName" className="block text-xs font-medium text-gray-500 mb-1">Tourname (optional)</label>
+            <input
+              id="tourName"
+              type="text"
+              value={tourName}
+              onChange={(e) => onTourNameChange(e.target.value)}
+              placeholder={`z.B. Tour ${selectedDate && isValid(selectedDate) ? format(selectedDate, 'dd.MM', { locale: de }) : ''}`}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+            />
+          </div>
+        </div>
       </div>
-      
-      <div className={`min-h-[200px] rounded-lg mb-4 flex items-center justify-center ${tourDeals.length === 0 ? 'border-2 border-dashed border-gray-300 bg-gray-50' : ''}`}>
+      <div className={`flex-grow min-h-[200px] rounded-lg mb-4 flex items-center justify-center ${tourDeals.length === 0 ? 'border-2 border-dashed border-gray-300 bg-gray-50' : ''}`}>
         {tourDeals.length === 0 ? (
           <div className="text-center py-10 text-gray-500">
             <Truck className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -174,8 +222,80 @@ const TourArea = ({ isOver, drop, tourDeals, onRemoveDeal, selectedDate, handleS
   );
 };
 
+// Hilfsfunktion zum Korrigieren der Wegpunktreihenfolge (AUßERHALB der Komponente)
+const fixWaypointOrder = (optimizedOrder, requestWaypoints, allLocations) => {
+  let correctedOrder = [...optimizedOrder]; // Kopie erstellen
+  const loadedItems = new Set();
+  let orderChanged = false;
+  let indicesToRemove = []; // Indizes, die verschoben werden
+
+  // Erster Durchlauf: Identifiziere Pickups und finde Verletzungen
+  for (let i = 0; i < correctedOrder.length; i++) {
+    const waypointIndexInRequest = correctedOrder[i];
+    const waypointLocation = requestWaypoints[waypointIndexInRequest].location;
+    const locationInfo = allLocations.find(l => l.location === waypointLocation);
+
+    if (!locationInfo) continue;
+
+    if (locationInfo.type === 'pickup') {
+      loadedItems.add(locationInfo.dealId);
+    } else if (locationInfo.type === 'delivery') {
+      if (!loadedItems.has(locationInfo.dealId)) {
+        // Verletzung gefunden: Lieferung vor Abholung
+        const pickupLocation = allLocations.find(l => l.dealId === locationInfo.dealId && l.type === 'pickup');
+        if (!pickupLocation) {
+          console.error(`Zugehöriger Pickup für Deal ${locationInfo.dealId} nicht gefunden!`);
+          continue;
+        }
+        const pickupWaypointIndexInRequest = requestWaypoints.findIndex(wp => wp.location === pickupLocation.location);
+        const pickupIndexInCorrectedOrder = correctedOrder.indexOf(pickupWaypointIndexInRequest);
+
+        if (pickupIndexInCorrectedOrder === -1) {
+           console.error(`Pickup-Index für Deal ${locationInfo.dealId} nicht in korrigierter Order gefunden!`);
+           continue;
+        }
+
+        // Markiere den aktuellen Delivery-Index zum Verschieben
+        indicesToRemove.push({ deliveryIndexInOrder: i, pickupIndexInOrder: pickupIndexInCorrectedOrder });
+        orderChanged = true;
+      }
+    }
+  }
+
+  // Zweiter Durchlauf: Führe die Verschiebungen durch (rückwärts, um Indizes nicht zu stören)
+  indicesToRemove.sort((a, b) => b.deliveryIndexInOrder - a.deliveryIndexInOrder); // Nach Index absteigend sortieren
+
+  for (const { deliveryIndexInOrder, pickupIndexInOrder } of indicesToRemove) {
+     // Entferne die Delivery aus der aktuellen Position
+     const [deliveryWaypointIndex] = correctedOrder.splice(deliveryIndexInOrder, 1);
+
+     // Finde den *neuen* Index des Pickups (könnte sich durch vorherige Splices verschoben haben)
+     const currentPickupIndexInOrder = correctedOrder.indexOf(optimizedOrder[pickupIndexInOrder]); // Suche den ursprünglichen Pickup-Index
+
+     if (currentPickupIndexInOrder === -1) {
+         console.error("Pickup-Index nach Splice nicht mehr gefunden!");
+         // Füge Delivery am Ende wieder hinzu als Fallback
+         correctedOrder.push(deliveryWaypointIndex);
+         continue;
+     }
+
+     // Füge die Delivery nach dem Pickup wieder ein
+     correctedOrder.splice(currentPickupIndexInOrder + 1, 0, deliveryWaypointIndex);
+  }
+
+  return { correctedOrder, orderChanged };
+};
+
 // Definiere TourPlannerContent als eigenständige Komponente
 const TourPlannerContent = () => {
+  // --- KONSTANTEN FÜR PROJEKT-UPDATES HIER DEFINIEREN ---
+  const PROJECT_TOUR_DATE_FIELD_KEY = "3c7b83b905a2d762409414672a4aa1450e966d49";
+  const PROJECT_TOUR_ID_FIELD_KEY = "7cfa771db86bba5afa46a05a82ff66734524c981";
+  const TARGET_PHASE_ID = 25;
+  const SCHLAILE_TRANSPORT_TYPE_KEY = "7a2f7e7908160ae7e6288c0a238b74328a5eb4af"; // Diese kann auch hierher
+  const OFFICE_POSTAL_PREFIX = OFFICE_ADDRESS.match(/\b(\d{2})\d{3}\b/)?.[1] || "76"; // Diese auch
+  // --- ENDE KONSTANTEN ---
+
   const [allDeals, setAllDeals] = useState([]);
   const [filteredDeals, setFilteredDeals] = useState([]);
   const [tourDeals, setTourDeals] = useState([]);
@@ -187,21 +307,19 @@ const TourPlannerContent = () => {
   const [optimizedRoute, setOptimizedRoute] = useState(null);
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [directionsService, setDirectionsService] = useState(null);
+  const [isSavingTour, setIsSavingTour] = useState(false);
+  const [tourName, setTourName] = useState('');
 
   // Drop-Zone für die Tour
   const [{ isOver }, drop] = useDrop({
     accept: 'deal',
     drop: (item) => {
-      console.log("Deal gedropped:", item.deal?.title || item.deal?.id);
-      setTourDeals(prevTourDeals => {
-        const dealExists = prevTourDeals.some(d => d.id === item.deal.id);
-        if (!dealExists) {
-          console.log("Füge Deal zur Tour hinzu:", item.deal.id);
-          return [...prevTourDeals, item.deal];
-        }
-        console.log("Deal existiert bereits in der Tour:", item.deal.id);
-        return prevTourDeals;
-      });
+      if (!tourDeals.some(d => d.id === item.deal.id)) {
+        setTourDeals(prev => [...prev, item.deal]);
+        setOptimizedRoute(null);
+      } else {
+        alert("Dieser Auftrag ist bereits in der Tour enthalten.");
+      }
     },
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
@@ -217,9 +335,6 @@ const TourPlannerContent = () => {
     { id: 'west', name: 'Westen', phase_id: 23 },
     { id: 'ka', name: 'Karlsruhe', phase_id: 20 },
   ], []);
-
-  const OFFICE_ADDRESS = "Greschbachstraße 15, 76229 Karlsruhe";
-  const OFFICE_POSTAL_PREFIX = OFFICE_ADDRESS.match(/\b(\d{2})\d{3}\b/)?.[1] || "76";
 
   // Hilfsfunktion: Region (PLZ-Präfix) aus Adresse extrahieren
   const getRegionFromAddress = (address) => {
@@ -242,9 +357,8 @@ const TourPlannerContent = () => {
 
   // Hilfsfunktion zur Verarbeitung von Projektdaten (Adressen extrahieren)
   const processProjects = useCallback(async (projectsData, resultArray, apiToken) => {
-    console.log("processProjects aufgerufen mit", projectsData.length, "Projekten");
-
     for (const project of projectsData) {
+      let dealObjectToAdd = null;
       try {
         if (project.deal_ids && project.deal_ids.length > 0) {
           const dealId = project.deal_ids[0];
@@ -252,20 +366,16 @@ const TourPlannerContent = () => {
           const dealData = await dealResponse.json();
 
           if (dealData.success && dealData.data) {
-            let originAddress = '';
-            let destinationAddress = '';
-            let moveDate = '';
-
+            // Definiere die bekannten Feld-IDs hier
             const knownFieldIds = {
-              originAddress: '07c3da8804f7b96210e45474fba35b8691211ddd',
-              destinationAddress: '9cb4de1018ec8404feeaaaf7ee9b293c78c44281',
-              moveDate: '949696aa9d99044db90383a758a74675587ed893'
+              originAddress: process.env.REACT_APP_PIPEDRIVE_ADDRESS_FIELD_KEY || '07c3da8804f7b96210e45474fba35b8691211ddd', // Fallback-Key, falls ENV nicht gesetzt
+              destinationAddress: process.env.REACT_APP_PIPEDRIVE_DELIVERY_ADDRESS_FIELD_KEY || '9cb4de1018ec8404feeaaaf7ee9b293c78c44281', // Fallback-Key
+              moveDate: process.env.REACT_APP_PIPEDRIVE_MOVE_DATE_FIELD_KEY || '949696aa9d99044db90383a758a74675587ed893' // Fallback-Key
             };
 
-            // Versuche bekannte Felder
-            originAddress = dealData.data[knownFieldIds.originAddress] || '';
-            destinationAddress = dealData.data[knownFieldIds.destinationAddress] || '';
-            moveDate = dealData.data[knownFieldIds.moveDate] || '';
+            let originAddress = dealData.data[knownFieldIds.originAddress] || '';
+            let destinationAddress = dealData.data[knownFieldIds.destinationAddress] || '';
+            let moveDate = dealData.data[knownFieldIds.moveDate] || '';
 
             // Heuristik, falls bekannte Felder leer sind (optional, kann zu Fehlern führen)
             if ((!originAddress || !destinationAddress) && typeof dealData.data === 'object') {
@@ -280,50 +390,121 @@ const TourPlannerContent = () => {
               }
             }
 
-            resultArray.push({
+            // Standardadressen zuerst holen
+            let originAddressFinal = originAddress.trim();
+            let destinationAddressFinal = destinationAddress.trim();
+            const schlaileTransportType = dealData.data[SCHLAILE_TRANSPORT_TYPE_KEY];
+
+            // --- VERSTÄRKTES DEBUGGING ---
+            console.log(`[Schlaile Check] Deal ${dealId}: Wert='${schlaileTransportType}', Typ=${typeof schlaileTransportType}. Vergleich mit DELIVERY='${SCHLAILE_TYPE_DELIVERY}' (Typ=${typeof SCHLAILE_TYPE_DELIVERY}), PICKUP='${SCHLAILE_TYPE_PICKUP}' (Typ=${typeof SCHLAILE_TYPE_PICKUP})`);
+            let schlaileMatched = false; // Flag
+            // --- ENDE VERSTÄRKTES DEBUGGING ---
+
+            if (schlaileTransportType === SCHLAILE_TYPE_DELIVERY) {
+              // --- VERSTÄRKTES DEBUGGING ---
+              console.log(`[Schlaile Check] Deal ${dealId}: Matched DELIVERY ('${schlaileTransportType}')`);
+              schlaileMatched = true;
+              // --- ENDE VERSTÄRKTES DEBUGGING ---
+              // Lieferung VON Schlaile: Start ist die feste Schlaile-Adresse
+              originAddressFinal = SCHLAILE_FIXED_ADDRESS;
+              console.log(`[Schlaile Assign] Deal ${dealId}: Set originAddressFinal to SCHLAILE_FIXED_ADDRESS: '${originAddressFinal}'`); // Log nach Zuweisung
+              // Zieladresse (destinationAddressFinal) bleibt die Standardadresse des Deals
+
+            } else if (schlaileTransportType === SCHLAILE_TYPE_PICKUP) {
+              // --- VERSTÄRKTES DEBUGGING ---
+              console.log(`[Schlaile Check] Deal ${dealId}: Matched PICKUP ('${schlaileTransportType}')`);
+              schlaileMatched = true;
+              // --- ENDE VERSTÄRKTES DEBUGGING ---
+              // Abholung BEI Kunde für Schlaile: Ziel ist die feste Schlaile-Adresse
+              destinationAddressFinal = SCHLAILE_FIXED_ADDRESS;
+              console.log(`[Schlaile Assign] Deal ${dealId}: Set destinationAddressFinal to SCHLAILE_FIXED_ADDRESS: '${destinationAddressFinal}'`); // Log nach Zuweisung
+              // Abholadresse (originAddressFinal) bleibt die Standardadresse des Deals
+            }
+
+            // --- VERSTÄRKTES DEBUGGING ---
+            if (!schlaileMatched && schlaileTransportType) {
+                console.log(`[Schlaile Check] Deal ${dealId}: NO MATCH for type '${schlaileTransportType}'`);
+            }
+            console.log(`[Schlaile Final Addr] Deal ${dealId}: Before object creation - Origin='${originAddressFinal}', Dest='${destinationAddressFinal}'`);
+            // --- ENDE VERSTÄRKTES DEBUGGING ---
+
+            // Erstelle das Objekt in der Variable
+            dealObjectToAdd = {
               id: project.id,
               dealId: dealId,
               title: project.title || dealData.data.title,
               organization: dealData.data.org_name,
               moveDate: moveDate || project.start_date,
-              originAddress: originAddress.trim(),
-              destinationAddress: destinationAddress.trim(),
+              originAddress: originAddressFinal, // Die ggf. überschriebene Adresse
+              destinationAddress: destinationAddressFinal, // Die ggf. überschriebene Adresse
               value: dealData.data.value,
               currency: dealData.data.currency,
               region: getRegionNameFromPhaseId(project.phase_id),
               projectStartDate: project.start_date,
-              projectEndDate: project.end_date
-            });
+              projectEndDate: project.end_date,
+              schlaileType: schlaileTransportType || null
+            };
+
           } else {
-            console.warn(`Keine Deal-Daten für ID ${dealId} gefunden oder API-Fehler.`);
-            resultArray.push({
+            // Erstelle ein Fallback-Objekt
+            dealObjectToAdd = {
               id: project.id,
+              dealId: dealId, // dealId ist hier bekannt
               title: project.title,
               region: getRegionNameFromPhaseId(project.phase_id),
               moveDate: project.start_date,
               projectStartDate: project.start_date,
               projectEndDate: project.end_date,
               originAddress: '',
-              destinationAddress: ''
-            });
+              destinationAddress: '',
+              schlaileType: null
+            };
           }
         } else {
-          resultArray.push({
+          // Erstelle ein Fallback-Objekt, wenn keine Deal-IDs vorhanden sind
+          dealObjectToAdd = {
             id: project.id,
+            dealId: null, // Keine Deal-ID
             title: project.title,
             region: getRegionNameFromPhaseId(project.phase_id),
             moveDate: project.start_date,
             projectStartDate: project.start_date,
             projectEndDate: project.end_date,
             originAddress: '',
-            destinationAddress: ''
-          });
+            destinationAddress: '',
+            schlaileType: null
+          };
         }
         await new Promise(resolve => setTimeout(resolve, 50));
+
       } catch (error) {
         console.error(`Fehler bei der Verarbeitung von Projekt ${project.id}:`, error);
+        // Erstelle ein Fehler-Fallback-Objekt
+         dealObjectToAdd = {
+            id: project.id,
+            dealId: project.deal_ids?.[0] || null, // Versuche, die Deal-ID zu bekommen
+            title: project.title + " (Fehler bei Verarbeitung)",
+            region: getRegionNameFromPhaseId(project.phase_id),
+            moveDate: project.start_date,
+            projectStartDate: project.start_date,
+            projectEndDate: project.end_date,
+            originAddress: '',
+            destinationAddress: '',
+            schlaileType: null
+          };
       }
-    }
+
+      // Logge das Objekt, *bevor* es hinzugefügt wird (wenn es erstellt wurde)
+      if (dealObjectToAdd) {
+        console.log(`[Schlaile Debug] Projekt ${project.id} (Deal ${dealObjectToAdd.dealId}): Objekt verarbeitet -> Origin: '${dealObjectToAdd.originAddress}', Dest: '${dealObjectToAdd.destinationAddress}', SchlaileType: '${dealObjectToAdd.schlaileType}'`);
+        resultArray.push(dealObjectToAdd); // Füge das Objekt zum Array hinzu
+      } else {
+         console.warn(`Projekt ${project.id}: Kein Objekt zum Hinzufügen erstellt.`);
+      }
+    } // Ende der for...of Schleife
+
+    // Das return resultArray sollte *nach* der Schleife stehen
+    return resultArray;
   }, [getRegionNameFromPhaseId]);
 
   // Deal aus der Tour entfernen
@@ -458,287 +639,313 @@ const TourPlannerContent = () => {
     setOptimizedRoute(null);
   };
 
-  // Tour speichern
-  const handleSaveTour = () => {
+  // Tour speichern - ÜBERARBEITET
+  const handleSaveTour = useCallback(async () => {
     if (!selectedDate || !isValid(selectedDate)) {
       alert("Bitte wählen Sie ein gültiges Datum aus, um die Tour zu speichern.");
       return;
     }
-    const tourName = format(selectedDate, 'yyyy-MM-dd');
-    const currentTours = JSON.parse(localStorage.getItem('savedTours') || '{}');
-    currentTours[tourName] = tourDeals.map(deal => deal.id);
-    localStorage.setItem('savedTours', JSON.stringify(currentTours));
-    alert(`Tour für ${format(selectedDate, 'dd.MM.yyyy', { locale: de })} gespeichert!`);
-  };
+    if (tourDeals.length === 0) {
+      alert("Bitte fügen Sie zuerst Aufträge zur Tour hinzu.");
+      return;
+    }
 
-  // Hilfsfunktion zum Korrigieren der Wegpunktreihenfolge
-  const fixWaypointOrder = (optimizedOrder, requestWaypoints, allLocations) => {
-    console.log("Korrigiere Wegpunktreihenfolge (falls nötig)...");
-    let correctedOrder = [...optimizedOrder]; // Kopie erstellen
-    const loadedItems = new Set();
-    let orderChanged = false;
-    let indicesToRemove = []; // Indizes, die verschoben werden
+    setIsSavingTour(true); // Start loading
 
-    // Erster Durchlauf: Identifiziere Pickups und finde Verletzungen
-    for (let i = 0; i < correctedOrder.length; i++) {
-      const waypointIndexInRequest = correctedOrder[i];
-      const waypointLocation = requestWaypoints[waypointIndexInRequest].location;
-      const locationInfo = allLocations.find(l => l.location === waypointLocation);
+    // --- Datum im gewünschten Format (dd.MM.yyyy) ---
+    const tourDateFormatted = format(selectedDate, 'dd.MM.yyyy', { locale: de });
+    // --- Tour ID: Eingegebener Name oder generierte ID ---
+    const finalTourId = tourName.trim() !== ''
+      ? tourName.trim()
+      : `Tour-${format(selectedDate, 'yyyy-MM-dd')}-${tourDeals.length}-${Date.now()}`; // Fallback ID
 
-      if (!locationInfo) continue;
+    const apiToken = process.env.REACT_APP_PIPEDRIVE_API_TOKEN;
+    const apiUrl = process.env.REACT_APP_PIPEDRIVE_API_URL || 'https://api.pipedrive.com/v1';
 
-      if (locationInfo.type === 'pickup') {
-        loadedItems.add(locationInfo.dealId);
-      } else if (locationInfo.type === 'delivery') {
-        if (!loadedItems.has(locationInfo.dealId)) {
-          console.warn(`Verletzung gefunden: Lieferung ${locationInfo.dealId} (${locationInfo.location}) vor Abholung.`);
-          // Finde den Index des Pickups in der *korrigierten* Reihenfolge
-          const pickupLocation = allLocations.find(l => l.dealId === locationInfo.dealId && l.type === 'pickup');
-          if (!pickupLocation) {
-            console.error(`Zugehöriger Pickup für Deal ${locationInfo.dealId} nicht gefunden!`);
-            continue; // Überspringe diese Korrektur
-          }
-          const pickupWaypointIndexInRequest = requestWaypoints.findIndex(wp => wp.location === pickupLocation.location);
-          const pickupIndexInCorrectedOrder = correctedOrder.indexOf(pickupWaypointIndexInRequest);
+    if (!apiToken) {
+        alert("Pipedrive API Token nicht konfiguriert. Speichern nicht möglich.");
+        setIsSavingTour(false);
+        return;
+    }
 
-          if (pickupIndexInCorrectedOrder === -1) {
-             console.error(`Pickup-Index für Deal ${locationInfo.dealId} nicht in korrigierter Order gefunden!`);
-             continue;
-          }
+    let successCount = 0;
+    let errorCount = 0;
 
-          // Markiere den aktuellen Delivery-Index zum Verschieben
-          indicesToRemove.push({ deliveryIndexInOrder: i, pickupIndexInOrder: pickupIndexInCorrectedOrder });
-          orderChanged = true;
-        }
+    const updatePromises = tourDeals.map(async (deal) => {
+      const projectId = deal.id;
+      if (!projectId) {
+        console.warn("Überspringe Deal ohne Projekt-ID:", deal.title);
+        errorCount++;
+        return;
       }
-    }
 
-    // Zweiter Durchlauf: Führe die Verschiebungen durch (rückwärts, um Indizes nicht zu stören)
-    indicesToRemove.sort((a, b) => b.deliveryIndexInOrder - a.deliveryIndexInOrder); // Nach Index absteigend sortieren
+      const updateData = {
+        phase_id: TARGET_PHASE_ID,
+        [PROJECT_TOUR_DATE_FIELD_KEY]: tourDateFormatted, // Korrigiertes Datumsformat
+        [PROJECT_TOUR_ID_FIELD_KEY]: finalTourId, // Verwendet den eingegebenen Namen oder Fallback
+      };
 
-    for (const { deliveryIndexInOrder, pickupIndexInOrder } of indicesToRemove) {
-       // Entferne die Delivery aus der aktuellen Position
-       const [deliveryWaypointIndex] = correctedOrder.splice(deliveryIndexInOrder, 1);
+      try {
+        const response = await axios.put(
+          `${apiUrl}/projects/${projectId}?api_token=${apiToken}`,
+          updateData
+        );
+        if (response.data && response.data.success) {
+          console.log(`Projekt ${projectId} (Deal: ${deal.dealId}) erfolgreich aktualisiert.`);
+          successCount++;
+        } else {
+          console.error(`Fehler beim Aktualisieren von Projekt ${projectId}. Antwort:`, response.data);
+          errorCount++;
+        }
+      } catch (error) {
+        console.error(`Fehler beim Aktualisieren von Projekt ${projectId}:`, error.response ? error.response.data : error.message);
+        errorCount++;
+      }
+    });
 
-       // Finde den *neuen* Index des Pickups (könnte sich durch vorherige Splices verschoben haben)
-       const currentPickupIndexInOrder = correctedOrder.indexOf(optimizedOrder[pickupIndexInOrder]); // Suche den ursprünglichen Pickup-Index
+    await Promise.all(updatePromises);
 
-       if (currentPickupIndexInOrder === -1) {
-           console.error("Pickup-Index nach Splice nicht mehr gefunden!");
-           // Füge Delivery am Ende wieder hinzu als Fallback
-           correctedOrder.push(deliveryWaypointIndex);
-           continue;
-       }
+    setIsSavingTour(false); // End loading
 
-       // Füge die Delivery nach dem Pickup ein
-       correctedOrder.splice(currentPickupIndexInOrder + 1, 0, deliveryWaypointIndex);
-       console.log(`Delivery (Index ${deliveryWaypointIndex}) verschoben nach Pickup (Index ${optimizedOrder[pickupIndexInOrder]})`);
-    }
-
-
-    if (orderChanged) {
-      console.log("Ursprüngliche Order:", optimizedOrder);
-      console.log("Korrigierte Order:", correctedOrder);
+    if (errorCount === 0) {
+      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert und ${successCount} Projekte erfolgreich aktualisiert!`);
     } else {
-      console.log("Keine Korrektur der Reihenfolge notwendig.");
+      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert. ${successCount} Projekte aktualisiert, ${errorCount} Fehler aufgetreten. Details siehe Konsole.`);
     }
+  }, [selectedDate, tourDeals, tourName, TARGET_PHASE_ID, PROJECT_TOUR_DATE_FIELD_KEY, PROJECT_TOUR_ID_FIELD_KEY]);
 
-    return { correctedOrder, orderChanged };
-  };
-
-
-  const calculateOptimizedRoute = useCallback(async (deals) => {
-    if (!directionsService || deals.length === 0) {
+  // calculateOptimizedRoute (useCallback bleibt, aber fixWaypointOrder ist jetzt stabil)
+  const calculateOptimizedRoute = useCallback(async () => {
+    if (!directionsService || tourDeals.length === 0) {
       setOptimizedRoute(null);
       setLoadingRoute(false);
       return;
     }
     setLoadingRoute(true);
-    console.log(`Starte Routenberechnung (Optimieren + Korrigieren) für ${deals.length} Deals.`);
-
-    // 1. Locations sammeln (wie gehabt)
-    const locations = deals.flatMap(deal => {
-      const locs = [];
-      if (deal.originAddress && deal.originAddress.trim()) locs.push({ location: deal.originAddress.trim(), type: 'pickup', dealId: deal.id, title: deal.title });
-      if (deal.destinationAddress && deal.destinationAddress.trim()) locs.push({ location: deal.destinationAddress.trim(), type: 'delivery', dealId: deal.id, title: deal.title });
-      return locs;
-    }).filter(loc => loc.location);
-
-    if (locations.length === 0) { /* ... Fehlerbehandlung ... */ return; }
-    console.log(`Gefundene gültige Locations: ${locations.length}`);
-
-    // 2. Erste Anfrage: Optimieren lassen
-    const initialRequest = {
-      origin: OFFICE_ADDRESS,
-      destination: OFFICE_ADDRESS,
-      waypoints: locations.map(loc => ({ location: loc.location, stopover: true })),
-      optimizeWaypoints: true, // OPTIMIEREN!
-      travelMode: window.google.maps.TravelMode.DRIVING,
-    };
-
-    let finalResult; // Das Ergebnis, das wir am Ende verwenden
 
     try {
-      console.log("Sende initiale Optimierungsanfrage...");
-      const initialResult = await new Promise((resolve, reject) => {
-        directionsService.route(initialRequest, (result, status) => {
-          if (status === window.google.maps.DirectionsStatus.OK) {
-            resolve(result);
+      // --- STUFE 1: Kundenadressen für Optimierung vorbereiten ---
+      const customerAddresses = new Set();
+      const addressToDealInfo = new Map();
+
+      tourDeals.forEach(deal => {
+        const isSchlailePickup = deal.schlaileType === SCHLAILE_TYPE_PICKUP;
+        const isSchlaileDelivery = deal.schlaileType === SCHLAILE_TYPE_DELIVERY;
+
+        const origin = deal.originAddress;
+        const destination = deal.destinationAddress;
+
+        // Nur gültige Adressen hinzufügen
+        const isValidAddress = (addr) => typeof addr === 'string' && addr.trim().length > 3;
+
+        if (isSchlailePickup) {
+          if (isValidAddress(origin)) {
+            customerAddresses.add(origin);
+            if (!addressToDealInfo.has(origin)) addressToDealInfo.set(origin, []);
+            addressToDealInfo.get(origin).push({ dealId: deal.id, type: 'pickup_to_schlaile' });
           } else {
-            reject(new Error(`Initiale Directions request failed: ${status}`));
+             console.warn(`Ungültige Origin-Adresse für Schlaile Pickup Deal ${deal.id}`);
           }
-        });
-      });
-      console.log("Initiale Optimierung erfolgreich:", initialResult);
-
-      // 3. Ergebnis prüfen und ggf. korrigieren
-      const optimizedOrder = initialResult.routes[0].waypoint_order;
-      const { correctedOrder, orderChanged } = fixWaypointOrder(
-        optimizedOrder,
-        initialRequest.waypoints, // Die Wegpunkte, auf die sich optimizedOrder bezieht
-        locations // Die Liste mit Typ/DealID Infos
-      );
-
-      // 4. Zweite Anfrage (falls nötig) mit korrigierter Reihenfolge
-      if (orderChanged) {
-        console.log("Reihenfolge wurde korrigiert. Sende zweite Anfrage für korrekte Legs...");
-        const correctedWaypoints = correctedOrder.map(index => initialRequest.waypoints[index]); // Wegpunkte in korrigierter Reihenfolge
-
-        const correctedRequest = {
-          origin: OFFICE_ADDRESS,
-          destination: OFFICE_ADDRESS,
-          waypoints: correctedWaypoints, // Korrigierte Reihenfolge
-          optimizeWaypoints: false, // NICHT MEHR OPTIMIEREN!
-          travelMode: window.google.maps.TravelMode.DRIVING,
-        };
-
-        finalResult = await new Promise((resolve, reject) => {
-          directionsService.route(correctedRequest, (result, status) => {
-            if (status === window.google.maps.DirectionsStatus.OK) {
-              // WICHTIG: Füge die korrigierte Order dem Ergebnis hinzu, da Google sie nicht liefert
-              result.routes[0].waypoint_order = correctedOrder.map((_, i) => i); // Erzeuge eine 0, 1, 2... Sequenz
-              result.corrected_waypoint_order_indices = correctedOrder; // Speichere die originalen Indizes
-              resolve(result);
-            } else {
-              reject(new Error(`Korrigierte Directions request failed: ${status}`));
-            }
-          });
-        });
-        console.log("Zweite Anfrage (korrigierte Route) erfolgreich:", finalResult);
-
-      } else {
-        // Keine Korrektur nötig, verwende das erste Ergebnis
-        finalResult = initialResult;
-        finalResult.routes[0].waypoint_order = optimizedOrder; // Stelle sicher, dass die Order drin ist
-      }
-
-      // 5. Ergebnis verarbeiten (mit finalResult)
-      const route = finalResult.routes[0];
-      const finalWaypointOrder = route.waypoint_order; // Entweder die optimierte oder die 0,1,2... Sequenz
-      const finalRequestWaypoints = finalResult.request.waypoints; // Die Wegpunkte der *letzten* Anfrage
-      const originalLegs = route.legs;
-
-      // Anreichern der Legs
-      const enrichedLegs = originalLegs.map((leg, index) => {
-        let stopType = 'unknown';
-        let dealId = null;
-
-        // Finde den Typ des Wegpunkts am *Ende* dieses Legs
-        // Der Index in finalWaypointOrder bezieht sich auf finalRequestWaypoints
-        if (index < finalWaypointOrder.length) {
-           // Bei korrigierter Route ist finalWaypointOrder [0, 1, 2...], also index = orderedWaypointIndex
-           const orderedWaypointIndex = finalWaypointOrder[index];
-           const legEndLocation = finalRequestWaypoints[orderedWaypointIndex].location;
-           // Finde die Infos in der ursprünglichen 'locations'-Liste
-           const originalLocationInfo = locations.find(l => l.location === legEndLocation);
-           stopType = originalLocationInfo?.type || 'unknown';
-           dealId = originalLocationInfo?.dealId || null;
-        } else if (index === originalLegs.length - 1) {
-           stopType = 'office_return';
+        } else if (isSchlaileDelivery) {
+          if (isValidAddress(destination)) {
+            customerAddresses.add(destination);
+            if (!addressToDealInfo.has(destination)) addressToDealInfo.set(destination, []);
+            addressToDealInfo.get(destination).push({ dealId: deal.id, type: 'delivery_from_schlaile' });
+          } else {
+             console.warn(`Ungültige Destination-Adresse für Schlaile Delivery Deal ${deal.id}`);
+          }
+        } else {
+          // Normaler Umzug
+          if (isValidAddress(origin)) {
+             customerAddresses.add(origin);
+             if (!addressToDealInfo.has(origin)) addressToDealInfo.set(origin, []);
+             addressToDealInfo.get(origin).push({ dealId: deal.id, type: 'normal_origin' });
+          } else {
+             console.warn(`Ungültige Origin-Adresse für normalen Deal ${deal.id}`);
+          }
+          if (isValidAddress(destination)) {
+             customerAddresses.add(destination);
+             if (!addressToDealInfo.has(destination)) addressToDealInfo.set(destination, []);
+             addressToDealInfo.get(destination).push({ dealId: deal.id, type: 'normal_dest' });
+          } else {
+             console.warn(`Ungültige Destination-Adresse für normalen Deal ${deal.id}`);
+          }
         }
-        return { ...leg, stopType: stopType, dealId: dealId };
       });
 
-      // Display Legs erstellen
-      const displayLegs = [
-         { /* ... Start-Leg ... */
-            start_address: OFFICE_ADDRESS,
-            end_address: enrichedLegs.length > 0 ? enrichedLegs[0].start_address : OFFICE_ADDRESS,
-            distance: { text: 'Start', value: 0 },
-            duration: { text: '', value: 0 },
-            stopType: 'office_start',
-            dealId: null
-          },
-         ...enrichedLegs
-       ];
+      const waypointsForOptimization = Array.from(customerAddresses).map(addr => ({ location: addr, stopover: true }));
 
-      // Custom Waypoint Order für die Anzeige (basierend auf der finalen Reihenfolge)
-      let customWaypointDisplayOrder;
-      if (orderChanged && finalResult.corrected_waypoint_order_indices) {
-          // Nimm die gespeicherten Original-Indizes und hole die Locations aus der *initialen* Anfrage
-          customWaypointDisplayOrder = finalResult.corrected_waypoint_order_indices.map(idx => initialRequest.waypoints[idx].location);
-      } else {
-          // Nimm die optimierte Order und hole die Locations aus der initialen Anfrage
-          customWaypointDisplayOrder = optimizedOrder.map(idx => initialRequest.waypoints[idx].location);
+      if (waypointsForOptimization.length === 0) {
+         console.log("Keine gültigen Kundenadressen für Optimierung gefunden.");
+         setOptimizedRoute(null);
+         setLoadingRoute(false);
+         return;
       }
 
+      // --- STUFE 1: Google Optimierung der Kundenadressen ---
+      console.log("[Route Logic] Starte Optimierung für Kundenadressen:", waypointsForOptimization);
+      const optimizationRequest = {
+        origin: OFFICE_ADDRESS,
+        destination: OFFICE_ADDRESS,
+        waypoints: waypointsForOptimization,
+        optimizeWaypoints: true,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      };
 
-      setOptimizedRoute({
-        ...finalResult,
-        legs: displayLegs,
-        request: finalResult.request, // Die Anfrage, die zu diesen Legs führte
-        custom_waypoint_order: customWaypointDisplayOrder // Korrekte Reihenfolge für Anzeige
+      const optimizationResponse = await directionsService.route(optimizationRequest);
+      if (!optimizationResponse || !optimizationResponse.routes || optimizationResponse.routes.length === 0) {
+          throw new Error("Keine Route von der Optimierungs-API erhalten.");
+      }
+      const optimizedCustomerOrder = optimizationResponse.routes[0].waypoint_order.map(index => waypointsForOptimization[index].location);
+      console.log("[Route Logic] Optimierte Kundenreihenfolge:", optimizedCustomerOrder);
+
+      // --- STUFE 2: Logische Sequenz mit Schlaile erstellen ---
+      let finalSequence = [OFFICE_ADDRESS];
+      let pendingSchlaileVisit = false;
+      let visitedAddressesForDeal = new Map();
+
+      const addSchlaileIfNeeded = () => {
+        if (pendingSchlaileVisit && finalSequence[finalSequence.length - 1] !== SCHLAILE_FIXED_ADDRESS) {
+          console.log("[Route Logic] Füge fälligen Schlaile-Besuch hinzu.");
+          finalSequence.push(SCHLAILE_FIXED_ADDRESS);
+          pendingSchlaileVisit = false;
+        }
+      };
+
+      optimizedCustomerOrder.forEach(customerAddress => {
+        const dealInfos = addressToDealInfo.get(customerAddress) || [];
+        dealInfos.forEach(info => {
+            const visitKey = `${info.dealId}-${info.type}`;
+            if (visitedAddressesForDeal.has(visitKey)) return;
+
+            console.log(`[Route Logic] Verarbeite Adresse: ${customerAddress.substring(0,20)}... für Deal ${info.dealId} (${info.type})`);
+
+            if (info.type === 'delivery_from_schlaile') {
+              addSchlaileIfNeeded();
+              if (finalSequence[finalSequence.length - 1] !== SCHLAILE_FIXED_ADDRESS) {
+                 console.log("[Route Logic] Füge Schlaile vor Lieferung hinzu.");
+                 finalSequence.push(SCHLAILE_FIXED_ADDRESS);
+              }
+              finalSequence.push(customerAddress);
+              visitedAddressesForDeal.set(visitKey, true);
+            } else if (info.type === 'pickup_to_schlaile') {
+              addSchlaileIfNeeded();
+              finalSequence.push(customerAddress);
+              pendingSchlaileVisit = true;
+              visitedAddressesForDeal.set(visitKey, true);
+            } else {
+              addSchlaileIfNeeded();
+              finalSequence.push(customerAddress);
+              visitedAddressesForDeal.set(visitKey, true);
+            }
+        });
       });
+
+      addSchlaileIfNeeded();
+
+      if (finalSequence[finalSequence.length - 1] !== OFFICE_ADDRESS) {
+         finalSequence.push(OFFICE_ADDRESS);
+      }
+
+      finalSequence = finalSequence.filter((addr, index, self) => index === 0 || addr !== self[index - 1]);
+      console.log("[Route Logic] Finale Sequenz erstellt:", finalSequence);
+
+      // --- STUFE 3: Finale Route für die feste Sequenz abrufen ---
+      if (finalSequence.length <= 1) {
+         console.warn("[Route Logic] Finale Sequenz zu kurz, keine Route berechenbar.");
+         setOptimizedRoute(null);
+         setLoadingRoute(false);
+         return;
+      }
+
+      const finalWaypoints = finalSequence.slice(1, -1).map(addr => ({ location: addr, stopover: true }));
+      const finalRouteRequest = {
+        origin: finalSequence[0],
+        destination: finalSequence[finalSequence.length - 1],
+        waypoints: finalWaypoints,
+        optimizeWaypoints: false,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      };
+
+      console.log("[Route Logic] Starte finale Routenberechnung für feste Sequenz.");
+      const finalRouteResponse = await directionsService.route(finalRouteRequest);
+      if (!finalRouteResponse || !finalRouteResponse.routes || finalRouteResponse.routes.length === 0) {
+          throw new Error("Keine Route von der finalen Routenberechnungs-API erhalten.");
+      }
+
+      const finalRouteResult = finalRouteResponse.routes[0];
+      finalRouteResult.custom_waypoint_order = finalSequence; // Speichere die *gesamte* Sequenz
+
+      // TODO: Bessere stopType Zuordnung basierend auf finalSequence und addressToDealInfo
+      finalRouteResult.legs.forEach((leg, index) => {
+          leg.stopType = 'intermediate'; // Platzhalter
+          const startAddr = finalSequence[index];
+          const endAddr = finalSequence[index + 1];
+
+          if (startAddr === OFFICE_ADDRESS) leg.stopType = 'office_start';
+          else if (endAddr === OFFICE_ADDRESS) leg.stopType = 'office_return';
+          else if (startAddr === SCHLAILE_FIXED_ADDRESS) leg.stopType = 'delivery'; // Lieferung VON Schlaile
+          else if (endAddr === SCHLAILE_FIXED_ADDRESS) leg.stopType = 'pickup'; // Abholung ZU Schlaile
+          // Hier könnte man noch feiner differenzieren, wenn nötig
+      });
+
+      setOptimizedRoute(finalRouteResult);
 
     } catch (error) {
       console.error("Fehler bei der Routenberechnung:", error);
-      alert(`Routenberechnung fehlgeschlagen: ${error.message}`);
+      alert(`Fehler bei der Routenberechnung: ${error.message}`);
       setOptimizedRoute(null);
     } finally {
       setLoadingRoute(false);
     }
-  }, [directionsService, OFFICE_ADDRESS]);
+  }, [directionsService, tourDeals, OFFICE_ADDRESS, SCHLAILE_FIXED_ADDRESS, SCHLAILE_TYPE_PICKUP, SCHLAILE_TYPE_DELIVERY]);
 
   // useEffect Hook, der die Route neu berechnet
   useEffect(() => {
-    console.log("useEffect für tourDeals ausgelöst. tourDeals:", tourDeals.length);
     if (tourDeals.length > 0 && directionsService) {
-      console.log("Bedingungen erfüllt, rufe calculateOptimizedRoute auf.");
-      calculateOptimizedRoute(tourDeals);
+      calculateOptimizedRoute();
     } else if (tourDeals.length === 0) {
-      console.log("Keine Deals mehr, lösche Route.");
       setOptimizedRoute(null);
       setLoadingRoute(false);
-    } else {
-      console.log("Warte auf Directions Service oder keine Deals vorhanden...");
     }
-    // calculateOptimizedRoute aus Abhängigkeiten entfernt, da fixWaypointOrder jetzt außerhalb ist
-    // und die Funktion selbst durch useCallback memoized ist.
-  }, [tourDeals, directionsService]);
+  }, [tourDeals, directionsService, calculateOptimizedRoute]);
 
-  // handleOpenRouteInGoogleMaps muss angepasst werden, um die custom_waypoint_order zu verwenden
+  // handleOpenRouteInGoogleMaps (angepasst, um die gesamte Sequenz zu verwenden)
   const handleOpenRouteInGoogleMaps = () => {
-    console.log("Versuche Google Maps zu öffnen. Aktuelle optimizedRoute:", optimizedRoute);
-    // Prüfe auf das Vorhandensein der custom_waypoint_order
-    if (!optimizedRoute || !optimizedRoute.custom_waypoint_order || optimizedRoute.custom_waypoint_order.length === 0) {
+    if (!optimizedRoute || !optimizedRoute.custom_waypoint_order || optimizedRoute.custom_waypoint_order.length < 2) {
       alert("Route wurde noch nicht berechnet oder ist ungültig.");
-      console.error("OptimizedRoute oder custom_waypoint_order fehlen:", optimizedRoute);
+      console.error("OptimizedRoute oder custom_waypoint_order fehlen oder sind zu kurz:", optimizedRoute);
       return;
     }
 
     try {
-      const origin = OFFICE_ADDRESS;
-      const destination = OFFICE_ADDRESS;
+      const fullSequence = optimizedRoute.custom_waypoint_order;
+      const origin = fullSequence[0];
+      const destination = fullSequence[fullSequence.length - 1];
+      const waypointsInSequence = fullSequence.slice(1, -1);
 
-      // Verwende die custom_waypoint_order direkt
-      const waypoints = optimizedRoute.custom_waypoint_order
-        .map(addr => encodeURIComponent(addr)); // Kodiere die Adressen
+      // --- Filtere die Wegpunkte für den Google Maps Link (Schlaile nur einmal) ---
+      const filteredWaypointsForMap = [];
+      const schlaileAddedToMap = new Set();
 
+      for (const address of waypointsInSequence) { // Iteriere nur über die Wegpunkte
+        if (address === SCHLAILE_FIXED_ADDRESS) {
+          if (!schlaileAddedToMap.has(SCHLAILE_FIXED_ADDRESS)) {
+            filteredWaypointsForMap.push(address);
+            schlaileAddedToMap.add(SCHLAILE_FIXED_ADDRESS);
+          }
+        } else {
+          filteredWaypointsForMap.push(address);
+        }
+      }
+      // --- ENDE Filtern ---
+
+      const waypoints = filteredWaypointsForMap.map(addr => encodeURIComponent(addr));
       const waypointsStr = waypoints.length > 0 ? `&waypoints=${waypoints.join('|')}` : '';
-      // WICHTIG: Füge &dirflg=h hinzu, da wir Google die *korrigierte* Reihenfolge vorgeben!
-      const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointsStr}&travelmode=driving&dirflg=h`;
+      // WICHTIG: &dirflg=h entfernen, da wir Google die *optimierte* Reihenfolge geben, nicht die manuell korrigierte
+      const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointsStr}&travelmode=driving`;
 
-      console.log("Öffne Google Maps mit URL (korrigierte Reihenfolge):", googleMapsUrl);
+      console.log("[Google Maps Link] Gefilterte Wegpunkte für Link:", filteredWaypointsForMap);
       window.open(googleMapsUrl, '_blank');
     } catch (error) {
       console.error("Fehler beim Erstellen der Google Maps URL:", error);
@@ -771,6 +978,47 @@ const TourPlannerContent = () => {
       }
     }
   }, [directionsService]);
+
+  // --- NEU: Berechne die gefilterte Liste der Legs für die Anzeige ---
+  const filteredLegsForDisplay = useMemo(() => {
+    if (!optimizedRoute || !optimizedRoute.legs) {
+      return [];
+    }
+
+    const originalLegs = optimizedRoute.legs;
+    const filtered = [];
+
+    for (let i = 0; i < originalLegs.length; i++) {
+      const currentLeg = originalLegs[i];
+      const isCurrentLegSchlaileToSchlaile =
+        currentLeg.start_address?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]) &&
+        currentLeg.end_address?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]) &&
+        currentLeg.distance?.value < 100; // Schlaile -> Schlaile mit kurzer Distanz
+
+      if (isCurrentLegSchlaileToSchlaile) {
+        // Prüfe das vorherige Leg
+        const previousLeg = i > 0 ? originalLegs[i - 1] : null;
+        const didPreviousLegEndAtSchlaile =
+          previousLeg?.end_address?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]);
+
+        // Entferne das aktuelle Leg NUR, wenn das vorherige auch bei Schlaile endete
+        if (didPreviousLegEndAtSchlaile) {
+          // Dies ist ein redundanter, aufeinanderfolgender Schlaile->Schlaile Schritt - überspringen
+          console.log(`[Route Display Filter] Entferne redundantes Schlaile->Schlaile Leg bei Index ${i}`);
+          continue; // Gehe zum nächsten Leg in der Schleife
+        }
+        // Andernfalls (wenn das vorherige Leg NICHT bei Schlaile endete),
+        // behalte dieses Leg, da es den *ersten* Stopp bei Schlaile in einer Sequenz darstellt.
+      }
+
+      // Behalte das aktuelle Leg (entweder kein Schlaile->Schlaile oder der erste Stopp bei Schlaile)
+      filtered.push(currentLeg);
+    }
+    console.log("[Route Display Filter] Original Legs:", originalLegs.length, "Gefilterte Legs für Anzeige:", filtered.length);
+    return filtered;
+
+  }, [optimizedRoute]); // Abhängigkeit von optimizedRoute (SCHLAILE_FIXED_ADDRESS und OFFICE_ADDRESS sind Konstanten)
+  // --- ENDE NEU ---
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -825,7 +1073,7 @@ const TourPlannerContent = () => {
                     key={deal.id}
                     deal={deal}
                     index={index}
-                    isDraggable={!!(deal.originAddress && deal.destinationAddress)}
+                    isDraggable={!!((deal.originAddress && deal.destinationAddress) || deal.schlaileType)}
                   />
                 ))
               )}
@@ -839,8 +1087,13 @@ const TourPlannerContent = () => {
             drop={drop}
             tourDeals={tourDeals}
             onRemoveDeal={handleRemoveDeal}
+            selectedDate={selectedDate}
+            onDateChange={(date) => setSelectedDate(date)}
+            tourName={tourName}
+            onTourNameChange={(name) => setTourName(name)}
             handleSaveTour={handleSaveTour}
-            handleCalculateRoute={handleOpenRouteInGoogleMaps}
+            handleCalculateRoute={calculateOptimizedRoute}
+            isSavingTour={isSavingTour}
           />
 
           <div className="bg-white p-4 rounded-xl shadow-sm">
@@ -856,7 +1109,7 @@ const TourPlannerContent = () => {
             )}
             {!loadingRoute && !optimizedRoute && tourDeals.length > 0 && (
               <div className="text-center py-4 text-gray-500 text-sm">
-                Route konnte nicht berechnet werden. Prüfen Sie die Adressen und die Browser-Konsole auf Fehler.
+                Klicken Sie auf "Route berechnen".
               </div>
             )}
             {!loadingRoute && !optimizedRoute && tourDeals.length === 0 && (
@@ -864,12 +1117,12 @@ const TourPlannerContent = () => {
                 Fügen Sie Aufträge zur Tour hinzu, um die Route zu berechnen.
               </div>
             )}
-            {optimizedRoute && optimizedRoute.legs && (
+            {optimizedRoute && filteredLegsForDisplay.length > 0 && (
               <div className="space-y-3">
                 <div className="flex justify-between items-center text-sm font-medium bg-gray-50 p-2 rounded">
                   <span>Gesamt:</span>
                   <div className="text-right">
-                    {optimizedRoute.routes && optimizedRoute.routes[0] && optimizedRoute.routes[0].legs && (
+                    {optimizedRoute?.routes?.[0]?.legs && (
                       <>
                         <div>{(optimizedRoute.routes[0].legs.reduce((sum, leg) => sum + (leg.distance?.value || 0), 0) / 1000).toFixed(1)} km</div>
                         <div className="text-xs text-gray-500">{Math.round(optimizedRoute.routes[0].legs.reduce((sum, leg) => sum + (leg.duration?.value || 0), 0) / 60)} min Fahrzeit</div>
@@ -878,46 +1131,61 @@ const TourPlannerContent = () => {
                   </div>
                 </div>
                 <div className="space-y-1 max-h-[300px] overflow-y-auto text-sm">
-                  {optimizedRoute.legs.map((leg, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 border-b last:border-b-0">
-                      <div className="flex items-center space-x-2">
-                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${
-                          leg.stopType === 'office_start' ? 'bg-green-500 text-white' :
-                          leg.stopType === 'pickup' ? 'bg-blue-500 text-white' :
-                          leg.stopType === 'delivery' ? 'bg-orange-500 text-white' :
-                          leg.stopType === 'office_return' ? 'bg-green-500 text-white' :
-                          'bg-gray-400 text-white'
-                        }`}>
-                          {leg.stopType === 'office_start' ? 'S' :
-                           leg.stopType === 'pickup' ? <Building size={12}/> :
-                           leg.stopType === 'delivery' ? <Home size={12}/> :
-                           leg.stopType === 'office_return' ? 'Z' :
-                           index}
-                        </span>
-                        <span className="truncate max-w-[180px]" title={leg.start_address}>
-                          {leg.stopType === 'office_start' ? 'Büro' : leg.start_address?.split(',')[0] ?? '?'}
-                        </span>
-                        <span className="text-gray-400">→</span>
-                        <span className="truncate max-w-[180px]" title={leg.end_address}>
-                          {leg.stopType === 'office_return' ? 'Büro' : leg.end_address?.split(',')[0] ?? '?'}
-                        </span>
+                  {filteredLegsForDisplay.map((leg, index, displayedArray) => (
+                      <div key={index} className="flex items-center justify-between p-2 border-b last:border-b-0">
+                        <div className="flex items-center space-x-2">
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${
+                            (index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'bg-green-500 text-white' :
+                            (index === displayedArray.length - 1 && leg.end_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'bg-green-500 text-white' :
+                            leg.stopType === 'pickup' ? 'bg-blue-500 text-white' :
+                            leg.stopType === 'delivery' ? 'bg-orange-500 text-white' :
+                            'bg-gray-400 text-white'
+                          }`}>
+                            {(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'S' :
+                             (index === displayedArray.length - 1 && leg.end_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'Z' :
+                             leg.stopType === 'pickup' ? <Building size={12}/> :
+                             leg.stopType === 'delivery' ? <Home size={12}/> :
+                             index + 1}
+                          </span>
+                          <span className="truncate max-w-[180px]" title={leg.start_address}>
+                            {(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'Büro' : leg.start_address?.split(',')[0] ?? '?'}
+                          </span>
+                          <span className="text-gray-400">→</span>
+                          <span className="truncate max-w-[180px]" title={leg.end_address}>
+                            {(index === displayedArray.length - 1 && leg.end_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'Büro' : leg.end_address?.split(',')[0] ?? '?'}
+                          </span>
+                        </div>
+                        <div className="text-right text-xs whitespace-nowrap">
+                          {!(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) && (
+                            <>
+                              <div>{leg.distance?.text ?? '-'}</div>
+                              <div className="text-gray-500">{leg.duration?.text ?? '-'}</div>
+                            </>
+                          )}
+                          {(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) && (
+                             <div>Start</div>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right text-xs whitespace-nowrap">
-                        {leg.stopType !== 'office_start' && (
-                          <>
-                            <div>{leg.distance?.text ?? '-'}</div>
-                            <div className="text-gray-500">{leg.duration?.text ?? '-'}</div>
-                          </>
-                        )}
-                        {leg.stopType === 'office_start' && (
-                           <div>Start</div>
-                        )}
-                      </div>
-                    </div>
                   ))}
                 </div>
+                 {/* Button zum Öffnen in Google Maps */}
+                 <button
+                    onClick={handleOpenRouteInGoogleMaps}
+                    className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                    disabled={loadingRoute || !optimizedRoute} // Deaktivieren während Laden oder wenn keine Route
+                  >
+                    <MapPin className="w-4 h-4" />
+                    In Google Maps öffnen
+                  </button>
               </div>
             )}
+             {/* Fallback-Anzeige, wenn nach Filterung keine Legs mehr übrig sind */}
+             {optimizedRoute?.legs && filteredLegsForDisplay.length === 0 && !loadingRoute && (
+                 <div className="text-center py-4 text-gray-500 text-sm">
+                    Keine gültigen Routenschritte nach Filterung gefunden.
+                 </div>
+             )}
           </div>
         </div>
       </div>

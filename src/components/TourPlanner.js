@@ -125,7 +125,9 @@ const TourArea = ({
   onTourNameChange,
   handleSaveTour,
   handleCalculateRoute,
-  isSavingTour
+  isSavingTour,
+  pianoCalculations,
+  onCalculatePianoPrice
 }) => {
   return (
     <div
@@ -175,26 +177,52 @@ const TourArea = ({
       <div className={`flex-grow min-h-[200px] rounded-lg mb-4 flex items-center justify-center ${tourDeals.length === 0 ? 'border-2 border-dashed border-gray-300 bg-gray-50' : ''}`}>
         {tourDeals.length === 0 ? (
           <div className="text-center py-10 text-gray-500">
-            <Truck className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-            <p>Ziehen Sie Aufträge hierher, um Ihre Tour zu planen</p>
+            <p className="mb-2">Ziehen Sie Aufträge hierher</p>
+            <Truck size={40} className="mx-auto text-gray-400" />
           </div>
         ) : (
-          <div className="w-full space-y-2">
-            {tourDeals.map((deal, index) => (
-              <div key={deal.id} className="flex items-center">
-                <div className="mr-2 bg-primary text-white w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0">
-                  {index + 1}
+          <div className="w-full space-y-3 overflow-y-auto max-h-[calc(100vh-450px)] pr-2">
+            {tourDeals.map((deal) => {
+              const isPianoDeal = deal.title?.toLowerCase().includes('piano') || deal.title?.toLowerCase().includes('flügel');
+              const calculation = pianoCalculations[deal.id];
+
+              return (
+                <div key={deal.id} className="relative group">
+                  <PipedriveDeal deal={deal} isDraggable={false} />
+                  <button
+                    onClick={() => onRemoveDeal(deal.id)}
+                    className="absolute top-1 right-1 p-1 bg-white bg-opacity-70 rounded-full text-gray-500 hover:text-red-600 hover:bg-opacity-100 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Aus Tour entfernen"
+                  >
+                    <X size={16} />
+                  </button>
+                  {isPianoDeal && !deal.schlaileType && (
+                    <div className="mt-1 ml-4 text-xs">
+                      {!calculation || (!calculation.result && !calculation.error && !calculation.loading) ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCalculatePianoPrice(deal);
+                          }}
+                          className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-xs"
+                        >
+                          Klavierpreis berechnen
+                        </button>
+                      ) : calculation.loading ? (
+                        <span className="text-gray-500 italic">Berechne Preis...</span>
+                      ) : calculation.error ? (
+                        <span className="text-red-600" title={calculation.error}>Fehler bei Preisberechnung</span>
+                      ) : calculation.result ? (
+                        <div className="bg-indigo-50 p-2 rounded border border-indigo-100">
+                          <span className="font-semibold text-indigo-800">Klavierpreis: {calculation.result.gross_sum} €</span>
+                          <span className="text-gray-600 ml-2">(Netto: {calculation.result.net_sum} €, Basis: {calculation.result.base_price}€, Etage: {calculation.result.floor_surcharge}€, KM: {calculation.result.km_surcharge}€)</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
-                <div className="flex-1">
-                  <PipedriveDeal 
-                    deal={deal} 
-                    index={index}
-                    isDraggable={false}
-                    onRemove={onRemoveDeal}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -209,7 +237,7 @@ const TourArea = ({
               </p>
             </div>
             <button 
-              onClick={handleCalculateRoute}
+              onClick={() => handleCalculateRoute(tourDeals)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
             >
               Route berechnen
@@ -292,8 +320,9 @@ const TourPlannerContent = () => {
   const PROJECT_TOUR_DATE_FIELD_KEY = "3c7b83b905a2d762409414672a4aa1450e966d49";
   const PROJECT_TOUR_ID_FIELD_KEY = "7cfa771db86bba5afa46a05a82ff66734524c981";
   const TARGET_PHASE_ID = 25;
-  const SCHLAILE_TRANSPORT_TYPE_KEY = "7a2f7e7908160ae7e6288c0a238b74328a5eb4af"; // Diese kann auch hierher
-  const OFFICE_POSTAL_PREFIX = OFFICE_ADDRESS.match(/\b(\d{2})\d{3}\b/)?.[1] || "76"; // Diese auch
+  const SCHLAILE_TRANSPORT_TYPE_KEY = "7a2f7e7908160ae7e6288c0a238b74328a5eb4af";
+  const PIANO_FLOOR_COUNT_FIELD_KEY = "DEINE_PIPEDRIVE_STOCKWERK_FELD_ID"; // <-- BITTE ERSETZEN!
+  const OFFICE_POSTAL_PREFIX = OFFICE_ADDRESS.match(/\b(\d{2})\d{3}\b/)?.[1] || "76";
   // --- ENDE KONSTANTEN ---
 
   const [allDeals, setAllDeals] = useState([]);
@@ -309,6 +338,7 @@ const TourPlannerContent = () => {
   const [directionsService, setDirectionsService] = useState(null);
   const [isSavingTour, setIsSavingTour] = useState(false);
   const [tourName, setTourName] = useState('');
+  const [pianoCalculations, setPianoCalculations] = useState({}); // { dealId: { result: data, loading: bool, error: string } }
 
   // Drop-Zone für die Tour
   const [{ isOver }, drop] = useDrop({
@@ -442,7 +472,8 @@ const TourPlannerContent = () => {
               region: getRegionNameFromPhaseId(project.phase_id),
               projectStartDate: project.start_date,
               projectEndDate: project.end_date,
-              schlaileType: schlaileTransportType || null
+              schlaileType: schlaileTransportType || null,
+              [PIANO_FLOOR_COUNT_FIELD_KEY]: dealData.data[PIANO_FLOOR_COUNT_FIELD_KEY] || 0
             };
 
           } else {
@@ -1020,6 +1051,99 @@ const TourPlannerContent = () => {
   }, [optimizedRoute]); // Abhängigkeit von optimizedRoute (SCHLAILE_FIXED_ADDRESS und OFFICE_ADDRESS sind Konstanten)
   // --- ENDE NEU ---
 
+  // --- NEU: Funktion zur Klavierpreis-Berechnung ---
+  const handleCalculatePianoPrice = useCallback(async (deal) => {
+    const dealId = deal.id;
+    if (!directionsService) {
+      alert("Google Maps Service nicht bereit.");
+      return;
+    }
+
+    // Set loading state
+    setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: true } }));
+
+    const origin = deal.originAddress;
+    const destination = deal.destinationAddress;
+    const floorCountRaw = deal[PIANO_FLOOR_COUNT_FIELD_KEY]; // Wert aus Pipedrive holen
+    const floorCount = parseInt(floorCountRaw || "0", 10);
+
+    if (!origin || !destination) {
+      setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: "Start- oder Zieladresse fehlt im Deal." } }));
+      return;
+    }
+    if (PIANO_FLOOR_COUNT_FIELD_KEY === "DEINE_PIPEDRIVE_STOCKWERK_FELD_ID") {
+        console.warn("Platzhalter für Stockwerk-Feld-ID noch nicht ersetzt!");
+        // Optional: Hier einen Fehler setzen oder mit 0 Stockwerken weiterrechnen
+        // setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: "Stockwerk-Feld-ID nicht konfiguriert." } }));
+        // return;
+    }
+
+    try {
+      // Direkte Distanzberechnung zwischen Origin und Destination des Deals
+      const request = {
+        origin: origin,
+        destination: destination,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      };
+      const response = await directionsService.route(request);
+
+      if (!response || !response.routes || response.routes.length === 0 || !response.routes[0].legs || response.routes[0].legs.length === 0) {
+        throw new Error("Keine Route zwischen Start und Ziel gefunden.");
+      }
+
+      const leg = response.routes[0].legs[0];
+      const distanceInMeters = leg.distance.value;
+      const distanceInKm = Math.round(distanceInMeters / 100) / 10; // Auf eine Nachkommastelle
+
+      // Preisberechnung basierend auf der Kilometertabelle
+      const calculatePrice = (distanceKm) => {
+        const priceTable = [
+          { maxKm: 19, price: 300.00 }, { maxKm: 29, price: 325.00 },
+          { maxKm: 39, price: 350.00 }, { maxKm: 49, price: 375.00 },
+          { maxKm: 59, price: 400.00 }, { maxKm: 69, price: 400.00 }, // Annahme: 60-69km ist auch 400€
+          { maxKm: 79, price: 425.00 }, { maxKm: 89, price: 450.00 },
+          { maxKm: 99, price: 475.00 }, { maxKm: Infinity, price: 500.00 }
+        ];
+        for (const entry of priceTable) {
+          if (distanceKm <= entry.maxKm) return entry.price;
+        }
+        return priceTable[priceTable.length - 1].price; // Fallback
+      };
+
+      const basePrice = calculatePrice(distanceInKm);
+      const floorSurchargeRate = 35.00;
+      const floorSurcharge = floorCount * floorSurchargeRate;
+      const kmRate = 5.50;
+      const kmSurcharge = Math.ceil(distanceInKm / 10) * kmRate;
+      const netSum = basePrice + floorSurcharge + kmSurcharge;
+      const vatRate = 0.19;
+      const vatAmount = netSum * vatRate;
+      const grossSum = netSum + vatAmount;
+
+      const resultData = {
+        distance_km: distanceInKm.toFixed(1),
+        base_price: basePrice.toFixed(2),
+        floor_count: floorCount,
+        floor_surcharge_rate: floorSurchargeRate.toFixed(2),
+        floor_surcharge: floorSurcharge.toFixed(2),
+        km_surcharge: kmSurcharge.toFixed(2),
+        net_sum: netSum.toFixed(2),
+        vat_amount: vatAmount.toFixed(2),
+        gross_sum: grossSum.toFixed(2),
+        origin_address: origin,
+        destination_address: destination
+      };
+
+      // Ergebnis speichern
+      setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, result: resultData } }));
+
+    } catch (error) {
+      console.error(`Fehler bei Klavierpreis-Berechnung für Deal ${dealId}:`, error);
+      setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: error.message || "Unbekannter Fehler" } }));
+    }
+  }, [directionsService, PIANO_FLOOR_COUNT_FIELD_KEY]); // Abhängigkeiten
+  // --- ENDE NEU ---
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <h1 className="text-2xl font-bold mb-6">Tourenplanung</h1>
@@ -1094,6 +1218,8 @@ const TourPlannerContent = () => {
             handleSaveTour={handleSaveTour}
             handleCalculateRoute={calculateOptimizedRoute}
             isSavingTour={isSavingTour}
+            pianoCalculations={pianoCalculations}
+            onCalculatePianoPrice={handleCalculatePianoPrice}
           />
 
           <div className="bg-white p-4 rounded-xl shadow-sm">
@@ -1156,15 +1282,17 @@ const TourPlannerContent = () => {
                           </span>
                         </div>
                         <div className="text-right text-xs whitespace-nowrap">
-                          {!(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) && (
+                          {/* --- Bedingung entfernt, um Distanz/Dauer IMMER anzuzeigen --- */}
+                          {/* {!(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) && ( */}
                             <>
                               <div>{leg.distance?.text ?? '-'}</div>
                               <div className="text-gray-500">{leg.duration?.text ?? '-'}</div>
                             </>
-                          )}
-                          {(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) && (
+                          {/* )} */}
+                          {/* --- Die separate "Start"-Anzeige kann entfernt werden, da jetzt die Daten angezeigt werden --- */}
+                          {/* {(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) && (
                              <div>Start</div>
-                          )}
+                          )} */}
                         </div>
                       </div>
                   ))}

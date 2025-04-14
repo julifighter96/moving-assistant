@@ -818,20 +818,92 @@ Antworte im folgenden JSON-Format:
   });
 });
 
-    // Preis aktualisieren
+    // Update a price entry
     app.put('/api/admin/prices/:id', (req, res) => {
-  const { id } = req.params;
-      const { price, width, length, height } = req.body;
+      const id = req.params.id;
+      console.log(`[Backend] PUT /api/admin/prices/${id} received body:`, req.body);
+      // Extrahiere NUR die relevanten Felder aus dem Body
+      const {
+        name,
+        price,
+        type,
+        width,
+        length,
+        height
+      } = req.body;
 
-      db.run(
-        'UPDATE admin_prices SET price = ?, width = ?, length = ?, height = ? WHERE id = ?',
-        [price, width, length, height, id],
-        function(err) {
-      if (err) {
-            console.error('Error updating price:', err);
-        return res.status(500).json({ error: err.message });
+      // Basic validation
+      if (!name || price === undefined || !type) {
+        console.error(`[Backend] Validation failed for update price ${id}: Missing core fields`, { name, price, type });
+        return res.status(400).json({ error: 'Name, price, and type are required' });
       }
-          res.json({ id: parseInt(id), price, width, length, height });
+
+      // Bereite die zu aktualisierenden Daten vor (ohne description/assembly_time)
+      const updateData = {
+        name: name,
+        price: parseFloat(price) || 0,
+        type: type,
+        width: parseFloat(width) || 0,
+        length: parseFloat(length) || 0,
+        height: parseFloat(height) || 0
+      };
+
+      console.log(`[Backend] Attempting to update price ${id} with:`, updateData);
+
+      // Passe die SQL-Anweisung und die Parameter an
+      db.run(
+        `UPDATE admin_prices
+         SET name = ?,
+             price = ?,
+             type = ?,
+             width = ?,
+             length = ?,
+             height = ?
+         WHERE id = ?`,
+        [
+          updateData.name,
+          updateData.price,
+          updateData.type,
+          updateData.width,
+          updateData.length,
+          updateData.height,
+          id
+        ],
+        function(err) {
+          if (err) {
+            // Spezifische Fehlerbehandlung für UNIQUE Constraint
+            if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || (err.message && err.message.includes('UNIQUE constraint failed: admin_prices.name'))) {
+              console.warn(`[Backend] UNIQUE constraint failed for price ${id} with name "${name}"`);
+              return res.status(409).json({
+                error: `Der Name "${name}" wird bereits verwendet. Bitte wählen Sie einen anderen Namen.`
+              });
+            }
+            // Prüfen auf andere Constraints
+            if (err.code === 'SQLITE_CONSTRAINT_NOTNULL' || (err.message && err.message.includes('NOT NULL constraint failed'))) {
+                 console.error(`[Backend] NOT NULL constraint failed for price ${id}:`, err.message);
+                 const columnName = err.message.split(':').pop().trim().split('.').pop();
+                 return res.status(400).json({ error: `Ein erforderliches Feld (${columnName || 'unbekannt'}) fehlt oder ist ungültig.` });
+            }
+
+            // Allgemeiner Datenbankfehler
+            console.error(`[Backend] Error updating price ${id} in DB:`, err);
+            return res.status(500).json({ error: 'Datenbankfehler beim Aktualisieren.', details: err.message });
+          }
+
+          console.log(`[Backend] Update result for price ${id}: changes = ${this.changes}`);
+          // Holen und Zurückgeben des aktualisierten Eintrags...
+          db.get('SELECT * FROM admin_prices WHERE id = ?', [id], (dbErr, row) => {
+            if (dbErr) {
+              console.error(`[Backend] Error fetching updated price ${id} after update:`, dbErr);
+              return res.status(500).json({ error: 'Fehler beim Abrufen des aktualisierten Preises.', details: dbErr.message });
+            }
+            if (!row) {
+                 console.error(`[Backend] Price ${id} not found after update attempt.`);
+                 return res.status(404).json({ error: 'Preis nach Update nicht gefunden.' });
+            }
+            console.log(`[Backend] Successfully processed update for price ${id}. Returning:`, row);
+            res.json(row);
+          });
         }
       );
     });
@@ -1145,26 +1217,76 @@ Antworte im folgenden JSON-Format:
       console.log('Added type column to admin_prices table or it already exists');
     });
 
-    // Add new price
-    app.post('/api/admin/prices', authenticateToken, (req, res) => {
-      const { name, price, width, length, height, type } = req.body;
+    // Add a new price entry
+    app.post('/api/admin/prices', (req, res) => {
+      console.log(`[Backend] POST /api/admin/prices received body:`, req.body);
+      // Extrahiere NUR die relevanten Felder aus dem Body
+      const {
+        name,
+        price,
+        type,
+        width,
+        length,
+        height
+      } = req.body;
+
+      // Basic validation
+      if (!name || price === undefined || !type) {
+        console.error(`[Backend] Validation failed for add price: Missing core fields`, { name, price, type });
+        return res.status(400).json({ error: 'Name, price, and type are required' });
+      }
+
+      // Bereite die einzufügenden Daten vor (ohne description/assembly_time)
+      const insertData = {
+        name: name,
+        price: parseFloat(price) || 0,
+        type: type,
+        width: parseFloat(width) || 0,
+        length: parseFloat(length) || 0,
+        height: parseFloat(height) || 0
+      };
+
+      console.log(`[Backend] Attempting to insert new price with:`, insertData);
 
       db.run(
-        'INSERT INTO admin_prices (name, price, width, length, height, type) VALUES (?, ?, ?, ?, ?, ?)',
-        [name, price, width || 0, length || 0, height || 0, type || 'material'],
+        `INSERT INTO admin_prices (name, price, type, width, length, height)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          insertData.name,
+          insertData.price,
+          insertData.type,
+          insertData.width,
+          insertData.length,
+          insertData.height
+        ],
         function(err) {
           if (err) {
-            console.error('Error inserting price:', err);
-            return res.status(500).json({ error: err.message });
+            // Spezifische Fehlerbehandlung für UNIQUE Constraint
+            if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || (err.message && err.message.includes('UNIQUE constraint failed: admin_prices.name'))) {
+              console.warn(`[Backend] UNIQUE constraint failed when adding price with name "${name}"`);
+              return res.status(409).json({
+                error: `Der Name "${name}" wird bereits verwendet. Bitte wählen Sie einen anderen Namen oder bearbeiten Sie den vorhandenen Eintrag.`
+              });
+            }
+            // Prüfen auf andere Constraints
+            if (err.code === 'SQLITE_CONSTRAINT_NOTNULL' || (err.message && err.message.includes('NOT NULL constraint failed'))) {
+                 console.error(`[Backend] NOT NULL constraint failed when adding price:`, err.message);
+                 const columnName = err.message.split(':').pop().trim().split('.').pop();
+                 return res.status(400).json({ error: `Ein erforderliches Feld (${columnName || 'unbekannt'}) fehlt oder ist ungültig.` });
+            }
+
+            // Allgemeiner Datenbankfehler
+            console.error(`[Backend] Error adding price to DB:`, err);
+            return res.status(500).json({ error: 'Datenbankfehler beim Hinzufügen des Preises.', details: err.message });
           }
-          res.status(201).json({ 
-            id: this.lastID,
-            name,
-            price,
-            width: width || 0,
-            length: length || 0,
-            height: height || 0,
-            type: type || 'material'
+
+          // Erfolg
+          const newId = this.lastID;
+          console.log(`[Backend] Successfully added price with ID ${newId}`);
+          // Gib den neu erstellten Eintrag zurück
+          res.status(201).json({
+            id: newId,
+            ...insertData // Sende die tatsächlich eingefügten Daten zurück
           });
         }
       );

@@ -40,6 +40,17 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
 
   const objectIcon = getObjectTypeIcon(deal.title);
 
+  // Debug-Log für die Stockwerk-Daten
+  useEffect(() => {
+    if (deal && !deal.schlaileType) {
+      console.log(`[DEBUG] PipedriveDeal Rendering: Deal ${deal.id}`, {
+        originFloor: deal.originFloor,
+        destinationFloor: deal.destinationFloor,
+        schlaileType: deal.schlaileType
+      });
+    }
+  }, [deal]);
+
   return (
     <div
       ref={isDraggable ? drag : null}
@@ -97,6 +108,34 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
                 </span>
               </div>
             )}
+            
+            {/* Stockwerk-Informationen für Nicht-Schlaile-Deals */}
+            {!deal.schlaileType && (
+              <>
+                {deal.originFloor && (
+                  <div className="flex items-start text-gray-600">
+                    <Building className="w-4 h-4 mr-2 mt-0.5 text-blue-600" />
+                    <span className="flex-1">
+                      <strong>Stockwerk Abholung:</strong> {deal.originFloor}
+                    </span>
+          </div>
+                )}
+                
+                {deal.destinationFloor && (
+                  <div className="flex items-start text-gray-600">
+                    <Building className="w-4 h-4 mr-2 mt-0.5 text-purple-600" />
+                    <span className="flex-1">
+                      <strong>Stockwerk Lieferung:</strong> {deal.destinationFloor}
+                    </span>
+                  </div>
+                )}
+                
+                {/* Debug-Info direkt im UI - nur während der Entwicklung */}
+                <div className="text-xs text-gray-400 mt-1 italic">
+                  Debug: originFloor={deal.originFloor || 'leer'}, destFloor={deal.destinationFloor || 'leer'}
+                </div>
+              </>
+            )}
           </div>
         </div>
         
@@ -127,7 +166,11 @@ const TourArea = ({
   handleCalculateRoute,
   isSavingTour,
   pianoCalculations,
-  onCalculatePianoPrice
+  onCalculatePianoPrice,
+  dealSpecificData,
+  onGrandPianoSizeChange,
+  optimizedRoute, // NEU: Route übergeben für Logik
+  onDealTypeChange
 }) => {
   return (
     <div
@@ -183,8 +226,36 @@ const TourArea = ({
         ) : (
           <div className="w-full space-y-3 overflow-y-auto max-h-[calc(100vh-450px)] pr-2">
             {tourDeals.map((deal) => {
-              const isPianoDeal = deal.title?.toLowerCase().includes('piano') || deal.title?.toLowerCase().includes('flügel');
+              // Automatische Erkennung als Fallback
+              const autoDetectedIsPiano = deal.title?.toLowerCase().includes('piano');
+              const autoDetectedIsGrandPiano = deal.title?.toLowerCase().includes('flügel');
+
+              // Manuell ausgewählter Typ oder 'auto'
+              const selectedType = dealSpecificData[deal.id]?.type || 'auto';
+
+              // Bestimme den effektiven Typ für die Anzeige/Berechnung
+              let effectiveType = 'other';
+              if (selectedType === 'piano') {
+                effectiveType = 'piano';
+              } else if (selectedType === 'grand_piano') {
+                effectiveType = 'grand_piano';
+              } else if (selectedType === 'auto') {
+                if (autoDetectedIsGrandPiano) effectiveType = 'grand_piano';
+                else if (autoDetectedIsPiano) effectiveType = 'piano';
+              }
+
+              const isEffectivelyGrandPiano = effectiveType === 'grand_piano';
+              const isEffectivelyPiano = effectiveType === 'piano';
+              const isTypeDetermined = isEffectivelyPiano || isEffectivelyGrandPiano; // Ist der Typ klar?
+
               const calculation = pianoCalculations[deal.id];
+              const grandPianoSize = dealSpecificData[deal.id]?.size;
+              const isSchlaileDeal = !!deal.schlaileType;
+
+              // --- NEU: Angepasste Bedingung für Anzeige ---
+              // Zeige UI, wenn Typ bestimmt ist ODER wenn es ein Schlaile Deal ist
+              // (Bei Schlaile braucht der User die UI, um den Typ ggf. auszuwählen)
+              const shouldDisplayCalculationSection = isTypeDetermined || isSchlaileDeal;
 
               return (
                 <div key={deal.id} className="relative group">
@@ -196,26 +267,92 @@ const TourArea = ({
                   >
                     <X size={16} />
                   </button>
-                  {isPianoDeal && !deal.schlaileType && (
-                    <div className="mt-1 ml-4 text-xs">
+                  {/* Preisberechnung UI */}
+                  {shouldDisplayCalculationSection && ( // Verwende die neue Bedingung
+                    <div className="mt-1 ml-4 text-xs space-y-2">
+                      {/* Dropdown für Typauswahl (immer anzeigen, wenn Section sichtbar) */}
+                      <div className="flex items-center gap-2">
+                        <label htmlFor={`dealType-${deal.id}`} className="text-xs font-medium text-gray-600">Typ:</label>
+                        <select
+                          id={`dealType-${deal.id}`}
+                          value={selectedType}
+                          onChange={(e) => onDealTypeChange(deal.id, e.target.value)}
+                          className="p-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                          <option value="auto">Automatisch (Titel)</option>
+                          <option value="piano">Klavier</option>
+                          <option value="grand_piano">Flügel</option>
+                        </select>
+                      </div>
+
+                      {/* Eingabefeld für Größe (nur wenn effektiv Flügel) */}
+                      {isEffectivelyGrandPiano && (
+                        <div className="flex items-center gap-2">
+                           <label htmlFor={`grandPianoSize-${deal.id}`} className="text-xs font-medium text-gray-600">Größe (cm):</label>
+                           <input
+                             type="number"
+                             id={`grandPianoSize-${deal.id}`}
+                             value={grandPianoSize ?? ''}
+                             onChange={(e) => onGrandPianoSizeChange(deal.id, e.target.value)}
+                             placeholder="z.B. 180"
+                             min="1"
+                             className="w-20 p-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                           />
+                        </div>
+                      )}
+
+                      {/* Button und Ergebnis-Anzeige */}
                       {!calculation || (!calculation.result && !calculation.error && !calculation.loading) ? (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onCalculatePianoPrice(deal);
                           }}
-                          className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 text-xs"
+                          className={`px-2 py-1 rounded text-xs ${isEffectivelyGrandPiano ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : (isEffectivelyPiano ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200')} disabled:opacity-50 disabled:cursor-not-allowed`}
+                          // --- NEU: Angepasste Deaktivierungslogik ---
+                          disabled={
+                            // Deaktivieren, wenn Typ noch nicht bestimmt ist
+                            !isTypeDetermined ||
+                            // ODER wenn Flügel und Größe fehlt
+                            (isEffectivelyGrandPiano && (grandPianoSize === undefined || grandPianoSize <= 0))
+                          }
+                          title={
+                             // Hinweis, wenn Typ fehlt
+                             (!isTypeDetermined ? "Bitte Typ (Klavier/Flügel) auswählen. " : "") +
+                             // Hinweis, wenn Größe fehlt
+                             (isEffectivelyGrandPiano && (grandPianoSize === undefined || grandPianoSize <= 0) ? "Bitte Flügelgröße eingeben. " : "") +
+                             // Hinweis für Schlaile Schätzung
+                             (isSchlaileDeal && !optimizedRoute ? "Berechnet vorläufige Distanz. Für exakten Preis bitte Route optimieren." : "")
+                          }
                         >
-                          Klavierpreis berechnen
+                          {/* Angepasster Button-Text */}
+                          {!isTypeDetermined ? 'Typ auswählen...' : (isEffectivelyGrandPiano ? 'Flügelpreis berechnen' : 'Klavierpreis berechnen')}
+                          {/* Schlaile Schätzung Indikator */}
+                          {isSchlaileDeal && !optimizedRoute && <span className="ml-1 text-orange-600">*</span>}
                         </button>
                       ) : calculation.loading ? (
                         <span className="text-gray-500 italic">Berechne Preis...</span>
                       ) : calculation.error ? (
-                        <span className="text-red-600" title={calculation.error}>Fehler bei Preisberechnung</span>
+                        <span className="text-red-600" title={calculation.error}>Fehler: {calculation.error}</span>
                       ) : calculation.result ? (
-                        <div className="bg-indigo-50 p-2 rounded border border-indigo-100">
-                          <span className="font-semibold text-indigo-800">Klavierpreis: {calculation.result.gross_sum} €</span>
-                          <span className="text-gray-600 ml-2">(Netto: {calculation.result.net_sum} €, Basis: {calculation.result.base_price}€, Etage: {calculation.result.floor_surcharge}€, KM: {calculation.result.km_surcharge}€)</span>
+                        <div className={`p-2 rounded border ${isEffectivelyGrandPiano ? 'bg-purple-50 border-purple-100' : 'bg-indigo-50 border-indigo-100'}`}>
+                          <div className="font-semibold text-sm mb-1">
+                            <span className={isEffectivelyGrandPiano ? 'text-purple-800' : 'text-indigo-800'}>
+                                {calculation.result.calculation_type}: {calculation.result.gross_sum} €
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-700 space-y-0.5">
+                             <div>Netto: {calculation.result.net_sum} €</div>
+                             <div>(Basis<span className="text-gray-500">({calculation.result.distance_km}km)</span>: {calculation.result.base_price}€</div>
+                             <div>+ Etage<span className="text-gray-500">({calculation.result.floor_count}x{calculation.result.floor_surcharge_rate}€)</span>: {calculation.result.floor_surcharge}€</div>
+                             <div>+ KM<span className="text-gray-500">({isEffectivelyGrandPiano ? `${calculation.result.distance_km}km*${calculation.result.km_rate}€` : `je 10km*${calculation.result.km_rate}€`})</span>: {calculation.result.km_surcharge}€)</div>
+                          </div>
+                          {/* NEU: Hinweis, wenn Schätzung verwendet wurde */}
+                          {calculation.result.distance_source === 'direct_calculation_schlaile_fallback' && (
+                            <p className="text-orange-600 text-[10px] italic mt-1">
+                              *Distanz geschätzt. Ggf. nach Routenoptimierung neu berechnen.
+                            </p>
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -321,7 +458,15 @@ const TourPlannerContent = () => {
   const PROJECT_TOUR_ID_FIELD_KEY = "7cfa771db86bba5afa46a05a82ff66734524c981";
   const TARGET_PHASE_ID = 25;
   const SCHLAILE_TRANSPORT_TYPE_KEY = "7a2f7e7908160ae7e6288c0a238b74328a5eb4af";
-  const PIANO_FLOOR_COUNT_FIELD_KEY = "DEINE_PIPEDRIVE_STOCKWERK_FELD_ID"; // <-- BITTE ERSETZEN!
+  const PIANO_FLOOR_COUNT_FIELD_KEY = "384e703f3b71a344cbff7adf46f2eab3ff28c0a0"; // Stockwerk-Feld für normale Transporte
+  const GRAND_PIANO_SIZE_FIELD_KEY = "DEINE_PIPEDRIVE_FLUEGELGROESSE_FELD_ID";
+  
+  // Neue Konstanten für die Stockwerk-Felder
+  const ORIGIN_FLOOR_FIELD_KEY = "9e4e07bce884e21671546529b564da98ceb4765a";
+  const DESTINATION_FLOOR_FIELD_KEY = "72cfdc30fa0621d1d6947cf408409e44c6bb40d6";
+  // Neues Feld für Schlaile-Lieferung Stockwerk
+  const SCHLAILE_DELIVERY_FLOOR_FIELD_KEY = "2c2118401f79c6d3276e7bce4aaa41e4decd7592";
+  
   const OFFICE_POSTAL_PREFIX = OFFICE_ADDRESS.match(/\b(\d{2})\d{3}\b/)?.[1] || "76";
   // --- ENDE KONSTANTEN ---
 
@@ -339,6 +484,8 @@ const TourPlannerContent = () => {
   const [isSavingTour, setIsSavingTour] = useState(false);
   const [tourName, setTourName] = useState('');
   const [pianoCalculations, setPianoCalculations] = useState({}); // { dealId: { result: data, loading: bool, error: string } }
+  // Erweitere dealSpecificData: { dealId: { size?: number, type?: 'auto' | 'piano' | 'grand_piano' } }
+  const [dealSpecificData, setDealSpecificData] = useState({});
 
   // Drop-Zone für die Tour
   const [{ isOver }, drop] = useDrop({
@@ -426,37 +573,54 @@ const TourPlannerContent = () => {
             const schlaileTransportType = dealData.data[SCHLAILE_TRANSPORT_TYPE_KEY];
 
             // --- VERSTÄRKTES DEBUGGING ---
-            console.log(`[Schlaile Check] Deal ${dealId}: Wert='${schlaileTransportType}', Typ=${typeof schlaileTransportType}. Vergleich mit DELIVERY='${SCHLAILE_TYPE_DELIVERY}' (Typ=${typeof SCHLAILE_TYPE_DELIVERY}), PICKUP='${SCHLAILE_TYPE_PICKUP}' (Typ=${typeof SCHLAILE_TYPE_PICKUP})`);
             let schlaileMatched = false; // Flag
             // --- ENDE VERSTÄRKTES DEBUGGING ---
 
             if (schlaileTransportType === SCHLAILE_TYPE_DELIVERY) {
               // --- VERSTÄRKTES DEBUGGING ---
-              console.log(`[Schlaile Check] Deal ${dealId}: Matched DELIVERY ('${schlaileTransportType}')`);
               schlaileMatched = true;
               // --- ENDE VERSTÄRKTES DEBUGGING ---
               // Lieferung VON Schlaile: Start ist die feste Schlaile-Adresse
               originAddressFinal = SCHLAILE_FIXED_ADDRESS;
-              console.log(`[Schlaile Assign] Deal ${dealId}: Set originAddressFinal to SCHLAILE_FIXED_ADDRESS: '${originAddressFinal}'`); // Log nach Zuweisung
               // Zieladresse (destinationAddressFinal) bleibt die Standardadresse des Deals
 
             } else if (schlaileTransportType === SCHLAILE_TYPE_PICKUP) {
               // --- VERSTÄRKTES DEBUGGING ---
-              console.log(`[Schlaile Check] Deal ${dealId}: Matched PICKUP ('${schlaileTransportType}')`);
               schlaileMatched = true;
               // --- ENDE VERSTÄRKTES DEBUGGING ---
               // Abholung BEI Kunde für Schlaile: Ziel ist die feste Schlaile-Adresse
               destinationAddressFinal = SCHLAILE_FIXED_ADDRESS;
-              console.log(`[Schlaile Assign] Deal ${dealId}: Set destinationAddressFinal to SCHLAILE_FIXED_ADDRESS: '${destinationAddressFinal}'`); // Log nach Zuweisung
               // Abholadresse (originAddressFinal) bleibt die Standardadresse des Deals
             }
 
-            // --- VERSTÄRKTES DEBUGGING ---
-            if (!schlaileMatched && schlaileTransportType) {
-                console.log(`[Schlaile Check] Deal ${dealId}: NO MATCH for type '${schlaileTransportType}'`);
+
+            // Flügelgröße aus Pipedrive lesen (optional)
+            const grandPianoSizeRaw = dealData.data[GRAND_PIANO_SIZE_FIELD_KEY];
+            const initialGrandPianoSize = grandPianoSizeRaw ? parseInt(grandPianoSizeRaw, 10) : undefined;
+            if (initialGrandPianoSize !== undefined && !isNaN(initialGrandPianoSize)) {
+                // Nur Größe initial setzen, Typ bleibt 'auto' (oder undefined)
+                setDealSpecificData(prev => ({
+                    ...prev,
+                    [project.id]: { ...(prev[project.id] || {}), size: initialGrandPianoSize }
+                }));
             }
-            console.log(`[Schlaile Final Addr] Deal ${dealId}: Before object creation - Origin='${originAddressFinal}', Dest='${destinationAddressFinal}'`);
-            // --- ENDE VERSTÄRKTES DEBUGGING ---
+
+            // Stockwerk-Informationen abrufen
+            const originFloor = dealData.data[ORIGIN_FLOOR_FIELD_KEY] || '';
+            const destinationFloor = dealData.data[DESTINATION_FLOOR_FIELD_KEY] || '';
+            // Schlaile-spezifisches Stockwerk-Feld
+            const schlaileDeliveryFloor = dealData.data[SCHLAILE_DELIVERY_FLOOR_FIELD_KEY] || '';
+
+            // Debug-Logs für Stockwerk-Felder
+            console.log(`[DEBUG] Deal ${dealId} Stockwerk-Felder:`, {
+              originFloorKey: ORIGIN_FLOOR_FIELD_KEY,
+              originFloorValue: dealData.data[ORIGIN_FLOOR_FIELD_KEY],
+              destinationFloorKey: DESTINATION_FLOOR_FIELD_KEY,
+              destinationFloorValue: dealData.data[DESTINATION_FLOOR_FIELD_KEY],
+              schlaileDeliveryFloorKey: SCHLAILE_DELIVERY_FLOOR_FIELD_KEY,
+              schlaileDeliveryFloorValue: dealData.data[SCHLAILE_DELIVERY_FLOOR_FIELD_KEY],
+              schlaileType: schlaileTransportType
+            });
 
             // Erstelle das Objekt in der Variable
             dealObjectToAdd = {
@@ -465,15 +629,20 @@ const TourPlannerContent = () => {
               title: project.title || dealData.data.title,
               organization: dealData.data.org_name,
               moveDate: moveDate || project.start_date,
-              originAddress: originAddressFinal, // Die ggf. überschriebene Adresse
-              destinationAddress: destinationAddressFinal, // Die ggf. überschriebene Adresse
+              originAddress: originAddressFinal,
+              destinationAddress: destinationAddressFinal,
               value: dealData.data.value,
               currency: dealData.data.currency,
               region: getRegionNameFromPhaseId(project.phase_id),
               projectStartDate: project.start_date,
               projectEndDate: project.end_date,
               schlaileType: schlaileTransportType || null,
-              [PIANO_FLOOR_COUNT_FIELD_KEY]: dealData.data[PIANO_FLOOR_COUNT_FIELD_KEY] || 0
+              [PIANO_FLOOR_COUNT_FIELD_KEY]: dealData.data[PIANO_FLOOR_COUNT_FIELD_KEY] || 0,
+              // Stockwerk-Felder
+              originFloor: originFloor,
+              destinationFloor: destinationFloor,
+              // Schlaile-spezifisches Stockwerk-Feld
+              [SCHLAILE_DELIVERY_FLOOR_FIELD_KEY]: schlaileDeliveryFloor
             };
 
           } else {
@@ -488,7 +657,11 @@ const TourPlannerContent = () => {
               projectEndDate: project.end_date,
               originAddress: '',
               destinationAddress: '',
-              schlaileType: null
+              schlaileType: null,
+              [PIANO_FLOOR_COUNT_FIELD_KEY]: 0,
+              originFloor: '',
+              destinationFloor: '',
+              [SCHLAILE_DELIVERY_FLOOR_FIELD_KEY]: '',
             };
           }
         } else {
@@ -503,7 +676,11 @@ const TourPlannerContent = () => {
             projectEndDate: project.end_date,
             originAddress: '',
             destinationAddress: '',
-            schlaileType: null
+            schlaileType: null,
+            [PIANO_FLOOR_COUNT_FIELD_KEY]: 0,
+            originFloor: '',
+            destinationFloor: '',
+            [SCHLAILE_DELIVERY_FLOOR_FIELD_KEY]: '',
           };
         }
         await new Promise(resolve => setTimeout(resolve, 50));
@@ -521,13 +698,16 @@ const TourPlannerContent = () => {
             projectEndDate: project.end_date,
             originAddress: '',
             destinationAddress: '',
-            schlaileType: null
+            schlaileType: null,
+            [PIANO_FLOOR_COUNT_FIELD_KEY]: 0,
+            originFloor: '',
+            destinationFloor: '',
+            [SCHLAILE_DELIVERY_FLOOR_FIELD_KEY]: '',
           };
       }
 
       // Logge das Objekt, *bevor* es hinzugefügt wird (wenn es erstellt wurde)
       if (dealObjectToAdd) {
-        console.log(`[Schlaile Debug] Projekt ${project.id} (Deal ${dealObjectToAdd.dealId}): Objekt verarbeitet -> Origin: '${dealObjectToAdd.originAddress}', Dest: '${dealObjectToAdd.destinationAddress}', SchlaileType: '${dealObjectToAdd.schlaileType}'`);
         resultArray.push(dealObjectToAdd); // Füge das Objekt zum Array hinzu
       } else {
          console.warn(`Projekt ${project.id}: Kein Objekt zum Hinzufügen erstellt.`);
@@ -536,7 +716,7 @@ const TourPlannerContent = () => {
 
     // Das return resultArray sollte *nach* der Schleife stehen
     return resultArray;
-  }, [getRegionNameFromPhaseId]);
+  }, [getRegionNameFromPhaseId, SCHLAILE_TRANSPORT_TYPE_KEY, PIANO_FLOOR_COUNT_FIELD_KEY, GRAND_PIANO_SIZE_FIELD_KEY, ORIGIN_FLOOR_FIELD_KEY, DESTINATION_FLOOR_FIELD_KEY, SCHLAILE_DELIVERY_FLOOR_FIELD_KEY]);
 
   // Deal aus der Tour entfernen
   const handleRemoveDeal = (dealId) => {
@@ -564,19 +744,16 @@ const TourPlannerContent = () => {
     if (cachedProjects) {
       const { data, timestamp } = JSON.parse(cachedProjects);
       if (Date.now() - timestamp < cacheDuration) {
-        console.log(`Verwende gecachte Projekte für Region: ${selectedRegion}`);
         setAllDeals(data);
         filterDeals(data, searchQuery, showDateFilter ? selectedDate : null);
         setLoading(false);
         return;
       } else {
-        console.log(`Cache für Region ${selectedRegion} abgelaufen.`);
         localStorage.removeItem(cacheKey);
       }
     }
 
     let allProjectsWithDetails = [];
-    console.log(`Starte API-Abfrage für Region: ${selectedRegion}`);
 
     const regionsToFetch = selectedRegion === 'all'
       ? REGIONS.filter(r => r.id !== 'all' && r.phase_id !== null)
@@ -606,7 +783,6 @@ const TourPlannerContent = () => {
       }
     }
 
-    console.log("Insgesamt geladene Projekte mit Details:", allProjectsWithDetails.length);
     setAllDeals(allProjectsWithDetails);
     filterDeals(allProjectsWithDetails, searchQuery, showDateFilter ? selectedDate : null);
     localStorage.setItem(cacheKey, JSON.stringify({ data: allProjectsWithDetails, timestamp: Date.now() }));
@@ -664,7 +840,7 @@ const TourPlannerContent = () => {
 
   // Region ändern
   const handleRegionChange = (regionId) => {
-    console.log("Region geändert auf:", regionId);
+
     setSelectedRegion(regionId);
     setTourDeals([]);
     setOptimizedRoute(null);
@@ -722,7 +898,6 @@ const TourPlannerContent = () => {
           updateData
         );
         if (response.data && response.data.success) {
-          console.log(`Projekt ${projectId} (Deal: ${deal.dealId}) erfolgreich aktualisiert.`);
           successCount++;
         } else {
           console.error(`Fehler beim Aktualisieren von Projekt ${projectId}. Antwort:`, response.data);
@@ -807,14 +982,12 @@ const TourPlannerContent = () => {
       const waypointsForOptimization = Array.from(customerAddresses).map(addr => ({ location: addr, stopover: true }));
 
       if (waypointsForOptimization.length === 0) {
-         console.log("Keine gültigen Kundenadressen für Optimierung gefunden.");
          setOptimizedRoute(null);
          setLoadingRoute(false);
          return;
       }
 
-      // --- STUFE 1: Google Optimierung der Kundenadressen ---
-      console.log("[Route Logic] Starte Optimierung für Kundenadressen:", waypointsForOptimization);
+
       const optimizationRequest = {
         origin: OFFICE_ADDRESS,
         destination: OFFICE_ADDRESS,
@@ -828,7 +1001,6 @@ const TourPlannerContent = () => {
           throw new Error("Keine Route von der Optimierungs-API erhalten.");
       }
       const optimizedCustomerOrder = optimizationResponse.routes[0].waypoint_order.map(index => waypointsForOptimization[index].location);
-      console.log("[Route Logic] Optimierte Kundenreihenfolge:", optimizedCustomerOrder);
 
       // --- STUFE 2: Logische Sequenz mit Schlaile erstellen ---
       let finalSequence = [OFFICE_ADDRESS];
@@ -837,7 +1009,6 @@ const TourPlannerContent = () => {
 
       const addSchlaileIfNeeded = () => {
         if (pendingSchlaileVisit && finalSequence[finalSequence.length - 1] !== SCHLAILE_FIXED_ADDRESS) {
-          console.log("[Route Logic] Füge fälligen Schlaile-Besuch hinzu.");
           finalSequence.push(SCHLAILE_FIXED_ADDRESS);
           pendingSchlaileVisit = false;
         }
@@ -849,12 +1020,10 @@ const TourPlannerContent = () => {
             const visitKey = `${info.dealId}-${info.type}`;
             if (visitedAddressesForDeal.has(visitKey)) return;
 
-            console.log(`[Route Logic] Verarbeite Adresse: ${customerAddress.substring(0,20)}... für Deal ${info.dealId} (${info.type})`);
 
             if (info.type === 'delivery_from_schlaile') {
               addSchlaileIfNeeded();
               if (finalSequence[finalSequence.length - 1] !== SCHLAILE_FIXED_ADDRESS) {
-                 console.log("[Route Logic] Füge Schlaile vor Lieferung hinzu.");
                  finalSequence.push(SCHLAILE_FIXED_ADDRESS);
               }
               finalSequence.push(customerAddress);
@@ -879,7 +1048,6 @@ const TourPlannerContent = () => {
       }
 
       finalSequence = finalSequence.filter((addr, index, self) => index === 0 || addr !== self[index - 1]);
-      console.log("[Route Logic] Finale Sequenz erstellt:", finalSequence);
 
       // --- STUFE 3: Finale Route für die feste Sequenz abrufen ---
       if (finalSequence.length <= 1) {
@@ -898,7 +1066,6 @@ const TourPlannerContent = () => {
         travelMode: window.google.maps.TravelMode.DRIVING,
       };
 
-      console.log("[Route Logic] Starte finale Routenberechnung für feste Sequenz.");
       const finalRouteResponse = await directionsService.route(finalRouteRequest);
       if (!finalRouteResponse || !finalRouteResponse.routes || finalRouteResponse.routes.length === 0) {
           throw new Error("Keine Route von der finalen Routenberechnungs-API erhalten.");
@@ -976,7 +1143,6 @@ const TourPlannerContent = () => {
       // WICHTIG: &dirflg=h entfernen, da wir Google die *optimierte* Reihenfolge geben, nicht die manuell korrigierte
       const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointsStr}&travelmode=driving`;
 
-      console.log("[Google Maps Link] Gefilterte Wegpunkte für Link:", filteredWaypointsForMap);
       window.open(googleMapsUrl, '_blank');
     } catch (error) {
       console.error("Fehler beim Erstellen der Google Maps URL:", error);
@@ -987,19 +1153,16 @@ const TourPlannerContent = () => {
   // Google Directions Service Initialisierung
   useEffect(() => {
     if (window.google && window.google.maps && !directionsService) {
-      console.log("Initialisiere Google Directions Service...");
       setDirectionsService(new window.google.maps.DirectionsService());
     } else if (!window.google || !window.google.maps) {
       const existingScript = document.getElementById('googleMapsScript');
       if (!existingScript) {
-        console.log("Lade Google Maps Script...");
         const script = document.createElement('script');
         script.id = 'googleMapsScript';
         script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places`;
         script.async = true;
         script.defer = true;
         script.onload = () => {
-          console.log("Google Maps Script geladen.");
           if (window.google && window.google.maps) {
             setDirectionsService(new window.google.maps.DirectionsService());
           }
@@ -1035,7 +1198,6 @@ const TourPlannerContent = () => {
         // Entferne das aktuelle Leg NUR, wenn das vorherige auch bei Schlaile endete
         if (didPreviousLegEndAtSchlaile) {
           // Dies ist ein redundanter, aufeinanderfolgender Schlaile->Schlaile Schritt - überspringen
-          console.log(`[Route Display Filter] Entferne redundantes Schlaile->Schlaile Leg bei Index ${i}`);
           continue; // Gehe zum nächsten Leg in der Schleife
         }
         // Andernfalls (wenn das vorherige Leg NICHT bei Schlaile endete),
@@ -1045,13 +1207,48 @@ const TourPlannerContent = () => {
       // Behalte das aktuelle Leg (entweder kein Schlaile->Schlaile oder der erste Stopp bei Schlaile)
       filtered.push(currentLeg);
     }
-    console.log("[Route Display Filter] Original Legs:", originalLegs.length, "Gefilterte Legs für Anzeige:", filtered.length);
     return filtered;
 
   }, [optimizedRoute]); // Abhängigkeit von optimizedRoute (SCHLAILE_FIXED_ADDRESS und OFFICE_ADDRESS sind Konstanten)
   // --- ENDE NEU ---
 
-  // --- NEU: Funktion zur Klavierpreis-Berechnung ---
+  // Funktion zum Aktualisieren der Flügelgröße (bleibt gleich)
+  const handleGrandPianoSizeChange = (dealId, size) => {
+    const newSize = size === '' ? undefined : parseInt(size, 10);
+    setDealSpecificData(prev => ({
+      ...prev,
+      [dealId]: { ...(prev[dealId] || {}), size: isNaN(newSize) ? undefined : newSize }
+    }));
+    // Berechnung zurücksetzen
+    setPianoCalculations(prev => {
+        const newState = {...prev};
+        if (newState[dealId]) {
+            delete newState[dealId].result;
+            delete newState[dealId].error;
+        }
+        return newState;
+    });
+  };
+
+  // --- NEU: Funktion zum Aktualisieren des Deal-Typs ---
+  const handleDealTypeChange = (dealId, type) => {
+    setDealSpecificData(prev => ({
+      ...prev,
+      [dealId]: { ...(prev[dealId] || {}), type: type } // type ist 'auto', 'piano', oder 'grand_piano'
+    }));
+    // Berechnung zurücksetzen, da sich der Typ geändert hat
+    setPianoCalculations(prev => {
+        const newState = {...prev};
+        if (newState[dealId]) {
+            delete newState[dealId].result;
+            delete newState[dealId].error;
+        }
+        return newState;
+    });
+  };
+  // --- ENDE NEU ---
+
+  // --- ANGEPASST: Funktion zur Klavier/Flügelpreis-Berechnung ---
   const handleCalculatePianoPrice = useCallback(async (deal) => {
     const dealId = deal.id;
     if (!directionsService) {
@@ -1059,90 +1256,392 @@ const TourPlannerContent = () => {
       return;
     }
 
-    // Set loading state
     setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: true } }));
 
-    const origin = deal.originAddress;
-    const destination = deal.destinationAddress;
-    const floorCountRaw = deal[PIANO_FLOOR_COUNT_FIELD_KEY]; // Wert aus Pipedrive holen
-    const floorCount = parseInt(floorCountRaw || "0", 10);
+    const origin = deal.originAddress; // Kunden- oder Schlaile-Adresse (je nach Typ)
+    const destination = deal.destinationAddress; // Kunden- oder Schlaile-Adresse (je nach Typ)
+    
+    // --- KORRIGIERT: Stockwerk-Berechnung mit Berücksichtigung der Pipedrive-Felder ---
+    const floorCountRaw = deal[PIANO_FLOOR_COUNT_FIELD_KEY];
+    let floorCount = parseInt(floorCountRaw || "0", 10);
+    
+    const isSchlaileDeal = !!deal.schlaileType;
+    
+    if (isSchlaileDeal) {
+      // Für Schlaile-Deals: Summe aus originFloor und schlaileDeliveryFloor
+      let originFloorValue = 0;
+      let schlaileDeliveryFloorValue = 0;
+      
+      console.log(`[DEBUG] Schlaile-Transport Stockwerk-Werte für Deal ${dealId}:`, {
+        origin: deal.originFloor,
+        schlaileDelivery: deal[SCHLAILE_DELIVERY_FLOOR_FIELD_KEY],
+        schlaileType: deal.schlaileType,
+        pianoPipedriveFloorCount: floorCountRaw
+      });
+      
+      // Versuche, originFloor zu parsen und verwende den absoluten Wert
+      if (deal.originFloor) {
+        const parsed = parseInt(deal.originFloor, 10);
+        if (!isNaN(parsed)) {
+          // Verwende den absoluten Wert (negative Werte werden positiv)
+          originFloorValue = Math.abs(parsed);
+        }
+      }
+      
+      // Versuche, schlaileDeliveryFloor zu parsen und verwende den absoluten Wert
+      if (deal[SCHLAILE_DELIVERY_FLOOR_FIELD_KEY]) {
+        const parsed = parseInt(deal[SCHLAILE_DELIVERY_FLOOR_FIELD_KEY], 10);
+        if (!isNaN(parsed)) {
+          // Verwende den absoluten Wert (negative Werte werden positiv)
+          schlaileDeliveryFloorValue = Math.abs(parsed);
+        }
+      }
+      
+      // Summiere die Stockwerke (beide als absolute Werte)
+      const totalFloors = originFloorValue + schlaileDeliveryFloorValue;
+      
+      console.log(`[DEBUG] Berechnete Stockwerk-Summe für Schlaile-Transport Deal ${dealId}:`, {
+        originFloorValue,
+        schlaileDeliveryFloorValue,
+        originalFloorCount: floorCount,
+        totalFloors: totalFloors
+      });
+      
+      // Überschreibe die floorCount mit der Summe aus beiden Feldern
+      floorCount = totalFloors;
+    } else {
+      // Für Nicht-Schlaile-Deals: Summe aus originFloor und destinationFloor
+      let originFloorValue = 0;
+      let destinationFloorValue = 0;
+      
+      console.log(`[DEBUG] Stockwerk-Werte für Deal ${dealId}:`, {
+        origin: deal.originFloor,
+        destination: deal.destinationFloor,
+        pianoPipedriveFloorCount: floorCountRaw
+      });
+      
+      // Versuche, originFloor zu parsen und verwende den absoluten Wert
+      if (deal.originFloor) {
+        const parsed = parseInt(deal.originFloor, 10);
+        if (!isNaN(parsed)) {
+          // Verwende den absoluten Wert (negative Werte werden positiv)
+          originFloorValue = Math.abs(parsed);
+        }
+      }
+      
+      // Versuche, destinationFloor zu parsen und verwende den absoluten Wert
+      if (deal.destinationFloor) {
+        const parsed = parseInt(deal.destinationFloor, 10);
+        if (!isNaN(parsed)) {
+          // Verwende den absoluten Wert (negative Werte werden positiv)
+          destinationFloorValue = Math.abs(parsed);
+        }
+      }
+      
+      // Summiere die Stockwerke (beide als absolute Werte)
+      const totalFloors = originFloorValue + destinationFloorValue;
+      
+      console.log(`[DEBUG] Berechnete Stockwerk-Summe für Deal ${dealId}:`, {
+        originFloorValue,
+        destinationFloorValue,
+        originalFloorCount: floorCount,
+        totalFloors: totalFloors
+      });
+      
+      // Überschreibe die floorCount mit der Summe aus beiden Feldern
+      floorCount = totalFloors;
+    }
+    // --- ENDE KORRIGIERT: Stockwerk-Berechnung ---
+    
+    const customerAddress = deal.schlaileType === SCHLAILE_TYPE_PICKUP
+                             ? deal.originAddress // Bei Abholung ist Origin der Kunde
+                             : deal.schlaileType === SCHLAILE_TYPE_DELIVERY
+                             ? deal.destinationAddress // Bei Lieferung ist Dest der Kunde
+                             : null; // Sollte nicht vorkommen, wenn isSchlaileDeal true ist
+
+    // Rest der Funktion bleibt unverändert...
+
+    // --- Typbestimmung (Klavier/Flügel) ---
+    const selectedType = dealSpecificData[dealId]?.type || 'auto';
+    let isGrandPiano;
+    // ... (Logik für isGrandPiano bleibt gleich) ...
+     if (selectedType === 'grand_piano') { isGrandPiano = true; }
+     else if (selectedType === 'piano') { isGrandPiano = false; }
+     else { isGrandPiano = deal.title?.toLowerCase().includes('flügel'); }
+
+    const grandPianoSizeCm = dealSpecificData[dealId]?.size;
+    if (isGrandPiano && (grandPianoSizeCm === undefined || grandPianoSizeCm <= 0)) {
+      setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: "Bitte geben Sie eine gültige Flügelgröße (> 0 cm) ein." } }));
+      return;
+    }
+    // --- ENDE Typbestimmung ---
+
+    let distanceInKm = NaN;
+    let distanceSource = 'unknown'; // Start mit unbekannt
+
+    try {
+      // --- Distanzermittlung ---
+
+      if (isSchlaileDeal) {
+        // --- Fall 1: Schlaile Transport ---
+        if (optimizedRoute && optimizedRoute.legs /*...*/) {
+          // --- Fall 1a: Schlaile mit optimierter Route ---
+          // ... (Logik zum Finden von foundLeg bleibt gleich) ...
+          let foundLeg = null;
+          // ... (Code zum Finden des Legs basierend auf deal.schlaileType, customerAddress, SCHLAILE_FIXED_ADDRESS) ...
+          const waypoints = optimizedRoute.request?.waypoints || [];
+          const order = optimizedRoute.waypoint_order || [];
+          let startIndex = -1, endIndex = -1;
+
+          if (deal.schlaileType === SCHLAILE_TYPE_PICKUP) { // Kunde -> Schlaile
+              // Finde Index des Kunden (origin) und von Schlaile (destination) in der optimierten Route
+              startIndex = order.findIndex(i => waypoints[i]?.location?.query === origin);
+              endIndex = order.findIndex(i => waypoints[i]?.location?.query === destination); // Schlaile ist Ziel
+          } else if (deal.schlaileType === SCHLAILE_TYPE_DELIVERY) { // Schlaile -> Kunde
+              // Finde Index von Schlaile (origin) und des Kunden (destination)
+              startIndex = order.findIndex(i => waypoints[i]?.location?.query === origin); // Schlaile ist Start
+              endIndex = order.findIndex(i => waypoints[i]?.location?.query === destination);
+          }
+
+          // Finde den Leg, der diesem Schritt entspricht
+          // Der Index im 'legs'-Array entspricht dem Index des Start-Waypoints in der 'order'-Liste
+          if (startIndex !== -1 && startIndex < optimizedRoute.legs.length) {
+              // Überprüfe grob, ob die Adressen übereinstimmen (kann ungenau sein!)
+              const legCandidate = optimizedRoute.legs[startIndex];
+              const legStartAddress = legCandidate.start_address;
+              const legEndAddress = legCandidate.end_address;
+
+              // Einfacher Check, ob Teile der Adressen übereinstimmen
+              const isStartMatch = legStartAddress.includes(origin.split(',')[0]);
+              const isEndMatch = legEndAddress.includes(destination.split(',')[0]);
+
+              if (isStartMatch && isEndMatch) {
+                  foundLeg = legCandidate;
+              } else {
+                   console.warn(`[Schlaile Preis] Leg ${startIndex} Adressen (${legStartAddress} -> ${legEndAddress}) passen nicht exakt zu Deal (${origin} -> ${destination}). Prüfe Logik.`);
+                   // Optional: Strengere Prüfung oder andere Logik zum Finden des Legs
+              }
+          } else {
+              console.warn(`[Schlaile Preis] Konnte Start-Index (${startIndex}) für Deal ${dealId} in optimierter Route nicht finden.`);
+          }
+          // --- Ende Leg-Suche ---
+
+
+          if (foundLeg && typeof foundLeg.distance?.value === 'number') {
+            distanceInKm = Math.round(foundLeg.distance.value / 100) / 10;
+            distanceSource = 'optimized_route';
+          } else {
+            // --- Fall 1b: Schlaile ohne optimierte Route (oder Leg nicht gefunden) -> Fallback ---
+            console.warn(`[Schlaile Preis] Konnte passenden Leg oder Distanz in optimierter Route für Deal ${dealId} nicht finden. Fallback zur Direktberechnung (Kunde <-> Schlaile).`);
+            distanceSource = 'direct_calculation_schlaile_fallback';
+            if (!origin || !destination) {
+                setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: "Start- oder Zieladresse für Schlaile-Fallback fehlt." } }));
+                return;
+            }
+            const request = { origin, destination, travelMode: window.google.maps.TravelMode.DRIVING };
+            const response = await directionsService.route(request);
+            if (!response?.routes?.[0]?.legs?.[0]?.distance?.value) {
+              throw new Error("Keine gültige Distanz im Schlaile-Routen-Fallback gefunden.");
+            }
+            distanceInKm = Math.round(response.routes[0].legs[0].distance.value / 100) / 10;
+          }
+        } else {
+             // --- Fall 1b (explizit): Schlaile ohne optimierte Route -> Fallback ---
+             distanceSource = 'direct_calculation_schlaile_fallback';
+             if (!origin || !destination) {
+                 setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: "Start- oder Zieladresse für Schlaile-Fallback fehlt." } }));
+                 return;
+             }
+             const request = { origin, destination, travelMode: window.google.maps.TravelMode.DRIVING };
+             const response = await directionsService.route(request);
+             if (!response?.routes?.[0]?.legs?.[0]?.distance?.value) {
+               throw new Error("Keine gültige Distanz im Schlaile-Routen-Fallback gefunden.");
+             }
+             distanceInKm = Math.round(response.routes[0].legs[0].distance.value / 100) / 10;
+        }
+        // --- Ende Fall 1: Schlaile Transport ---
+
+      } else {
+        // --- Fall 2: Normaler (Nicht-Schlaile) Transport ---
+        distanceSource = 'direct_calculation_office_pickup_delivery';
 
     if (!origin || !destination) {
       setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: "Start- oder Zieladresse fehlt im Deal." } }));
       return;
     }
-    if (PIANO_FLOOR_COUNT_FIELD_KEY === "DEINE_PIPEDRIVE_STOCKWERK_FELD_ID") {
-        console.warn("Platzhalter für Stockwerk-Feld-ID noch nicht ersetzt!");
-        // Optional: Hier einen Fehler setzen oder mit 0 Stockwerken weiterrechnen
-        // setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: "Stockwerk-Feld-ID nicht konfiguriert." } }));
-        // return;
+        if (!OFFICE_ADDRESS) {
+             console.error("Büroadresse (OFFICE_ADDRESS) ist nicht definiert!");
+             setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: "Konfigurationsfehler: Büroadresse fehlt." } }));
+             return;
     }
 
     try {
-      // Direkte Distanzberechnung zwischen Origin und Destination des Deals
-      const request = {
-        origin: origin,
-        destination: destination,
-        travelMode: window.google.maps.TravelMode.DRIVING,
-      };
-      const response = await directionsService.route(request);
+            // 1. API-Aufruf: Büro -> Abholung (origin)
+            const request1 = { origin: OFFICE_ADDRESS, destination: origin, travelMode: window.google.maps.TravelMode.DRIVING };
+            const response1 = await directionsService.route(request1);
+            if (!response1?.routes?.[0]?.legs?.[0]?.distance?.value) {
+                throw new Error(`Keine gültige Distanz für Büro -> Abholung (${origin}) gefunden.`);
+            }
+            const distance1_meters = response1.routes[0].legs[0].distance.value;
 
-      if (!response || !response.routes || response.routes.length === 0 || !response.routes[0].legs || response.routes[0].legs.length === 0) {
-        throw new Error("Keine Route zwischen Start und Ziel gefunden.");
+            // 2. API-Aufruf: Abholung (origin) -> Lieferung (destination)
+            const request2 = { origin: origin, destination: destination, travelMode: window.google.maps.TravelMode.DRIVING };
+            const response2 = await directionsService.route(request2);
+            if (!response2?.routes?.[0]?.legs?.[0]?.distance?.value) {
+                throw new Error(`Keine gültige Distanz für Abholung (${origin}) -> Lieferung (${destination}) gefunden.`);
+            }
+            const distance2_meters = response2.routes[0].legs[0].distance.value;
+
+            // Distanzen addieren und in km umrechnen
+            const totalDistanceMeters = distance1_meters + distance2_meters;
+            distanceInKm = Math.round(totalDistanceMeters / 100) / 10;
+
+        } catch (apiError) {
+            console.error("Fehler bei der Distanzberechnung (Büro->Abholung->Lieferung):", apiError);
+            throw new Error(`Fehler bei Distanzberechnung: ${apiError.message}`);
+        }
+        // --- Ende Fall 2: Normaler Transport ---
       }
+      // --- ENDE Distanzermittlung ---
 
-      const leg = response.routes[0].legs[0];
-      const distanceInMeters = leg.distance.value;
-      const distanceInKm = Math.round(distanceInMeters / 100) / 10; // Auf eine Nachkommastelle
+      // --- Prüfung auf gültige Distanz ---
+      if (isNaN(distanceInKm) || typeof distanceInKm !== 'number') {
+          console.error(`[Preisberechnung Fehler] Ungültiger Distanzwert für Deal ${dealId}:`, distanceInKm);
+          throw new Error(`Konnte keine gültige Distanz ermitteln (${distanceSource}).`);
+      }
+      // --- ENDE Prüfung ---
 
-      // Preisberechnung basierend auf der Kilometertabelle
-      const calculatePrice = (distanceKm) => {
-        const priceTable = [
+
+      // --- Preisberechnung basierend auf distanceInKm ---
+      let basePrice = 0;
+      let floorSurcharge = 0;
+      let kmSurcharge = 0;
+      let calculationType = isGrandPiano ? 'Flügel' : 'Klavier';
+      let sizeInfo = '';
+      let floorSurchargeRate = 0;
+      let kmRate = 0;
+
+      if (isGrandPiano) {
+         sizeInfo = ` (${grandPianoSizeCm} cm)`;
+         kmRate = 0.55; // Sicherstellen, dass kmRate hier zugewiesen wird
+         kmSurcharge = distanceInKm * kmRate;
+         if (grandPianoSizeCm < 200) {
+             calculationType += ' (< 200cm)';
+             floorSurchargeRate = 52.00; // Sicherstellen, dass floorSurchargeRate hier zugewiesen wird
+             floorSurcharge = floorCount * floorSurchargeRate;
+             const priceTableGrandSmall = [
+                { maxKm: 20, price: 427.50 }, { maxKm: 30, price: 457.50 },
+                { maxKm: 40, price: 457.50 }, { maxKm: 50, price: 517.50 },
+                { maxKm: 60, price: 517.50 }, { maxKm: 70, price: 607.50 },
+                { maxKm: 80, price: 607.50 }, { maxKm: 90, price: 727.50 },
+                { maxKm: 100, price: 727.50 }, { maxKm: 110, price: 877.50 },
+                { maxKm: 120, price: 877.50 }, { maxKm: Infinity, price: 877.50 }
+             ];
+             // Wichtig: Sicherstellen, dass basePrice immer zugewiesen wird
+             basePrice = priceTableGrandSmall[priceTableGrandSmall.length - 1].price; // Fallback auf letzten Wert
+             for (const entry of priceTableGrandSmall) {
+                 if (distanceInKm <= entry.maxKm) {
+                     basePrice = entry.price;
+                     break;
+                 }
+             }
+         } else { // >= 200cm
+             calculationType += ' (>= 200cm)';
+             floorSurchargeRate = 62.00; // Sicherstellen, dass floorSurchargeRate hier zugewiesen wird
+             floorSurcharge = floorCount * floorSurchargeRate;
+             const priceTableGrandLarge = [
+                { maxKm: 20, price: 528.00 }, { maxKm: 30, price: 558.00 },
+                { maxKm: 40, price: 558.00 }, { maxKm: 50, price: 558.00 },
+                { maxKm: 60, price: 618.00 }, { maxKm: 70, price: 708.00 },
+                { maxKm: 80, price: 708.00 }, { maxKm: 90, price: 828.00 },
+                { maxKm: 100, price: 828.00 }, { maxKm: 110, price: 978.00 },
+                { maxKm: 120, price: 978.00 }, { maxKm: Infinity, price: 978.00 }
+             ];
+             // Wichtig: Sicherstellen, dass basePrice immer zugewiesen wird
+             basePrice = priceTableGrandLarge[priceTableGrandLarge.length - 1].price; // Fallback auf letzten Wert
+             for (const entry of priceTableGrandLarge) {
+                 if (distanceInKm <= entry.maxKm) {
+                     basePrice = entry.price;
+                     break;
+                 }
+             }
+         }
+      } else { // Klavier
+         calculationType = 'Klavier';
+         floorSurchargeRate = 35.00; // Sicherstellen, dass floorSurchargeRate hier zugewiesen wird
+         kmRate = 5.50; // Sicherstellen, dass kmRate hier zugewiesen wird
+         floorSurcharge = floorCount * floorSurchargeRate;
+         kmSurcharge = Math.ceil(distanceInKm / 10) * kmRate;
+         const calculatePianoBasePrice = (distanceKm) => {
+             const priceTablePiano = [
           { maxKm: 19, price: 300.00 }, { maxKm: 29, price: 325.00 },
           { maxKm: 39, price: 350.00 }, { maxKm: 49, price: 375.00 },
-          { maxKm: 59, price: 400.00 }, { maxKm: 69, price: 400.00 }, // Annahme: 60-69km ist auch 400€
+                { maxKm: 59, price: 400.00 }, { maxKm: 69, price: 400.00 },
           { maxKm: 79, price: 425.00 }, { maxKm: 89, price: 450.00 },
           { maxKm: 99, price: 475.00 }, { maxKm: Infinity, price: 500.00 }
         ];
-        for (const entry of priceTable) {
-          if (distanceKm <= entry.maxKm) return entry.price;
-        }
-        return priceTable[priceTable.length - 1].price; // Fallback
-      };
+             // Wichtig: Sicherstellen, dass immer ein Preis zurückgegeben wird
+             let calculatedPrice = priceTablePiano[priceTablePiano.length - 1].price; // Fallback
+             for (const entry of priceTablePiano) {
+                 if (distanceKm <= entry.maxKm) {
+                     calculatedPrice = entry.price;
+                     break;
+                 }
+             }
+             return calculatedPrice;
+         };
+         basePrice = calculatePianoBasePrice(distanceInKm); // Sicherstellen, dass basePrice zugewiesen wird
+      }
 
-      const basePrice = calculatePrice(distanceInKm);
-      const floorSurchargeRate = 35.00;
-      const floorSurcharge = floorCount * floorSurchargeRate;
-      const kmRate = 5.50;
-      const kmSurcharge = Math.ceil(distanceInKm / 10) * kmRate;
+      // Sicherstellen, dass alle Variablen Zahlen sind, bevor toFixed aufgerufen wird
+      // (Obwohl die obigen Zuweisungen dies abdecken sollten, ist dies eine zusätzliche Sicherheit)
+      if ([basePrice, floorSurcharge, kmSurcharge, floorSurchargeRate, kmRate].some(val => typeof val !== 'number' || isNaN(val))) {
+          console.error(`[Preisberechnung Fehler] Mindestens eine Preiskomponente ist keine Zahl für Deal ${dealId}:`, { basePrice, floorSurcharge, kmSurcharge, floorSurchargeRate, kmRate });
+          throw new Error("Fehler bei der Berechnung der Preiskomponenten.");
+      }
+
+
       const netSum = basePrice + floorSurcharge + kmSurcharge;
       const vatRate = 0.19;
       const vatAmount = netSum * vatRate;
       const grossSum = netSum + vatAmount;
 
       const resultData = {
+        // ... (Felder wie distance_km, distance_source, etc.) ...
         distance_km: distanceInKm.toFixed(1),
-        base_price: basePrice.toFixed(2),
+        distance_source: distanceSource,
+        calculation_type: calculationType + sizeInfo,
+        base_price: basePrice.toFixed(2), // Sicher, da basePrice jetzt immer eine Zahl sein sollte
         floor_count: floorCount,
-        floor_surcharge_rate: floorSurchargeRate.toFixed(2),
-        floor_surcharge: floorSurcharge.toFixed(2),
-        km_surcharge: kmSurcharge.toFixed(2),
-        net_sum: netSum.toFixed(2),
-        vat_amount: vatAmount.toFixed(2),
-        gross_sum: grossSum.toFixed(2),
-        origin_address: origin,
-        destination_address: destination
+        floor_surcharge_rate: floorSurchargeRate.toFixed(2), // Sicher
+        floor_surcharge: floorSurcharge.toFixed(2), // Sicher
+        km_rate: kmRate.toFixed(2), // Sicher
+        km_surcharge: kmSurcharge.toFixed(2), // Sicher
+        net_sum: netSum.toFixed(2), // Sicher
+        vat_amount: vatAmount.toFixed(2), // Sicher
+        gross_sum: grossSum.toFixed(2), // Sicher
+        // ... (Restliche Felder) ...
       };
 
-      // Ergebnis speichern
       setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, result: resultData } }));
 
     } catch (error) {
-      console.error(`Fehler bei Klavierpreis-Berechnung für Deal ${dealId}:`, error);
-      setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: error.message || "Unbekannter Fehler" } }));
+      console.error(`Fehler bei Preis-Berechnung für Deal ${dealId}:`, error);
+      // Zeige die spezifische Fehlermeldung im UI an
+      setPianoCalculations(prev => ({ ...prev, [dealId]: { loading: false, error: error.message || "Unbekannter Fehler bei Preisberechnung" } }));
     }
-  }, [directionsService, PIANO_FLOOR_COUNT_FIELD_KEY]); // Abhängigkeiten
-  // --- ENDE NEU ---
+  }, [
+      // ... Abhängigkeiten bleiben gleich ...
+      directionsService,
+      PIANO_FLOOR_COUNT_FIELD_KEY,
+      dealSpecificData,
+      optimizedRoute,
+      SCHLAILE_FIXED_ADDRESS,
+      SCHLAILE_TYPE_PICKUP,
+      SCHLAILE_TYPE_DELIVERY,
+      OFFICE_ADDRESS
+  ]);
+  // --- ENDE ANGEPASST ---
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -1220,6 +1719,10 @@ const TourPlannerContent = () => {
             isSavingTour={isSavingTour}
             pianoCalculations={pianoCalculations}
             onCalculatePianoPrice={handleCalculatePianoPrice}
+            dealSpecificData={dealSpecificData}
+            onGrandPianoSizeChange={handleGrandPianoSizeChange}
+            optimizedRoute={optimizedRoute} // NEU: Route übergeben
+            onDealTypeChange={handleDealTypeChange}
           />
 
           <div className="bg-white p-4 rounded-xl shadow-sm">

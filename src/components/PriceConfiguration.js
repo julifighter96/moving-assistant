@@ -87,14 +87,16 @@ const PriceConfiguration = () => {
   };
 
   const handleUpdateHourlyRate = async (updatedRate) => {
+    console.log("[Frontend] Updating hourly rate with data:", updatedRate);
     try {
       setLoading(true);
       await adminService.updatePrice(updatedRate.id, updatedRate);
+      console.log("[Frontend] Update successful, clearing edit state and reloading.");
       setEditingHourlyRate(null);
       await loadPrices();
     } catch (err) {
       setError('Fehler beim Aktualisieren des Stundensatzes');
-      console.error(err);
+      console.error("[Frontend] Error during update:", err);
     } finally {
       setLoading(false);
     }
@@ -137,10 +139,18 @@ const PriceConfiguration = () => {
         type: 'hourly_rate'
       };
       await adminService.addPrice(newRate);
+      setToast({ message: 'Neuer Stundensatz hinzugefügt. Bitte bearbeiten Sie ihn.', type: 'success' });
       await loadPrices();
     } catch (err) {
-      setError('Fehler beim Hinzufügen des Stundensatzes');
-      console.error(err);
+      console.error("Error adding hourly rate:", err);
+      if (err.response && err.response.status === 409 && err.response.data && err.response.data.error) {
+        setError(err.response.data.error);
+        setToast({ message: err.response.data.error, type: 'error' });
+      } else {
+        const defaultError = 'Fehler beim Hinzufügen des Stundensatzes.';
+        setError(defaultError);
+        setToast({ message: defaultError, type: 'error' });
+      }
     } finally {
       setLoading(false);
     }
@@ -175,6 +185,8 @@ const PriceConfiguration = () => {
     }
   };
 
+  const closeToast = () => setToast(null);
+
   if (loading && !prices.length && !hourlyRates.length && !loadingTimes.length && !noParkingZones.length) {
     return (
       <div className="flex justify-center items-center p-8">
@@ -196,7 +208,7 @@ const PriceConfiguration = () => {
           {toast.message}
           <button 
             className="ml-2 text-gray-500 hover:text-gray-700"
-            onClick={() => setToast(null)}
+            onClick={closeToast}
           >
             ×
           </button>
@@ -379,9 +391,10 @@ const PriceConfiguration = () => {
             <h3 className="text-lg font-medium text-gray-900">Stundensätze</h3>
             <button
               onClick={handleAddHourlyRate}
-              className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-dark"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-dark disabled:opacity-50"
+              disabled={loading}
             >
-              Neuer Stundensatz
+              Stundensatz hinzufügen
             </button>
           </div>
           

@@ -622,8 +622,8 @@ function App() {
        />
       <main className="pt-20 px-6 pb-6">
         <div className="max-w-none mx-auto">
-          {/* Step Progress - nur anzeigen, wenn weder admin noch route aktiv ist */}
-          {currentStep !== 'admin' && currentStep !== 'route-selection' && (
+          {/* Step Progress - nur anzeigen, wenn weder admin, route noch tour-planner aktiv ist */}
+          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && (
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
               <div className="flex justify-between">
                 {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
@@ -671,8 +671,8 @@ function App() {
             </div>
           )}
 
-          {/* Back/Forward Controls - nur anzeigen, wenn weder admin noch route aktiv ist */}
-          {currentStep !== 'admin' && currentStep !== 'route-selection' && (
+          {/* Back/Forward Controls - nur anzeigen, wenn weder admin, route noch tour-planner aktiv ist */}
+          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && (
             <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex justify-between items-center">
               <button
                 onClick={() => handleStepChange(currentStep - 1)} 

@@ -20,6 +20,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import MovingCalculation from './components/MovingCalculation';
 import TourPlanner from './components/TourPlanner';
 import RouteNavigation from './components/RouteNavigation';
+import TourPlanningV2 from './components/TourPlanningV2';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -623,7 +624,7 @@ function App() {
       <main className="pt-20 px-6 pb-6">
         <div className="max-w-none mx-auto">
           {/* Step Progress - nur anzeigen, wenn weder admin, route noch tour-planner aktiv ist */}
-          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && (
+          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && currentStep !== 'tour-planning-v2' && (
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
               <div className="flex justify-between">
                 {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
@@ -672,7 +673,7 @@ function App() {
           )}
 
           {/* Back/Forward Controls - nur anzeigen, wenn weder admin, route noch tour-planner aktiv ist */}
-          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && (
+          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && currentStep !== 'tour-planning-v2' && (
             <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex justify-between items-center">
               <button
                 onClick={() => handleStepChange(currentStep - 1)} 
@@ -953,6 +954,10 @@ function App() {
   <div className="bg-white rounded-lg shadow-sm">
     <TourPlanner />
   </div>
+)}
+
+{currentStep === 'tour-planning-v2' && (
+  <TourPlanningV2 />
 )}
 
 {currentStep === 'inspections' && (

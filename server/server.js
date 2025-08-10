@@ -7,7 +7,10 @@ const OpenAI = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
 const INITIAL_ROOMS_AND_ITEMS = require('./initialData');
-require('dotenv').config({ path: __dirname + '/.env' });
+// Load environment variables from multiple possible locations
+require('dotenv').config({ path: path.join(__dirname, '../.env.development') });
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
@@ -309,10 +312,14 @@ const startServer = async () => {
       res.json({ user: req.user });
     });
 
+    // Import tour planning routes
+    const tourPlanningRoutes = require('./routes/tourPlanningRoutes');
+
     // Protect routes that require authentication
     app.use('/api/deals', authenticateToken);
     app.use('/api/rooms', authenticateToken);
     app.use('/api/items', authenticateToken);
+    app.use('/api/tour-planning', authenticateToken, tourPlanningRoutes); // Authentication re-enabled
 
     // Analysis Routes
     app.post(['/api/analyze', '/api/analyze/'], async (req, res) => {

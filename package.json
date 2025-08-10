@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "homepage": "/moving-assistant",
+  "proxy": "http://localhost:3001",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
     "@electron/remote": "^2.1.2",

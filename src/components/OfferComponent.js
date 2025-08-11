@@ -25,18 +25,20 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
     duebelarbeitenCount: 0
   };
 
+  // Sammle alle Daten aus den rooms (inkl. bereits berechnete Volumina)
   Object.values(inspectionData.rooms || {}).forEach(room => {
+    // Verwende die bereits berechneten Werte aus dem RoomItemsSelector
+    if (room.totalVolume) {
+      combinedData.totalVolume += room.totalVolume;
+    }
+    
+    if (room.estimatedWeight) {
+      combinedData.volumeBasedWeightTotal += room.estimatedWeight;
+    }
+
+    // Sammle Items für die Anzeige
     room.items.forEach(item => {
-      // Debug-Ausgabe für Service-Flags
-      console.log(`Item ${item.name} Services:`, {
-        demontiert: !!item.demontiert,
-        remontiert: !!item.remontiert,
-        duebelarbeiten: !!item.duebelarbeiten,
-        elektro: !!item.elektro
-      });
-      
       if (!combinedData.items[item.name]) {
-        // Stelle sicher, dass alle Service-Flags übernommen werden
         combinedData.items[item.name] = { 
           ...item, 
           quantity: 0,
@@ -45,9 +47,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
           duebelarbeiten: !!item.duebelarbeiten,
           elektro: !!item.elektro
         };
-      }
-      // Update Service-Flags auch bei bestehenden Items
-      else {
+      } else {
         combinedData.items[item.name].demontiert = combinedData.items[item.name].demontiert || !!item.demontiert;
         combinedData.items[item.name].remontiert = combinedData.items[item.name].remontiert || !!item.remontiert;
         combinedData.items[item.name].duebelarbeiten = combinedData.items[item.name].duebelarbeiten || !!item.duebelarbeiten;
@@ -57,36 +57,76 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
       combinedData.items[item.name].quantity += item.quantity;
       if (item.demontiert) combinedData.demontageCount += item.quantity;
       if (item.duebelarbeiten) combinedData.duebelarbeitenCount += item.quantity;
-      // Zähle auch remontiert und elektro
       if (item.remontiert) combinedData.remontiertCount = (combinedData.remontiertCount || 0) + item.quantity;
       if (item.elektro) combinedData.elektroCount = (combinedData.elektroCount || 0) + item.quantity;
       
-      // Berechne das Volumen OHNE Reduktion
-      const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
-
+      // Gewichtsberechnung für Items
       if (item.weight) {
         combinedData.customWeightTotal += item.weight * item.quantity;
         combinedData.itemsWithCustomWeight += item.quantity;
       } else {
-        // Wende die Reduktion NUR auf das volumeBasedWeight an
+        // Verwende die bereits berechneten Gewichte aus dem RoomItemsSelector
+        const itemVolume = (item.length * item.width * item.height * item.quantity) / 1000000;
         const reductionFactor = volumeReductions[item.name] || 1;
         combinedData.volumeBasedWeightTotal += itemVolume * 200 * reductionFactor;
         combinedData.itemsWithVolumeWeight += item.quantity;
       }
-      
-      // Wende die Reduktion NUR auf das Gesamtvolumen an
-      const reductionFactor = volumeReductions[item.name] || 1;
-      combinedData.totalVolume += itemVolume * reductionFactor;
     });
 
+    // Sammle Packmaterialien
     room.packMaterials.forEach(material => {
       combinedData.packMaterials[material.name] = 
         (combinedData.packMaterials[material.name] || 0) + material.quantity;
     });
   });
 
-  // Calculate estimated weight (200kg per m³)
+  // Füge nur noch die Umzugskartons aus additionalInfo hinzu (falls nicht bereits in rooms enthalten)
+  if (inspectionData.additionalInfo) {
+    const umzugskartons = inspectionData.additionalInfo.find(
+      f => f.name === 'Anzahl Umzugskartons' && f.type === 'number'
+    )?.value || 0;
+    
+    const porzellankartons = inspectionData.additionalInfo.find(
+      f => f.name === 'Anzahl Porzellankartons' && f.type === 'number'
+    )?.value || 0;
+
+    if (umzugskartons > 0 || porzellankartons > 0) {
+      // Standard Umzugskarton: 60x40x40 cm = 0.096 m³
+      const umzugskartonVolume = 0.096;
+      // Porzellankarton: 50x30x30 cm = 0.045 m³
+      const porzellankartonVolume = 0.045;
+
+      const umzugskartonsVolume = umzugskartons * umzugskartonVolume;
+      const porzellankartonsVolume = porzellankartons * porzellankartonVolume;
+
+      // Füge nur die zusätzlichen Kartons hinzu
+      combinedData.totalVolume += umzugskartonsVolume + porzellankartonsVolume;
+      
+      // Füge Gewicht hinzu
+      const kartonsWeight = (umzugskartonsVolume + porzellankartonsVolume) * 200;
+      combinedData.volumeBasedWeightTotal += kartonsWeight;
+      combinedData.itemsWithVolumeWeight += umzugskartons + porzellankartons;
+
+      console.log('Added additional box volumes:', {
+        umzugskartons,
+        porzellankartons,
+        umzugskartonsVolume: umzugskartonsVolume.toFixed(3),
+        porzellankartonsVolume: porzellankartonsVolume.toFixed(3),
+        totalAddedVolume: (umzugskartonsVolume + porzellankartonsVolume).toFixed(3)
+      });
+    }
+  }
+
+  // Calculate estimated weight
   combinedData.estimatedWeight = combinedData.customWeightTotal + combinedData.volumeBasedWeightTotal;
+
+  // Debug-Ausgabe
+  console.log('Volume calculation using RoomItemsSelector values:', {
+    totalVolume: combinedData.totalVolume.toFixed(3),
+    customWeightTotal: Math.round(combinedData.customWeightTotal),
+    volumeBasedWeightTotal: Math.round(combinedData.volumeBasedWeightTotal),
+    estimatedWeight: Math.round(combinedData.estimatedWeight)
+  });
 
   // Calculate costs
   const BASE_RATE = 50; // €/m³
@@ -331,6 +371,74 @@ ${inspectionData.additionalInfo
       <div className="text-xl font-bold text-blue-900">
         {combinedData.totalVolume.toFixed(2)} m³
       </div>
+      {/* Zeige Kartons-Volumina an, falls vorhanden */}
+      {inspectionData.additionalInfo && (() => {
+        const umzugskartons = inspectionData.additionalInfo.find(
+          f => f.name === 'Anzahl Umzugskartons' && f.type === 'number'
+        )?.value || 0;
+        
+        const porzellankartons = inspectionData.additionalInfo.find(
+          f => f.name === 'Anzahl Porzellankartons' && f.type === 'number'
+        )?.value || 0;
+
+        if (umzugskartons > 0 || porzellankartons > 0) {
+          const umzugskartonsVolume = umzugskartons * 0.096;
+          const porzellankartonsVolume = porzellankartons * 0.045;
+          const totalBoxVolume = umzugskartonsVolume + porzellankartonsVolume;
+          
+          return (
+            <div className="mt-2 text-sm text-gray-600">
+              <div>Davon Kartons (additionalInfo): {totalBoxVolume.toFixed(3)} m³</div>
+              {umzugskartons > 0 && <div>• Umzugskartons: {umzugskartons}x ({(umzugskartons * 0.096).toFixed(3)} m³)</div>}
+              {porzellankartons > 0 && <div>• Porzellankartons: {porzellankartons}x ({(porzellankartons * 0.045).toFixed(3)} m³)</div>}
+            </div>
+          );
+        }
+        return null;
+      })()}
+      
+      {/* Zeige Packmaterialien aus rooms an, falls vorhanden */}
+      {(() => {
+        const roomPackMaterials = Object.values(inspectionData.rooms || {}).reduce((total, room) => {
+          const roomMaterials = room.packMaterials || [];
+          roomMaterials.forEach(material => {
+            if (['Umzugskartons (Standard)', 'Bücherkartons (Bücher&Geschirr)', 'Kleiderkisten'].includes(material.name)) {
+              if (!total[material.name]) total[material.name] = 0;
+              total[material.name] += material.quantity;
+            }
+          });
+          return total;
+        }, {});
+
+        const hasRoomPackMaterials = Object.values(roomPackMaterials).some(qty => qty > 0);
+        
+        if (hasRoomPackMaterials) {
+          let totalRoomVolume = 0;
+          const materialDetails = [];
+          
+          Object.entries(roomPackMaterials).forEach(([name, quantity]) => {
+            if (quantity > 0) {
+              let volume = 0.096; // Standard Umzugskarton
+              if (name === 'Bücherkartons (Bücher&Geschirr)') volume = 0.045;
+              else if (name === 'Kleiderkisten') volume = 0.072;
+              
+              const totalVolume = volume * quantity;
+              totalRoomVolume += totalVolume;
+              materialDetails.push(`${name}: ${quantity}x (${totalVolume.toFixed(3)} m³)`);
+            }
+          });
+          
+          return (
+            <div className="mt-2 text-sm text-gray-600">
+              <div>Davon Packmaterialien (rooms): {totalRoomVolume.toFixed(3)} m³</div>
+              {materialDetails.map((detail, index) => (
+                <div key={index}>• {detail}</div>
+              ))}
+            </div>
+          );
+        }
+        return null;
+      })()}
     </div>
     <div className="bg-white rounded-lg p-4 shadow-sm">
       <div className="text-sm text-gray-500 mb-2">Gewicht</div>
@@ -346,6 +454,30 @@ ${inspectionData.additionalInfo
           <span>{Math.round(combinedData.volumeBasedWeightTotal)} kg</span>
         </div>
       )}
+      {/* Zeige Kartons-Gewicht separat an, falls vorhanden */}
+      {inspectionData.additionalInfo && (() => {
+        const umzugskartons = inspectionData.additionalInfo.find(
+          f => f.name === 'Anzahl Umzugskartons' && f.type === 'number'
+        )?.value || 0;
+        
+        const porzellankartons = inspectionData.additionalInfo.find(
+          f => f.name === 'Anzahl Porzellankartons' && f.type === 'number'
+        )?.value || 0;
+
+        if (umzugskartons > 0 || porzellankartons > 0) {
+          const umzugskartonsVolume = umzugskartons * 0.096;
+          const porzellankartonsVolume = porzellankartons * 0.045;
+          const kartonsWeight = (umzugskartonsVolume + porzellankartonsVolume) * 200;
+          
+          return (
+            <div className="flex justify-between text-sm mb-1 text-blue-600">
+              <span>Davon Umzugskartons</span>
+              <span>{Math.round(kartonsWeight)} kg</span>
+            </div>
+          );
+        }
+        return null;
+      })()}
       <div className="flex justify-between font-bold text-blue-900 pt-2 border-t">
         <span>Gesamtgewicht</span>
         <span>{Math.round(combinedData.estimatedWeight)} kg</span>

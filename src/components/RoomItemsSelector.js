@@ -116,9 +116,7 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
     onUpdateRoom(roomName, {
       items,
       packMaterials,
-      totalVolume: items.reduce((total, item) => 
-        total + ((item.width || 0) * (item.length || 0) * (item.height || 0) * item.quantity), 0
-      ),
+      totalVolume: totalVolume, // Verwende die korrekte totalVolume-Berechnung
       estimatedWeight,
       notes
     });

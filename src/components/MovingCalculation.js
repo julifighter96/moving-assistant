@@ -1,7 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, Package, Truck, Users, Plus, Minus, MapPin } from 'lucide-react';
+import { Clock, Package, Truck, Users, Plus, Minus, MapPin, ChevronDown, X } from 'lucide-react';
 import { adminService } from '../services/adminService';
 import { getDeal } from '../services/pipedriveService';
+import { AVAILABLE_TRUCKS } from './MovingTruckSimulator';
+
+// --- Pipedrive Field API Keys (IMPORTANT: Replace placeholders with actual keys!) ---
+
+// Fahrzeuge und Fahrer
+const PIPEDRIVE_KEY_FAHRZEUGE = '7ef0bad215357130769f5d26e0b47c5c55da239d'; // Fahrzeuge (Multiple options field key)
+const PIPEDRIVE_KEY_FAHRER_12T = 'a1ee000b4ac48779cfb43f1319bd37250705ddaf'; // Anzahl Fahrer 12 Tonner (C, CE)
+const PIPEDRIVE_KEY_FAHRER_7_5T = 'ebb714ecc0028be711b63573a871504b2268b58e'; // Anzahl Fahrer 7,49 Tonner (C1, C, CE)
+const PIPEDRIVE_KEY_FAHRER_3_5T = 'e6141bc6608c18bad305abbc4d7e871fe6451d8f'; // Anzahl Fahrer 3,49 Tonner (B, BE, C1, C, CE)
+
+
+// Spezifische Mitarbeitertypen
+const PIPEDRIVE_KEY_UMZUGSHELFER = '34b7e1187558cb432b19593871c7f8599de16b22'; // Anzahl Umzugshelfer (Träger)
+const PIPEDRIVE_KEY_MONTEURE = '20b3d99d25f0a4f3377e94f4731cd6089c421831'; // Anzahl Monteure
+const PIPEDRIVE_KEY_KLAVIERTRAEGER = '92fe9d2c1d616504b461a2dfdc2e17f5bd73d754'; // Anzahl Klavierträger
+const PIPEDRIVE_KEY_VORARBEITER = '4f97709adbac21bce64ed5cc902c97737ab00188'; // Anzahl Vorarbeiter
+
+
+// Dynamische Mitarbeiter-Keys (werden automatisch generiert basierend auf employeeTypes)
+// Beispiel: PIPEDRIVE_KEY_MITARBEITER_MEISTER, PIPEDRIVE_KEY_MITARBEITER_MONTEUR, etc.
+// Diese werden in handleContinue() dynamisch erstellt basierend auf den tatsächlichen Mitarbeitertypen
 
 const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   const [totalVolume, setTotalVolume] = useState(0);
@@ -59,6 +80,26 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
 
   // Füge State für die vollständige Route hinzu
   const [completeRoute, setCompleteRoute] = useState(null);
+
+  // Füge State für die selected trucks hinzu
+  const [selectedTrucks, setSelectedTrucks] = useState([]);
+  const [isTruckDropdownOpen, setIsTruckDropdownOpen] = useState(false);
+  const truckDropdownRef = useRef(null);
+
+  // --- State for calculated driver counts ---
+  const [calculatedDrivers, setCalculatedDrivers] = useState({
+    '12T': 0,
+    '7.5T': 0,
+    '3.5T': 0,
+  });
+
+  // Add new state variables for editable times
+  const [editableTimes, setEditableTimes] = useState({
+    setup: 0,
+    dismantle: 0,
+    loading: 0,
+    travel: 0
+  });
 
   // Berechnung und Laden der Preisdaten beim Laden der Komponente
   useEffect(() => {
@@ -185,6 +226,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     
     // Durch alle Räume und deren Gegenstände iterieren
     Object.values(roomsData).forEach(room => {
+      // 1. Volumen und Zeiten für Möbel (items) berechnen
       if (room.items && Array.isArray(room.items)) {
         room.items.forEach(item => {
           // Nur Gegenstände berücksichtigen, die tatsächlich im Umzug enthalten sind
@@ -211,23 +253,42 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
         });
       }
       
-      // Packmaterialien könnten später hier hinzugefügt werden
+      // 2. Volumen für Packmaterialien (packMaterials) berechnen
+      if (room.packMaterials && Array.isArray(room.packMaterials)) {
+        room.packMaterials.forEach(material => {
+          if (material.quantity && material.quantity > 0) {
+            // Prüfen ob material ein Karton ist, für den Volumen berechnet werden soll
+            if (['Umzugskartons (Standard)', 'Bücherkartons (Bücher&Geschirr)', 'Kleiderkisten'].includes(material.name)) {
+              // Finde die Konfiguration (inkl. Maße) für dieses Material in den geladenen Preisen
+              const priceConfig = prices?.find(p => p.name === material.name);
+              
+              if (priceConfig?.length && priceConfig?.width && priceConfig?.height) {
+                const materialVolume = (priceConfig.length * priceConfig.width * priceConfig.height) / 1000000; // cm³ to m³
+                volume += materialVolume * material.quantity;
+                console.log(`Packmaterial ${material.name} (${material.quantity}x): Volumen=${(materialVolume * material.quantity).toFixed(3)}m³`);
+              } else {
+                console.warn(`Keine Maße für Packmaterial gefunden: ${material.name}`);
+              }
+            }
+          }
+        });
+      }
     });
     
-    console.log(`Berechnete Werte: Volumen=${volume.toFixed(2)}m³, Setup=${setupTime}min, Dismantle=${dismantleTime}min`);
+    console.log(`Berechnete Werte (inkl. Packmaterialien): Volumen=${volume.toFixed(2)}m³, Setup=${setupTime}min, Dismantle=${dismantleTime}min`);
     
     // Werte setzen
     setTotalVolume(volume);
     setPackingTime(setupTime);
     setUnpackingTime(dismantleTime);
     
-    // Berechne Ladezeit mit dem aktuellen loadingTimePerUnit-Wert
+    // Berechne Ladezeit mit dem aktuellen loadingTimePerUnit-Wert und dem *neuen* Gesamtvolumen
     const volumeUnits = Math.ceil(volume / 5);
     console.log(`Berechne Ladezeit: ${volumeUnits} Einheiten × ${loadingTimePerUnit} Minuten = ${volumeUnits * loadingTimePerUnit} Minuten`);
     const calculatedLoadingTime = volumeUnits * loadingTimePerUnit;
     setLoadingTime(calculatedLoadingTime);
     
-    // Gesamtdauer mit Ladezeit
+    // Gesamtdauer mit Ladezeit (Fahrtzeit wird später hinzugefügt)
     setTotalDuration(setupTime + dismantleTime + calculatedLoadingTime);
     
     setLoading(false);
@@ -533,8 +594,142 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     
   }, [roomsData, materialPrices]);
 
-  // Aktualisiere handleContinue, um Materialkosten einzubeziehen
+  // Effect to close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (truckDropdownRef.current && !truckDropdownRef.current.contains(event.target)) {
+        setIsTruckDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Handler for truck selection change
+  const handleTruckSelectionChange = (kennzeichen) => {
+    setSelectedTrucks(prevSelected =>
+      prevSelected.includes(kennzeichen)
+        ? prevSelected.filter(k => k !== kennzeichen) // Remove if already selected
+        : [...prevSelected, kennzeichen] // Add if not selected
+    );
+  };
+
+  // Function to get truck names from selected kennzeichen
+  const getSelectedTruckNames = () => {
+    return selectedTrucks
+      .map(kennzeichen => Object.values(AVAILABLE_TRUCKS).find(truck => truck.kennzeichen === kennzeichen)?.name)
+      .filter(Boolean)
+      .join(', ');
+  };
+
+  // Helper function to categorize trucks for driver assignment
+  const getTruckDriverCategory = (truckName) => {
+    if (!truckName) return null;
+    const lowerCaseName = truckName.toLowerCase();
+    if (lowerCaseName.includes('12 tonner')) return '12T';
+    if (lowerCaseName.includes('7,5 tonner') || lowerCaseName.includes('7.5 tonner') || lowerCaseName.includes('7,49 tonner')) return '7.5T';
+    if (lowerCaseName.includes('ducato') || lowerCaseName.includes('mercedes 3,5 t') || lowerCaseName.includes('renault') || lowerCaseName.includes('3,5 tonner') || lowerCaseName.includes('3.5 tonner') || lowerCaseName.includes('3,49 tonner')) return '3.5T';
+    return null; // Or a default category if needed
+  };
+
+  // --- Function to calculate driver counts based on selected trucks ---
+  const calculateDriverCounts = () => {
+    let count12T = 0;
+    let count7_5T = 0;
+    let count3_5T = 0;
+
+    const selectedTruckDetails = selectedTrucks.map(kennzeichen =>
+        Object.values(AVAILABLE_TRUCKS).find(truck => truck.kennzeichen === kennzeichen)
+    ).filter(Boolean);
+
+    selectedTruckDetails.forEach(truck => {
+        const category = getTruckDriverCategory(truck.name);
+        switch (category) {
+            case '12T': count12T++; break;
+            case '7.5T': count7_5T++; break;
+            case '3.5T': count3_5T++; break;
+            default: break; // Already warned in getTruckDriverCategory if needed
+        }
+    });
+
+    setCalculatedDrivers({
+        '12T': count12T,
+        '7.5T': count7_5T,
+        '3.5T': count3_5T,
+    });
+  };
+
+  // --- useEffect to recalculate driver counts when trucks change ---
+  useEffect(() => {
+    calculateDriverCounts();
+  }, [selectedTrucks]); // Dependency array includes selectedTrucks
+
+  // Update handleContinue (calculation logic is now separate)
   const handleContinue = () => {
+    // Use the state values for calculated drivers
+    const driverCount12T = calculatedDrivers['12T'];
+    const driverCount7_5T = calculatedDrivers['7.5T'];
+    const driverCount3_5T = calculatedDrivers['3.5T'];
+
+    const selectedTruckDetails = selectedTrucks.map(kennzeichen =>
+        Object.values(AVAILABLE_TRUCKS).find(truck => truck.kennzeichen === kennzeichen)
+    ).filter(Boolean);
+
+    // --- Prepare Pipedrive Specific Data ---
+    const pipedriveData = {
+      // Fahrzeuge
+      [PIPEDRIVE_KEY_FAHRZEUGE]: selectedTrucks,
+      
+      // Fahrer (berechnet basierend auf Fahrzeugen)
+      [PIPEDRIVE_KEY_FAHRER_12T]: driverCount12T,
+      [PIPEDRIVE_KEY_FAHRER_7_5T]: driverCount7_5T,
+      [PIPEDRIVE_KEY_FAHRER_3_5T]: driverCount3_5T,
+      
+      // Manuell ausgewählte Mitarbeiter (nach Typ)
+      ...Object.entries(selectedEmployees).reduce((acc, [typeId, count]) => {
+        const employeeType = employeeTypes.find(type => type.id === typeId);
+        if (employeeType && count > 0) {
+          // Mapping der Mitarbeitertypen zu den spezifischen Pipedrive-Keys
+          let pipedriveKey = null;
+          
+          // Mapping basierend auf Mitarbeitertyp-Namen
+          switch (employeeType.name.toLowerCase()) {
+            case 'umzugshelfer':
+            case 'träger':
+              pipedriveKey = PIPEDRIVE_KEY_UMZUGSHELFER;
+              break;
+            case 'monteur':
+            case 'monteure':
+              pipedriveKey = PIPEDRIVE_KEY_MONTEURE;
+              break;
+            case 'klavierträger':
+            case 'klaviertraeger':
+              pipedriveKey = PIPEDRIVE_KEY_KLAVIERTRAEGER;
+              break;
+            case 'vorarbeiter':
+              pipedriveKey = PIPEDRIVE_KEY_VORARBEITER;
+              break;
+            default:
+              // Fallback für unbekannte Typen
+              console.warn(`Unbekannter Mitarbeitertyp: ${employeeType.name}`);
+              break;
+          }
+          
+          if (pipedriveKey) {
+            acc[pipedriveKey] = count;
+          }
+        }
+        return acc;
+      }, {}),
+      
+
+    };
+
+    console.log("Data prepared for Pipedrive:", pipedriveData);
+
+    // --- Prepare the final result object ---
     const result = {
       totalVolume,
       packingTime,
@@ -544,7 +739,8 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
         employees: selectedEmployees,
         totalCount: getTotalEmployees(),
         timePerEmployee: getTimePerEmployee(),
-        laborCosts: laborCosts
+        laborCosts: laborCosts,
+        calculatedDrivers: calculatedDrivers
       },
       travel: {
         costs: travelCosts,
@@ -553,11 +749,40 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       packMaterials,
       materialCosts,
       travelTimeMinutes,
-      // Berechne die Gesamtkosten
-      totalCost: laborCosts.total + materialCosts
+      selectedTrucks: selectedTruckDetails,
+      totalCost: laborCosts.total + materialCosts,
+      pipedriveUpdateData: pipedriveData
     };
-    
+
+    console.log("Final result object passed to onComplete:", result);
     onComplete(result);
+  };
+
+  // Update useEffect to initialize editable times when calculated times change
+  useEffect(() => {
+    setEditableTimes({
+      setup: packingTime,
+      dismantle: unpackingTime,
+      loading: loadingTime,
+      travel: travelTimeMinutes
+    });
+  }, [packingTime, unpackingTime, loadingTime, travelTimeMinutes]);
+
+  // Add handler for time changes
+  const handleTimeChange = (type, value) => {
+    const newValue = Math.max(0, parseInt(value) || 0);
+    setEditableTimes(prev => ({
+      ...prev,
+      [type]: newValue
+    }));
+
+    // Update total duration when any time changes
+    const newTotal = Object.values({
+      ...editableTimes,
+      [type]: newValue
+    }).reduce((sum, time) => sum + time, 0);
+
+    setTotalDuration(newTotal);
   };
 
   return (
@@ -659,6 +884,53 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                       </div>
                     </div>
 
+                    {/* Truck Selection Dropdown */}
+                    <div className="relative" ref={truckDropdownRef}>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Fahrzeugauswahl (bestimmt Fahreranzahl)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsTruckDropdownOpen(!isTruckDropdownOpen)}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors flex justify-between items-center text-left bg-white"
+                      >
+                        <span className="text-gray-700 truncate pr-2">
+                          {selectedTrucks.length > 0
+                            ? `${selectedTrucks.length} Fahrzeug(e) ausgewählt: ${getSelectedTruckNames()}`
+                            : 'Fahrzeuge auswählen...'}
+                        </span>
+                        <ChevronDown size={18} className={`text-gray-500 transition-transform ${isTruckDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isTruckDropdownOpen && (
+                        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {Object.values(AVAILABLE_TRUCKS).map(truck => (
+                            <label
+                              key={truck.kennzeichen}
+                              className="flex items-center px-4 py-3 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedTrucks.includes(truck.kennzeichen)}
+                                onChange={() => handleTruckSelectionChange(truck.kennzeichen)}
+                                className="mr-3 h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                              />
+                              <div className="flex-grow">
+                                <span className="font-medium text-gray-800">{truck.name}</span>
+                                <p className="text-xs text-gray-500">{truck.kennzeichen} ({truck.length}m x {truck.width}m x {truck.height}m)</p>
+                              </div>
+                            </label>
+                          ))}
+                           <button
+                              onClick={() => setIsTruckDropdownOpen(false)}
+                              className="sticky bottom-0 w-full bg-gray-50 hover:bg-gray-100 text-center py-2 text-sm text-gray-600 border-t"
+                           >
+                             Schließen
+                           </button>
+                        </div>
+                      )}
+                    </div>
+
                     {isCalculatingRoute ? (
                       <div className="flex items-center justify-center py-4 bg-gray-50 rounded-lg">
                         <div className="animate-spin h-5 w-5 mr-2 border-2 border-primary border-t-transparent rounded-full"></div>
@@ -725,27 +997,69 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                     Zeitaufwand
                   </h3>
                   <div className="bg-gray-50 p-5 rounded-lg">
-                    <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                      <span className="text-gray-700">Aufbauzeit</span>
-                      <span className="font-medium">{packingTime} Minuten</span>
-                    </div>
-                    <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                      <span className="text-gray-700">Abbauzeit</span>
-                      <span className="font-medium">{unpackingTime} Minuten</span>
-                    </div>
-                    <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                      <span className="text-gray-700">Ladezeit</span>
-                      <span className="font-medium">{loadingTime} Minuten</span>
-                    </div>
-                    {routeDetails && (
+                    <div className="space-y-4">
                       <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                        <span className="text-gray-700">Fahrtzeit (Hin & Rück)</span>
-                        <span className="font-medium">{Math.round(routeDetails.durationMinutes)} Minuten</span>
+                        <span className="text-gray-700">Aufbauzeit</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={editableTimes.setup}
+                            onChange={(e) => handleTimeChange('setup', e.target.value)}
+                            className="w-20 p-1 border border-gray-300 rounded text-right"
+                            min="0"
+                          />
+                          <span className="text-gray-500">Min.</span>
+                        </div>
                       </div>
-                    )}
-                    <div className="flex justify-between items-center py-3 mt-1 bg-white rounded-lg p-3 shadow-sm">
-                      <span className="font-semibold text-gray-800">Gesamtzeit</span>
-                      <span className="font-bold text-lg text-primary">{totalDuration} Minuten</span>
+                      
+                      <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                        <span className="text-gray-700">Abbauzeit</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={editableTimes.dismantle}
+                            onChange={(e) => handleTimeChange('dismantle', e.target.value)}
+                            className="w-20 p-1 border border-gray-300 rounded text-right"
+                            min="0"
+                          />
+                          <span className="text-gray-500">Min.</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                        <span className="text-gray-700">Ladezeit</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={editableTimes.loading}
+                            onChange={(e) => handleTimeChange('loading', e.target.value)}
+                            className="w-20 p-1 border border-gray-300 rounded text-right"
+                            min="0"
+                          />
+                          <span className="text-gray-500">Min.</span>
+                        </div>
+                      </div>
+                      
+                      {routeDetails && (
+                        <div className="flex justify-between items-center py-3 border-b border-gray-200">
+                          <span className="text-gray-700">Fahrtzeit (Hin & Rück)</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              value={editableTimes.travel}
+                              onChange={(e) => handleTimeChange('travel', e.target.value)}
+                              className="w-20 p-1 border border-gray-300 rounded text-right"
+                              min="0"
+                            />
+                            <span className="text-gray-500">Min.</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-between items-center py-3 mt-1 bg-white rounded-lg p-3 shadow-sm">
+                        <span className="font-semibold text-gray-800">Gesamtzeit</span>
+                        <span className="font-bold text-lg text-primary">{totalDuration} Minuten</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -794,10 +1108,35 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                     <Users className="h-5 w-5 text-primary mr-3" />
                     Personalaufwand
                   </h3>
-                  
-                  <h4 className="font-medium mb-4 text-gray-700">Team Zusammenstellung</h4>
+
+                  {/* --- Display Calculated Drivers --- */}
+                  <div className="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                      <h4 className="font-medium mb-3 text-blue-800">Benötigte Fahrer (automatisch):</h4>
+                      <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                              <span className="text-gray-700">Fahrer 12T (C, CE):</span>
+                              <span className="font-semibold text-blue-700">{calculatedDrivers['12T']}</span>
+                          </div>
+                          <div className="flex justify-between">
+                              <span className="text-gray-700">Fahrer 7,49T (C1, C, CE):</span>
+                              <span className="font-semibold text-blue-700">{calculatedDrivers['7.5T']}</span>
+                          </div>
+                          <div className="flex justify-between">
+                              <span className="text-gray-700">Fahrer 3,49T (B, BE, C1, C, CE):</span>
+                              <span className="font-semibold text-blue-700">{calculatedDrivers['3.5T']}</span>
+                          </div>
+                      </div>
+                      <p className="text-xs text-blue-600 mt-3 italic">Basierend auf der Fahrzeugauswahl. Diese werden automatisch in Pipedrive eingetragen.</p>
+                  </div>
+
+                  {/* --- Manual Employee Selection --- */}
+                  <h4 className="font-medium mb-4 text-gray-700">Zusätzliches Personal manuell hinzufügen:</h4>
                   <div className="bg-gray-50 p-5 rounded-lg">
                     {employeeTypes.map(type => (
+                      // Filter out driver types if they should ONLY be calculated automatically
+                      // Or keep them if manual override/addition is desired
+                      // Example: Filter out based on name
+                      // !type.name.toLowerCase().includes('fahrer') && (
                       <div key={type.id} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-0">
                         <div>
                           <span className="font-medium text-gray-800">{type.name}</span>
@@ -806,14 +1145,14 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                           </p>
                         </div>
                         <div className="flex items-center">
-                          <button 
+                          <button
                             onClick={() => handleEmployeeChange(type.id, -1)}
                             className="p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
                           >
                             <Minus size={16} />
                           </button>
                           <span className="mx-3 w-8 text-center font-semibold">{selectedEmployees[type.id] || 0}</span>
-                          <button 
+                          <button
                             onClick={() => handleEmployeeChange(type.id, 1)}
                             className="p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
                           >
@@ -821,18 +1160,20 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                           </button>
                         </div>
                       </div>
+                      // )
                     ))}
-                    
+
                     <div className="flex justify-between items-center mt-5 pt-3 border-t border-gray-300 bg-white p-4 rounded-lg shadow-sm">
                       <div className="flex items-center text-gray-800">
                         <Users className="mr-2 h-5 w-5 text-primary" />
-                        <span className="font-semibold">Gesamtteam</span>
+                        <span className="font-semibold">Gesamtteam (manuell gewählt)</span>
                       </div>
-                      <div>
+                      <div className="text-right">
                         <span className="font-bold text-primary">{getTotalEmployees()} Personen</span>
-                        <span className="ml-2 text-sm text-gray-600">
-                          (~{getTimePerEmployee()} Min./Person)
-                        </span>
+                        <div className="text-sm text-gray-600 mt-1">
+                          <div>Arbeitszeit: ~{Math.round((packingTime + unpackingTime + loadingTime) / Math.max(1, getTotalEmployees()))} Min./Person</div>
+                          <div>Fahrtzeit: {Math.round(travelTimeMinutes)} Min. (konstant)</div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -887,6 +1228,15 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
               </div>
             </div>
           )}
+        </div>
+        <div className="p-6 border-t border-gray-200 flex justify-end">
+            <button
+                onClick={handleContinue}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg focus:outline-none focus:shadow-outline transition-colors"
+                disabled={loading} // Disable button while loading/calculating
+            >
+                Berechnung abschließen & Weiter
+            </button>
         </div>
       </div>
     </div>

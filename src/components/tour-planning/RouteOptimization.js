@@ -72,7 +72,7 @@ const DraggableJob = ({ job, index }) => {
 };
 
 // Route Planning Area
-const RoutePlanningArea = ({ routes, setRoutes }) => {
+const RoutePlanningArea = ({ routes, setRoutes, onOptimizeRoute, availableJobs }) => {
   const [{ isOver }, drop] = useDrop({
     accept: 'job',
     drop: (item, monitor) => {
@@ -108,10 +108,12 @@ const RoutePlanningArea = ({ routes, setRoutes }) => {
     <div ref={drop} className="space-y-4">
       {Object.entries(routes).map(([routeId, route]) => (
         <RouteCard 
-          key={routeId}
+          key={`route-card-${routeId}`}
           routeId={routeId}
           route={route}
           onRemoveJob={removeJobFromRoute}
+          onOptimizeRoute={onOptimizeRoute}
+          availableJobs={availableJobs}
           isOver={isOver}
         />
       ))}
@@ -120,7 +122,7 @@ const RoutePlanningArea = ({ routes, setRoutes }) => {
 };
 
 // Route Card Component
-const RouteCard = ({ routeId, route, onRemoveJob, isOver }) => {
+const RouteCard = ({ routeId, route, onRemoveJob, isOver, onOptimizeRoute, availableJobs }) => {
   const [{ isOver: isOverRoute }, drop] = useDrop({
     accept: 'job',
     drop: () => ({ routeId }),
@@ -129,8 +131,10 @@ const RouteCard = ({ routeId, route, onRemoveJob, isOver }) => {
     }),
   });
 
-  const totalTime = route.jobs.reduce((sum, job) => sum + parseInt(job.estimatedTime), 0);
-  const totalDistance = route.jobs.length * 15; // Mock calculation
+  const totalTime = (route.jobs || []).reduce((sum, job) => 
+    sum + (job && job.estimatedTime ? parseInt(job.estimatedTime) : 0), 0
+  );
+  const totalDistance = route.totalDistance || (route.jobs || []).length * 15; // Use actual distance if available
 
   return (
     <div
@@ -166,25 +170,38 @@ const RouteCard = ({ routeId, route, onRemoveJob, isOver }) => {
         </div>
       </div>
 
+      {/* Route Optimization Button */}
+      {(route.jobs || []).length > 1 && (
+        <div className="mb-3">
+          <button
+            onClick={() => onOptimizeRoute(routeId, route.jobs || [])}
+            className="w-full px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+          >
+            <Zap className="w-4 h-4 mr-2" />
+            Route {routeId} optimieren
+          </button>
+        </div>
+      )}
+
       <div className="space-y-2">
-        {route.jobs.length === 0 ? (
+        {(route.jobs || []).length === 0 ? (
           <div className="p-6 border-2 border-dashed border-gray-300 rounded-lg text-center">
             <Truck className="w-8 h-8 text-gray-400 mx-auto mb-2" />
             <p className="text-gray-500">Aufträge hier hinziehen</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {route.jobs.map((job, index) => (
-              <div key={index} className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
+            {(route.jobs || []).map((job, index) => (
+              <div key={`${routeId}-job-${job?.id || index}-${index}`} className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg">
                 <div className="flex-shrink-0 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-medium">
                   {index + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{job.title}</p>
-                  <p className="text-xs text-gray-500 truncate">{job.pickup} → {job.delivery}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{job?.title || 'Unbekannter Auftrag'}</p>
+                  <p className="text-xs text-gray-500 truncate">{job?.pickup || 'N/A'} → {job?.delivery || 'N/A'}</p>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-xs text-gray-500">{job.estimatedTime} min</span>
+                  <span className="text-xs text-gray-500">{job?.estimatedTime || 0} min</span>
                   <button
                     onClick={() => onRemoveJob(routeId, index)}
                     className="text-red-500 hover:text-red-700 transition-colors"
@@ -205,6 +222,7 @@ const RouteOptimization = () => {
   const [availableJobs, setAvailableJobs] = useState([]);
   const [routes, setRoutes] = useState({});
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizingRoute, setOptimizingRoute] = useState(null); // Track which route is being optimized
   const [depot] = useState({ address: 'Berlin Depot', lat: 52.5200, lng: 13.4050 });
   const [selectedRegion] = useState('all');
 
@@ -326,51 +344,359 @@ const RouteOptimization = () => {
     return '60'; // 1 Stunde für kleine Umzüge
   };
 
+  // Geocoding-Funktion für Adressen
+  const geocodeAddress = async (address) => {
+    try {
+      const apiKey = process.env.REACT_APP_HERE_API_KEY;
+      if (!apiKey) {
+        console.error('HERE_API_KEY not found in environment variables');
+        return null;
+      }
+
+      const response = await fetch(
+        `https://geocode.search.hereapi.com/v1/geocode?q=${encodeURIComponent(address)}&apiKey=${apiKey}`
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.items && data.items.length > 0) {
+          const item = data.items[0];
+          return {
+            lat: item.position.lat,
+            lng: item.position.lng
+          };
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      return null;
+    }
+  };
+
+  // Einzelne Route optimieren
+  const handleOptimizeSingleRoute = async (routeId, routeJobs) => {
+    if (routeJobs.length < 2) {
+      alert('Mindestens 2 Aufträge benötigt für Routenoptimierung');
+      return;
+    }
+
+    setOptimizingRoute(routeId);
+    setIsOptimizing(true);
+    
+    try {
+      // Bereite Jobs für HERE Tour Planning API vor
+      const jobs = [];
+      
+      for (const job of routeJobs) {
+        // Geocode pickup and delivery addresses
+        const pickupLocation = await geocodeAddress(job.pickup);
+        const deliveryLocation = await geocodeAddress(job.delivery);
+        
+        if (pickupLocation && deliveryLocation) {
+          // Convert estimated time from minutes to seconds
+          const duration = parseInt(job.estimatedTime) * 60;
+          
+          jobs.push({
+            id: `job_${job.id}`,
+            tasks: {
+              pickups: [{
+                places: [{
+                  location: pickupLocation,
+                  duration: duration
+                }],
+                demand: [1] // 1 moving job
+              }],
+              deliveries: [{
+                places: [{
+                  location: deliveryLocation,
+                  duration: duration
+                }],
+                demand: [1] // 1 moving job
+              }]
+            },
+            skills: ['moving_service']
+          });
+        }
+      }
+
+      if (jobs.length === 0) {
+        throw new Error('No valid jobs with geocoded addresses found');
+      }
+
+      // Create the problem request for single route optimization
+      const problem = {
+        fleet: {
+          types: [
+            {
+              id: 'moving_truck_single',
+              profile: 'truck',
+              costs: {
+                fixed: 0,      // Keine Fixkosten
+                distance: 0.001,  // Kosten pro Meter (1€/km)
+                time: 0.001       // Kosten pro Sekunde (0.06€/min)
+              },
+              shifts: [{
+                start: {
+                  time: new Date().toISOString(),
+                  location: {
+                    lat: depot.lat,
+                    lng: depot.lng
+                  }
+                },
+                end: {
+                  time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours later
+                  location: {
+                    lat: depot.lat,
+                    lng: depot.lng
+                  }
+                }
+              }],
+              capacity: [10],  // Max 10 moving jobs per vehicle
+              limits: {
+                // maxDistance entfernt - HERE API berechnet Distanzen falsch
+                shiftTime: 86400      // Max 24 hours
+              },
+              skills: ['moving_service'],
+              amount: 1 // Only one vehicle for single route optimization
+            }
+          ],
+          profiles: [{
+            name: 'truck',
+            type: 'truck'
+          }]
+        },
+        plan: {
+          jobs: jobs
+        },
+        objectives: [
+          { type: 'minimizeUnassigned' },  // Alle Jobs zuweisen
+          { type: 'minimizeDistance' }     // Distanz minimieren
+        ]
+      };
+
+      console.log(`Optimizing route ${routeId} with problem:`, problem);
+
+      // Submit to HERE Tour Planning API
+      const apiKey = process.env.REACT_APP_HERE_API_KEY;
+      if (!apiKey) {
+        throw new Error('HERE_API_KEY not found in environment variables');
+      }
+
+      const response = await fetch(`https://tourplanning.hereapi.com/v3/problems?apiKey=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(problem)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('HERE API error:', response.status, errorText);
+        throw new Error(`HERE API error: ${response.status} - ${errorText}`);
+      }
+
+      const solution = await response.json();
+      console.log(`Route ${routeId} optimization solution:`, solution);
+      
+      if (solution.tours && solution.tours.length > 0) {
+        const tour = solution.tours[0]; // Single route optimization
+        
+        // Map tour stops back to our job format
+        const optimizedJobs = tour.stops
+          .filter(stop => stop.activities && stop.activities.length > 0)
+          .map(stop => {
+            const activity = stop.activities[0];
+            if (activity.jobId) {
+              // Extract job ID from HERE API format (job_123 -> 123)
+              const jobId = activity.jobId.replace('job_', '');
+              const foundJob = routeJobs.find(job => job.id === jobId);
+              if (foundJob) {
+                return foundJob;
+              } else {
+                console.warn(`Job with ID ${jobId} not found in routeJobs:`, routeJobs);
+              }
+            }
+            return null;
+          })
+          .filter(job => job !== null);
+
+        // Fallback: If no jobs were mapped, use original order
+        if (optimizedJobs.length === 0) {
+          console.warn('No jobs could be mapped from HERE API response, using original order');
+          optimizedJobs.push(...routeJobs);
+        }
+
+        // Update only the specific route
+        setRoutes(prev => ({
+          ...prev,
+          [routeId]: {
+            ...prev[routeId],
+            jobs: optimizedJobs,
+            totalDistance: tour.statistic?.distance ? Math.round(tour.statistic.distance / 1000) : 0,
+            totalTime: tour.statistic?.duration ? Math.round(tour.statistic.duration / 60) : 0,
+            estimatedCost: tour.statistic?.cost || 0
+          }
+        }));
+        
+        console.log(`Route ${routeId} optimized successfully:`, optimizedJobs);
+        alert(`Route ${routeId} wurde erfolgreich optimiert!`);
+      } else {
+        // Check if there are unassigned jobs and provide better error information
+        if (solution.unassigned && solution.unassigned.length > 0) {
+          const unassignedReasons = solution.unassigned.map(job => 
+            job.reasons?.map(reason => reason.description || reason.code).join(', ') || 'Unknown reason'
+          ).join('; ');
+          
+          // Check for specific constraint violations
+          if (unassignedReasons.includes('time window')) {
+            throw new Error(`Jobs konnten nicht zugewiesen werden: Zeitfenster-Konflikte zwischen den Aufträgen. Bitte überprüfen Sie die geplanten Zeiten.`);
+          } else {
+            throw new Error(`Jobs konnten nicht zugewiesen werden: ${unassignedReasons}`);
+          }
+        } else if (solution.notices && solution.notices.length > 0) {
+          const notices = solution.notices.map(notice => notice.title || notice.code).join(', ');
+          throw new Error(`Optimierung mit Einschränkungen: ${notices}`);
+        } else {
+          throw new Error('Keine optimierte Route gefunden. Bitte überprüfen Sie die Job-Konfiguration.');
+        }
+      }
+    } catch (error) {
+      console.error(`Error optimizing route ${routeId}:`, error);
+      alert(`Routenoptimierung für Route ${routeId} fehlgeschlagen: ${error.message}`);
+    }
+    
+    setOptimizingRoute(null);
+    setIsOptimizing(false);
+  };
+
+  // Alle Routen optimieren (behält die ursprüngliche Funktionalität)
   const handleOptimizeRoutes = async () => {
     setIsOptimizing(true);
     
     try {
-      const token = localStorage.getItem('token');
+      // Bereite Jobs für HERE Tour Planning API vor
+      const jobs = [];
       
-      // Bereite Jobs für HERE API vor
-      const movingJobs = availableJobs.map(job => ({
-        id: job.id,
-        pickupAddress: job.pickup,
-        deliveryAddress: job.delivery,
-        priority: job.priority === 'high' ? 3 : job.priority === 'medium' ? 2 : 1,
-        timeWindow: job.timeWindow,
-        estimatedDuration: parseInt(job.estimatedTime)
-      }));
+      for (const job of availableJobs) {
+        // Geocode pickup and delivery addresses
+        const pickupLocation = await geocodeAddress(job.pickup);
+        const deliveryLocation = await geocodeAddress(job.delivery);
+        
+        if (pickupLocation && deliveryLocation) {
+          // Convert estimated time from minutes to seconds
+          const duration = parseInt(job.estimatedTime) * 60;
+          
+          jobs.push({
+            id: `job_${job.id}`,
+            tasks: {
+              pickups: [{
+                places: [{
+                  location: pickupLocation,
+                  duration: duration
+                }],
+                demand: [1] // 1 moving job
+              }],
+              deliveries: [{
+                places: [{
+                  location: deliveryLocation,
+                  duration: duration
+                }],
+                demand: [1] // 1 moving job
+              }]
+            },
+            skills: ['moving_service']
+          });
+        }
+      }
 
-      const response = await fetch('/api/tour-planning/optimize-tours', {
+      if (jobs.length === 0) {
+        throw new Error('No valid jobs with geocoded addresses found');
+      }
+
+      // Create the problem request according to HERE Tour Planning API v3 specification
+      const problem = {
+        fleet: {
+          types: [
+            {
+              id: 'moving_truck',
+              profile: 'truck',
+              costs: {
+                fixed: 0,      // Keine Fixkosten
+                distance: 0.001,  // Kosten pro Meter (1€/km)
+                time: 0.001       // Kosten pro Sekunde (0.06€/min)
+              },
+              shifts: [{
+                start: {
+                  time: new Date().toISOString(),
+                  location: {
+                    lat: depot.lat,
+                    lng: depot.lng
+                  }
+                },
+                end: {
+                  time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours later
+                  location: {
+                    lat: depot.lat,
+                    lng: depot.lng
+                  }
+                }
+              }],
+              capacity: [10],  // Max 10 moving jobs per vehicle
+              limits: {
+                // maxDistance entfernt - HERE API berechnet Distanzen falsch
+                shiftTime: 86400      // Max 24 hours
+              },
+              skills: ['moving_service'],
+              amount: Object.keys(routes).length // Number of available routes
+            }
+          ],
+          profiles: [{
+            name: 'truck',
+            type: 'truck'
+          }]
+        },
+        plan: {
+          jobs: jobs
+        },
+        objectives: [
+          { type: 'minimizeUnassigned' },  // Alle Jobs zuweisen
+          { type: 'minimizeDistance' }     // Distanz minimieren
+        ]
+      };
+
+      console.log('Submitting problem to HERE Tour Planning API:', problem);
+
+      // Submit to HERE Tour Planning API
+      const apiKey = process.env.REACT_APP_HERE_API_KEY;
+      if (!apiKey) {
+        throw new Error('HERE_API_KEY not found in environment variables');
+      }
+
+      const response = await fetch(`https://tourplanning.hereapi.com/v3/problems?apiKey=${apiKey}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          movingJobs,
-          depot,
-          options: {
-            startTime: new Date().toISOString(),
-            endTime: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(), // 12 Stunden
-            maxDistance: 300000 // 300km
-          }
-        })
+        body: JSON.stringify(problem)
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('HERE API error:', response.status, errorText);
+        throw new Error(`HERE API error: ${response.status} - ${errorText}`);
       }
 
-      const optimizationResult = await response.json();
+      const solution = await response.json();
+      console.log('HERE Tour Planning solution:', solution);
       
-      if (optimizationResult.success) {
-        // Transformiere HERE API Ergebnis zu unserem Format
+      if (solution.tours && solution.tours.length > 0) {
+        // Transformiere HERE API Lösung zu unserem Format
         const optimizedRoutes = {};
         const routeKeys = Object.keys(routes);
         
-        optimizationResult.tours.forEach((tour, index) => {
+        solution.tours.forEach((tour, index) => {
           const routeKey = routeKeys[index] || `route${index + 1}`;
           const originalRoute = routes[routeKey] || {
             name: `Route ${index + 1}`,
@@ -379,21 +705,63 @@ const RouteOptimization = () => {
             jobs: []
           };
 
+          // Map tour stops back to our job format
+          const routeJobs = tour.stops
+            .filter(stop => stop.activities && stop.activities.length > 0)
+            .map(stop => {
+              const activity = stop.activities[0];
+              if (activity.jobId) {
+                // Extract job ID from HERE API format (job_123 -> 123)
+                const jobId = activity.jobId.replace('job_', '');
+                const foundJob = availableJobs.find(job => job.id === jobId);
+                if (foundJob) {
+                  return foundJob;
+                } else {
+                  console.warn(`Job with ID ${jobId} not found in availableJobs:`, availableJobs);
+                }
+              }
+              return null;
+            })
+            .filter(job => job !== null);
+
+          // Fallback: If no jobs were mapped, use original order
+          if (routeJobs.length === 0) {
+            console.warn('No jobs could be mapped from HERE API response, using original order');
+            routeJobs.push(...availableJobs);
+          }
+
           optimizedRoutes[routeKey] = {
             ...originalRoute,
-            jobs: tour.jobs.map(job => 
-              availableJobs.find(aj => aj.id === job.id) || job
-            ),
-            totalDistance: tour.totalDistance,
-            totalTime: tour.totalTime,
-            estimatedCost: tour.estimatedCost
+            jobs: routeJobs,
+            totalDistance: tour.statistic?.distance ? Math.round(tour.statistic.distance / 1000) : 0,
+            totalTime: tour.statistic?.duration ? Math.round(tour.statistic.duration / 60) : 0,
+            estimatedCost: tour.statistic?.cost || 0
           };
         });
         
         setRoutes(optimizedRoutes);
         setAvailableJobs([]); // Alle Jobs wurden verplant
+        
+        console.log('Routes optimized successfully:', optimizedRoutes);
       } else {
-        throw new Error(optimizationResult.error || 'Optimierung fehlgeschlagen');
+        // Check if there are unassigned jobs and provide better error information
+        if (solution.unassigned && solution.unassigned.length > 0) {
+          const unassignedReasons = solution.unassigned.map(job => 
+            job.reasons?.map(reason => reason.description || reason.code).join(', ') || 'Unknown reason'
+          ).join('; ');
+          
+                     // Check for specific constraint violations
+           if (unassignedReasons.includes('time window')) {
+            throw new Error(`Jobs konnten nicht zugewiesen werden: Zeitfenster-Konflikte zwischen den Aufträgen. Bitte überprüfen Sie die geplanten Zeiten.`);
+          } else {
+            throw new Error(`Jobs konnten nicht zugewiesen werden: ${unassignedReasons}`);
+          }
+        } else if (solution.notices && solution.notices.length > 0) {
+          const notices = solution.notices.map(notice => notice.title || notice.code).join(', ');
+          throw new Error(`Optimierung mit Einschränkungen: ${notices}`);
+        } else {
+                     throw new Error('Keine optimierte Route gefunden. Bitte überprüfen Sie die Job-Konfiguration.');
+        }
       }
     } catch (error) {
       console.error('Error optimizing routes:', error);
@@ -419,6 +787,9 @@ const RouteOptimization = () => {
       
       setRoutes(fallbackRoutes);
       setAvailableJobs([]);
+      
+      // Show error message to user
+      alert(`Route optimization failed: ${error.message}. Using fallback distribution.`);
     }
     
     setIsOptimizing(false);
@@ -452,12 +823,13 @@ const RouteOptimization = () => {
 
   const handleTestAPIs = async () => {
     try {
-      console.log('Testing HERE APIs...');
+      console.log('Testing HERE Tour Planning API v3...');
       
       // Get API key from environment variables
       const apiKey = process.env.REACT_APP_HERE_API_KEY;
       if (!apiKey) {
         console.error('HERE_API_KEY not found in environment variables');
+        alert('HERE_API_KEY not found in environment variables');
         return;
       }
       
@@ -471,262 +843,145 @@ const RouteOptimization = () => {
         console.log('✅ HERE Geocoding API working!');
         console.log('Depot Geocoding Result:', depotGeocodeData);
         
-        // Test if we can extract meaningful data
         if (depotGeocodeData.items && depotGeocodeData.items.length > 0) {
           const item = depotGeocodeData.items[0];
           console.log('🎯 Successfully geocoded depot address!');
           console.log(`   📍 Address: ${item.address?.label || 'N/A'}`);
           console.log(`   🗺️  Coordinates: ${item.position?.lat?.toFixed(5)}, ${item.position?.lng?.toFixed(5)}`);
-          console.log(`   🏢 Type: ${item.resultType || 'N/A'}`);
         }
       } else {
         const errorText = await depotGeocodeResponse.text();
         console.error('❌ HERE Geocoding API error:', depotGeocodeResponse.status, errorText);
       }
 
-      // Test HERE Routing
-      console.log('Testing HERE Routing...');
-      const routingResponse = await fetch(`https://router.hereapi.com/v8/routes?apiKey=${apiKey}`, {
+      // Test HERE Tour Planning API v3 with a simple problem
+      console.log('Testing HERE Tour Planning v3...');
+      const testProblem = {
+        fleet: {
+          types: [
+            {
+              id: 'test_truck',
+              profile: 'truck',
+              costs: {
+                fixed: 0,
+                distance: 0.001,
+                time: 0.001
+              },
+              shifts: [{
+                start: {
+                  time: new Date().toISOString(),
+                  location: {
+                    lat: 52.5200,
+                    lng: 13.4050
+                  }
+                },
+                end: {
+                  time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                  location: {
+                    lat: 52.5200,
+                    lng: 13.4050
+                  }
+                }
+              }],
+              capacity: [1],
+              limits: {
+                // maxDistance entfernt - HERE API berechnet Distanzen falsch
+                shiftTime: 86400
+              },
+              skills: ['test'],
+              amount: 1
+            }
+          ],
+          profiles: [{
+            name: 'truck',
+            type: 'truck'
+          }]
+        },
+        plan: {
+          jobs: [
+            {
+              id: "test_job",
+              tasks: {
+                pickups: [{
+                  places: [{
+                    location: {
+                      lat: 52.5000,
+                      lng: 13.4000
+                    },
+                    duration: 1800
+                  }],
+                  demand: [1]
+                }],
+                deliveries: [{
+                  places: [{
+                    location: {
+                      lat: 52.5100,
+                      lng: 13.4100
+                    },
+                    duration: 1800
+                  }],
+                  demand: [1]
+                }]
+              },
+              skills: ['test']
+            }
+          ]
+        },
+        objectives: [
+          { type: 'minimizeUnassigned' },
+          { type: 'minimizeDistance' }
+        ]
+      };
+
+      const tourResponse = await fetch(`https://tourplanning.hereapi.com/v3/problems?apiKey=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          waypoints: [
-            {
-              lat: 52.5200,
-              lng: 13.4050
-            },
-            {
-              lat: 52.5000,
-              lng: 13.4000
-            }
-          ],
-          transportMode: "truck",
-          routingMode: "fast"
-        })
+        body: JSON.stringify(testProblem)
       });
 
-      if (routingResponse.ok) {
-        const routingData = await routingResponse.json();
-        console.log('✅ HERE Routing API working!');
-        console.log('Routing Result:', routingData);
+      if (tourResponse.ok) {
+        const tourData = await tourResponse.json();
+        console.log('✅ HERE Tour Planning API v3 working!');
+        console.log('Tour Planning Result:', tourData);
         
-        // Test if we can extract meaningful data
-        if (routingData.routes && routingData.routes.length > 0) {
-          const route = routingData.routes[0];
-          console.log('🎯 Successfully calculated route!');
-          console.log(`   📏 Distance: ${route.summary?.length ? (route.summary.length / 1000).toFixed(1) + ' km' : 'N/A'}`);
-          console.log(`   ⏱️  Travel time: ${route.summary?.travelTime ? Math.round(route.summary.travelTime / 60) + ' min' : 'N/A'}`);
+        if (tourData.tours && tourData.tours.length > 0) {
+          console.log('🎯 Successfully created optimized tours!');
+          console.log(`   📊 Tours created: ${tourData.tours.length}`);
+          console.log(`   📏 Total distance: ${tourData.statistic?.distance ? (tourData.statistic.distance / 1000).toFixed(1) + ' km' : 'N/A'}`);
+          console.log(`   ⏱️  Total time: ${tourData.statistic?.duration ? Math.round(tourData.statistic.duration / 60) + ' min' : 'N/A'}`);
+        } else if (tourData.problemId) {
+          console.log('🎯 Tour planning problem created successfully!');
+          console.log(`   🆔 Problem ID: ${tourData.problemId}`);
         }
       } else {
-        const errorText = await routingResponse.text();
-        console.error('❌ HERE Routing API error:', routingResponse.status, errorText);
-      }
-
-      // Test HERE Matrix Routing (for distance/time matrix calculations)
-      console.log('Testing HERE Matrix Routing...');
-      try {
-        const matrixResponse = await fetch(`https://matrix.router.hereapi.com/v8/matrix?apiKey=${apiKey}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            origins: [
-              {
-                lat: 52.5200,
-                lng: 13.4050
-              }
-            ],
-            destinations: [
-              {
-                lat: 52.5000,
-                lng: 13.4000
-              },
-              {
-                lat: 52.5100,
-                lng: 13.4100
-              },
-              {
-                lat: 52.5300,
-                lng: 13.4200
-              }
-            ],
-            transportMode: "truck",
-            routingMode: "fast",
-            regionDefinition: {
-              type: "world"
-            }
-          })
-        });
-
-        if (matrixResponse.ok) {
-          const matrixData = await matrixResponse.json();
-          console.log('✅ HERE Matrix Routing API working!');
-          console.log('Matrix Routing Result:', matrixData);
-          
-          // Test if we can extract meaningful data
-          if (matrixData.matrix && matrixData.matrix.distances && matrixData.matrix.travelTimes) {
-            console.log('🎯 Successfully calculated distance/time matrix!');
-            console.log(`   📊 Origins: ${matrixData.matrix.distances.length}`);
-            console.log(`   📊 Destinations: ${matrixData.matrix.distances[0]?.length || 0}`);
-            console.log(`   📏 Sample distance: ${matrixData.matrix.distances[0]?.[0] ? (matrixData.matrix.distances[0][0] / 1000).toFixed(1) + ' km' : 'N/A'}`);
-            console.log(`   ⏱️  Sample travel time: ${matrixData.matrix.travelTimes[0]?.[0] ? Math.round(matrixData.matrix.travelTimes[0][0] / 60) + ' min' : 'N/A'}`);
+        const errorText = await tourResponse.text();
+        console.error('❌ Tour Planning API error:', tourResponse.status, errorText);
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.cause) {
+            console.error('🔍 Error cause:', errorData.cause);
           }
-        } else {
-          const errorText = await matrixResponse.text();
-          console.error('❌ HERE Matrix Routing API error:', matrixResponse.status, errorText);
-        }
-      } catch (matrixError) {
-        console.log('Matrix Routing API failed:', matrixError.message);
-      }
-
-      
-      // Test HERE Tour Planning API v3 (using the correct structure from working example)
-      console.log('Testing HERE Tour Planning v3...');
-      try {
-        const tourResponse = await fetch(`https://tourplanning.hereapi.com/v3/problems?apiKey=${apiKey}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            fleet: {
-              types: [
-                {
-                  id: 'piano_truck_1',
-                  profile: 'truck',
-                  costs: {
-                    fixed: 100.0,      // Fixkosten pro Tour
-                    distance: 0.0015,  // Kosten pro Meter (1.5€/km)
-                    time: 0.0083       // Kosten pro Sekunde (0.5€/min)
-                  },
-                  shifts: [{
-                    start: {
-                      time: '2025-08-07T08:00:00Z',
-                      location: {
-                        lat: 52.5200,
-                        lng: 13.4050
-                      }
-                    },
-                    end: {
-                      time: '2025-08-07T18:00:00Z',
-                      location: {
-                        lat: 52.5200,
-                        lng: 13.4050
-                      }
-                    }
-                  }],
-                  capacity: [2],  // Max 2 Klaviere pro Fahrzeug
-                  limits: {
-                    maxDistance: 500000,  // Max 500km
-                    shiftTime: 32400      // Max 9 Stunden
-                  },
-                  skills: ['piano_transport', 'heavy_lifting'],
-                  amount: 1
-                }
-              ],
-              profiles: [{
-                name: 'truck',
-                type: 'truck'
-              }]
-            },
-            plan: {
-              jobs: [
-                {
-                  id: "piano_job_1",
-                  priority: 3,  // Mittlere Priorität
-                  tasks: {
-                    pickups: [{
-                      places: [{
-                        location: {
-                          lat: 52.5000,
-                          lng: 13.4000
-                        },
-                        duration: 1800,  // 30 min für Klavierverpackung
-                        times: [
-                          ['2025-08-07T08:00:00Z', '2025-08-07T18:00:00Z']
-                        ]
-                      }],
-                      demand: [1]  // 1 Klavier
-                    }],
-                    deliveries: [{
-                      places: [{
-                        location: {
-                          lat: 52.5100,
-                          lng: 13.4100
-                        },
-                        duration: 2400,  // 40 min für Entladung
-                        times: [
-                          ['2025-08-07T09:00:00Z', '2025-08-07T19:00:00Z']
-                        ]
-                      }],
-                      demand: [1]  // 1 Klavier
-                    }]
-                  },
-                  skills: ['piano_transport', 'heavy_lifting'],
-                  maxTimeOnVehicle: 14400  // 4 Stunden max
-                }
-              ]
-            },
-            objectives: [
-              { type: 'minimizeUnassigned' },  // Alle Jobs zuweisen
-              { type: 'minimizeCost' },        // Kosten minimieren
-              { type: 'minimizeDistance' }     // Distanz minimieren
-            ]
-          })
-        });
-
-        if (tourResponse.ok) {
-          const tourData = await tourResponse.json();
-          console.log('✅ HERE Tour Planning API v3 working!');
-          console.log('Tour Planning Result:', tourData);
-          
-          // Test if we can extract meaningful data
-          if (tourData.solution && tourData.solution.tours && tourData.solution.tours.length > 0) {
-            console.log('🎯 Successfully created optimized tours!');
-            console.log(`   📊 Tours created: ${tourData.solution.tours.length}`);
-            console.log(`   📏 Total distance: ${tourData.solution.statistic?.distance ? (tourData.solution.statistic.distance / 1000).toFixed(1) + ' km' : 'N/A'}`);
-            console.log(`   ⏱️  Total time: ${tourData.solution.statistic?.duration ? Math.round(tourData.solution.statistic.duration / 60) + ' min' : 'N/A'}`);
-          } else if (tourData.problemId) {
-            console.log('🎯 Tour planning problem created successfully!');
-            console.log(`   🆔 Problem ID: ${tourData.problemId}`);
-            console.log('   📝 Note: Solution will be available via separate endpoint');
+          if (errorData.action) {
+            console.error('💡 Suggested action:', errorData.action);
           }
-        } else {
-          const errorText = await tourResponse.text();
-          console.error('❌ Tour Planning API error:', tourResponse.status, errorText);
-          
-          // Try to parse error details
-          try {
-            const errorData = JSON.parse(errorText);
-            if (errorData.cause) {
-              console.error('🔍 Error cause:', errorData.cause);
-            }
-            if (errorData.action) {
-              console.error('💡 Suggested action:', errorData.action);
-            }
-          } catch (parseError) {
-            console.error('📝 Raw error response:', errorText);
-          }
-        }
-      } catch (tourError) {
-        console.error('💥 Tour Planning API failed:', tourError.message);
-        if (tourError.name === 'TypeError' && tourError.message.includes('fetch')) {
-          console.error('🌐 This might be a CORS issue. Consider using a server-side proxy.');
+        } catch (parseError) {
+          console.error('📝 Raw error response:', errorText);
         }
       }
 
       console.log('🎯 API Tests completed successfully!');
       console.log('📋 Summary of tested APIs:');
       console.log('   ✅ HERE Geocoding API');
-      console.log('   ✅ HERE Routing API (v8)');
-      console.log('   ✅ HERE Matrix Routing API (v8)');
       console.log('   ✅ HERE Tour Planning API (v3)');
       console.log('\n🚀 All HERE APIs are now properly configured for moving services!');
+      
+      alert('API tests completed successfully! Check console for details.');
     } catch (error) {
       console.error('Error during API tests:', error);
+      alert(`API test failed: ${error.message}`);
     }
   };
 
@@ -742,7 +997,7 @@ const RouteOptimization = () => {
           
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {availableJobs.map((job, index) => (
-              <DraggableJob key={job.id} job={job} index={index} />
+              <DraggableJob key={`available-job-${job.id}-${index}`} job={job} index={index} />
             ))}
             
             {availableJobs.length === 0 && (
@@ -802,7 +1057,7 @@ const RouteOptimization = () => {
                   ) : (
                     <>
                       <Zap className="w-4 h-4 mr-2" />
-                      Automatisch optimieren
+                      Alle Routen optimieren
                     </>
                   )}
                 </button>
@@ -831,7 +1086,12 @@ const RouteOptimization = () => {
 
           {/* Routen */}
           <div className="flex-1 overflow-y-auto p-6">
-            <RoutePlanningArea routes={routes} setRoutes={setRoutes} />
+            <RoutePlanningArea 
+              routes={routes} 
+              setRoutes={setRoutes} 
+              onOptimizeRoute={handleOptimizeSingleRoute}
+              availableJobs={availableJobs}
+            />
           </div>
 
           {/* Statistiken */}
@@ -852,14 +1112,18 @@ const RouteOptimization = () => {
               <div>
                 <div className="text-2xl font-bold text-gray-900">
                   {Object.values(routes).reduce((sum, route) => 
-                    sum + route.jobs.reduce((routeSum, job) => routeSum + parseInt(job.estimatedTime), 0), 0
+                    sum + (route.jobs || []).reduce((routeSum, job) => 
+                      routeSum + (job && job.estimatedTime ? parseInt(job.estimatedTime) : 0), 0
+                    ), 0
                   )} min
                 </div>
                 <div className="text-sm text-gray-500">Gesamtzeit</div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900">
-                  {Object.values(routes).reduce((sum, route) => sum + route.jobs.length * 15, 0)} km
+                  {Object.values(routes).reduce((sum, route) => 
+                    sum + (route.totalDistance || (route.jobs || []).length * 15), 0
+                  )} km
                 </div>
                 <div className="text-sm text-gray-500">Gesamtstrecke</div>
               </div>

@@ -23,9 +23,11 @@ import {
   Download,
   Plus,
   Target,
-  DollarSign
+  DollarSign,
+  Map
 } from 'lucide-react';
 import { fetchDeals, REGIONS } from '../../services/pipedriveProjectService';
+import OrdersMap from './OrdersMap';
 
 const OrderManagement = () => {
   const [orders, setOrders] = useState([]);
@@ -38,6 +40,7 @@ const OrderManagement = () => {
   const [showDetails, setShowDetails] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState('all');
+  const [activeTab, setActiveTab] = useState('list'); // 'list' oder 'map'
 
   // Lade echte Pipedrive-Daten mit exakter TourPlanner.js Methode
   useEffect(() => {
@@ -243,6 +246,32 @@ const OrderManagement = () => {
             </div>
           </div>
 
+          {/* Tab Navigation */}
+          <div className="flex space-x-1 mt-4">
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeTab === 'list'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <FileText className="w-4 h-4 inline mr-2" />
+              Listenansicht
+            </button>
+            <button
+              onClick={() => setActiveTab('map')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeTab === 'map'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <Map className="w-4 h-4 inline mr-2" />
+              Kartenansicht
+            </button>
+          </div>
+
           {/* Statistics */}
           <div className="grid grid-cols-6 gap-4">
             <div className="bg-blue-50 p-3 rounded-lg">
@@ -294,183 +323,200 @@ const OrderManagement = () => {
               </select>
             </div>
             
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Aufträge suchen..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-              />
-            </div>
-            
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="all">Alle Status</option>
-              <option value="pending">Ausstehend</option>
-              <option value="scheduled">Geplant</option>
-              <option value="in_progress">In Bearbeitung</option>
-              <option value="completed">Abgeschlossen</option>
-              <option value="cancelled">Storniert</option>
-            </select>
+            {activeTab === 'list' && (
+              <>
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Aufträge suchen..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </div>
+                
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="all">Alle Status</option>
+                  <option value="pending">Ausstehend</option>
+                  <option value="scheduled">Geplant</option>
+                  <option value="in_progress">In Bearbeitung</option>
+                  <option value="completed">Abgeschlossen</option>
+                  <option value="cancelled">Storniert</option>
+                </select>
 
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="all">Alle Prioritäten</option>
-              <option value="high">Hoch</option>
-              <option value="medium">Mittel</option>
-              <option value="low">Niedrig</option>
-            </select>
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="all">Alle Prioritäten</option>
+                  <option value="high">Hoch</option>
+                  <option value="medium">Mittel</option>
+                  <option value="low">Niedrig</option>
+                </select>
 
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-            >
-              <option value="all">Alle Termine</option>
-              <option value="today">Heute</option>
-              <option value="tomorrow">Morgen</option>
-              <option value="week">Diese Woche</option>
-            </select>
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="all">Alle Termine</option>
+                  <option value="today">Heute</option>
+                  <option value="tomorrow">Morgen</option>
+                  <option value="week">Diese Woche</option>
+                </select>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Orders List */}
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="text-center">
-                <div className="animate-spin h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                <p className="text-gray-500">Lade Aufträge...</p>
+        {/* Main Content */}
+        {activeTab === 'list' ? (
+          /* Orders List */
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <div className="animate-spin h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p className="text-gray-500">Lade Aufträge...</p>
+                </div>
               </div>
-            </div>
-          ) : filteredOrders.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              <div className="text-center">
-                <FileText className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Aufträge gefunden</h3>
-                <p className="text-gray-500">Passen Sie Ihre Filter an oder erstellen Sie einen neuen Auftrag</p>
+            ) : filteredOrders.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <div className="text-center">
+                  <FileText className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Aufträge gefunden</h3>
+                  <p className="text-gray-500">Passen Sie Ihre Filter an oder erstellen Sie einen neuen Auftrag</p>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {filteredOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => {
-                    setSelectedOrder(order);
-                    setShowDetails(true);
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                          <FileText className="w-6 h-6 text-primary" />
+            ) : (
+              <div className="divide-y divide-gray-200">
+                {filteredOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="p-6 hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => {
+                      setSelectedOrder(order);
+                      setShowDetails(true);
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex-shrink-0">
+                          <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
+                            <FileText className="w-6 h-6 text-primary" />
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h4 className="text-lg font-semibold text-gray-900">{order.title}</h4>
+                          <p className="text-sm text-gray-500">Auftrag {order.id}</p>
                         </div>
                       </div>
                       
+                      <div className="flex items-center space-x-3">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(order.priority)}`}>
+                          {getPriorityText(order.priority)}
+                        </span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                          {getStatusIcon(order.status)}
+                          <span className="ml-1">{getStatusText(order.status)}</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-6 mb-3">
                       <div>
-                        <h4 className="text-lg font-semibold text-gray-900">{order.title}</h4>
-                        <p className="text-sm text-gray-500">Auftrag {order.id}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center space-x-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(order.priority)}`}>
-                        {getPriorityText(order.priority)}
-                      </span>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                        {getStatusIcon(order.status)}
-                        <span className="ml-1">{getStatusText(order.status)}</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-6 mb-3">
-                    <div>
-                      <div className="flex items-center text-sm text-gray-600 mb-1">
-                        <MapPin className="w-4 h-4 mr-2" />
-                        <span className="font-medium">Abholung:</span>
-                      </div>
-                      <p className="text-sm text-gray-900 ml-6">{order.pickup.address}</p>
-                      <p className="text-sm text-gray-500 ml-6">
-                        {new Date(order.pickup.date).toLocaleDateString('de-DE')} um {order.pickup.time}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <div className="flex items-center text-sm text-gray-600 mb-1">
-                        <Target className="w-4 h-4 mr-2" />
-                        <span className="font-medium">Lieferung:</span>
-                      </div>
-                      <p className="text-sm text-gray-900 ml-6">{order.delivery.address}</p>
-                      <p className="text-sm text-gray-500 ml-6">
-                        {new Date(order.delivery.date).toLocaleDateString('de-DE')} um {order.delivery.time}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-6 text-sm text-gray-600">
-                      <div className="flex items-center">
-                        <User className="w-4 h-4 mr-1" />
-                        <span>{order.customer.name}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Clock className="w-4 h-4 mr-1" />
-                        <span>{order.estimatedDuration}h</span>
-                      </div>
-                      <div className="flex items-center">
-                        <DollarSign className="w-4 h-4 mr-1" />
-                        <span>{order.price}€</span>
-                      </div>
-                      {order.assignedDriver && (
-                        <div className="flex items-center">
-                          <Truck className="w-4 h-4 mr-1" />
-                          <span>{order.assignedDriver}</span>
+                        <div className="flex items-center text-sm text-gray-600 mb-1">
+                          <MapPin className="w-4 h-4 mr-2" />
+                          <span className="font-medium">Abholung:</span>
                         </div>
-                      )}
+                        <p className="text-sm text-gray-900 ml-6">{order.pickup.address}</p>
+                        <p className="text-sm text-gray-500 ml-6">
+                          {new Date(order.pickup.date).toLocaleDateString('de-DE')} um {order.pickup.time}
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <div className="flex items-center text-sm text-gray-600 mb-1">
+                          <Target className="w-4 h-4 mr-2" />
+                          <span className="font-medium">Lieferung:</span>
+                        </div>
+                        <p className="text-sm text-gray-900 ml-6">{order.delivery.address}</p>
+                        <p className="text-sm text-gray-500 ml-6">
+                          {new Date(order.delivery.date).toLocaleDateString('de-DE')} um {order.delivery.time}
+                        </p>
+                      </div>
                     </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedOrder(order);
-                          setShowDetails(true);
-                        }}
-                        className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                      >
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-6 text-sm text-gray-600">
+                        <div className="flex items-center">
+                          <User className="w-4 h-4 mr-1" />
+                          <span>{order.customer.name}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <Clock className="w-4 h-4 mr-1" />
+                          <span>{order.estimatedDuration}h</span>
+                        </div>
+                        <div className="flex items-center">
+                          <DollarSign className="w-4 h-4 mr-1" />
+                          <span>{order.price}€</span>
+                        </div>
+                        {order.assignedDriver && (
+                          <div className="flex items-center">
+                            <Truck className="w-4 h-4 mr-1" />
+                            <span>{order.assignedDriver}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedOrder(order);
+                            setShowDetails(true);
+                          }}
+                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Map View */
+          <div className="flex-1">
+            <OrdersMap 
+              orders={filteredOrders}
+              selectedOrder={selectedOrder}
+              onOrderSelect={setSelectedOrder}
+              onShowDetails={setShowDetails}
+            />
+          </div>
+        )}
       </div>
 
       {/* Order Details Sidebar */}

@@ -246,7 +246,7 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
           const priceConfig = isPackagingMaterial(itemName) ? prices?.find(p => p.name === itemName) : null;
   
           return (
-            <div className="p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50">
+            <div key={`${itemName}-${index}`} className="p-3 bg-white rounded-lg border border-gray-200 hover:bg-gray-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <span className="font-medium">{itemName}</span>
@@ -285,13 +285,13 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
                   {/* Service-Dropdown */}
                   <div className="relative">
                     <button
-                      onClick={() => setOpenServiceDropdown(openServiceDropdown === item.id ? null : item.id)}
+                      onClick={() => setOpenServiceDropdown(openServiceDropdown === `${itemName}-${index}` ? null : `${itemName}-${index}`)}
                       className="px-3 py-1 border border-gray-300 rounded-md flex items-center text-sm"
                     >
                       <span>Services</span>
                       <ChevronDown size={14} className="ml-1" />
                     </button>
-                    {openServiceDropdown === item.id && (
+                    {openServiceDropdown === `${itemName}-${index}` && (
                       <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 p-2 w-48">
                         <div className="space-y-2">
                           <label className="flex items-center">
@@ -307,18 +307,18 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
                             <span>Demontiert</span>
                           </label>
                           
-                          <label className="flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={item.remontiert}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                handleCheckboxChange(index, 'remontiert');
-                              }}
-                              className="mr-2"
-                            />
-                            <span>Remontiert</span>
-                          </label>
+                                                     <label className="flex items-center">
+                             <input
+                               type="checkbox"
+                               checked={item.remontiert}
+                               onChange={(e) => {
+                                 e.stopPropagation();
+                                 handleCheckboxChange(index, 'remontiert');
+                               }}
+                               className="mr-2"
+                             />
+                             <span>Remontiert</span>
+                           </label>
                           
                           <label className="flex items-center">
                             <input
@@ -372,7 +372,7 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
         })}
       </div>
     );
-  }, [editingItem, handleQuantityChange, handleCheckboxChange, prices, openServiceDropdown]); 
+  }, [handleQuantityChange, handleCheckboxChange, prices, openServiceDropdown]); 
 
   // Neue Methode zur Anzeige der Details
   const showItemDetails = (item) => {

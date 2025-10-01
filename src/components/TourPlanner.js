@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { MapPin, Calendar, Truck, X, Clock, Search, ChevronRight, Globe, Milestone, Building, Home } from 'lucide-react';
+import { MapPin, Calendar, Truck, X, Clock, Search, ChevronRight, Globe, Milestone, Building, Home, GripVertical } from 'lucide-react';
 import axios from 'axios';
 import { format, parseISO, isValid } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -54,14 +55,14 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
   return (
     <div
       ref={isDraggable ? drag : null}
-      className={`p-4 mb-2 rounded-lg border ${isDragging ? 'opacity-50 border-dashed' : 'border-gray-200'} 
+      className={`p-3 rounded-lg border ${isDragging ? 'opacity-50 border-dashed' : 'border-gray-200'} 
                  ${isDraggable ? 'cursor-grab bg-white' : 'bg-primary-50'}`}
       style={{ opacity: isDragging ? 0.5 : 1 }}
     >
       <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <h3 className="font-medium text-gray-900 flex items-center">
-            <span>{deal.title}</span>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-medium text-gray-900 flex items-center text-sm">
+            <span className="truncate">{deal.title}</span>
             {objectIcon}
             {/* Schlaile Indikator */}
             {deal.schlaileType && (
@@ -71,70 +72,35 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
             )}
           </h3>
           
-          <div className="mt-2 space-y-1 text-sm">
-            {deal.projectStartDate && (
-              <div className="flex items-center text-gray-600">
-                <Calendar className="w-4 h-4 mr-2 text-blue-500" />
-                <span>Projekt: {deal.projectStartDate} bis {deal.projectEndDate || '?'}</span>
-              </div>
-            )}
-            
+          <div className="mt-1 space-y-1 text-xs">
             {deal.moveDate && (
               <div className="flex items-center text-gray-600">
-                <Calendar className="w-4 h-4 mr-2 text-primary" />
+                <Calendar className="w-3 h-3 mr-1 text-primary" />
                 <span>{format(parseISO(deal.moveDate), 'dd.MM.yyyy', { locale: de })}</span>
               </div>
             )}
             
             {deal.originAddress && (
               <div className="flex items-start text-gray-600">
-                <MapPin className="w-4 h-4 mr-2 mt-0.5 text-green-600" />
-                <span className="flex-1">{deal.originAddress}</span>
+                <MapPin className="w-3 h-3 mr-1 mt-0.5 text-green-600 flex-shrink-0" />
+                <span className="truncate text-xs">{deal.originAddress}</span>
               </div>
             )}
             
             {deal.destinationAddress && (
               <div className="flex items-start text-gray-600">
-                <MapPin className="w-4 h-4 mr-2 mt-0.5 text-red-600" />
-                <span className="flex-1">{deal.destinationAddress}</span>
+                <MapPin className="w-3 h-3 mr-1 mt-0.5 text-red-600 flex-shrink-0" />
+                <span className="truncate text-xs">{deal.destinationAddress}</span>
               </div>
             )}
 
             {deal.region && (
-              <div className="flex items-center mt-1">
-                <Globe className="w-4 h-4 mr-2 text-blue-500" />
-                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">
+              <div className="flex items-center">
+                <Globe className="w-3 h-3 mr-1 text-blue-500" />
+                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">
                   {deal.region}
                 </span>
               </div>
-            )}
-            
-            {/* Stockwerk-Informationen für Nicht-Schlaile-Deals */}
-            {!deal.schlaileType && (
-              <>
-                {deal.originFloor && (
-                  <div className="flex items-start text-gray-600">
-                    <Building className="w-4 h-4 mr-2 mt-0.5 text-blue-600" />
-                    <span className="flex-1">
-                      <strong>Stockwerk Abholung:</strong> {deal.originFloor}
-                    </span>
-          </div>
-                )}
-                
-                {deal.destinationFloor && (
-                  <div className="flex items-start text-gray-600">
-                    <Building className="w-4 h-4 mr-2 mt-0.5 text-purple-600" />
-                    <span className="flex-1">
-                      <strong>Stockwerk Lieferung:</strong> {deal.destinationFloor}
-                    </span>
-                  </div>
-                )}
-                
-                {/* Debug-Info direkt im UI - nur während der Entwicklung */}
-                <div className="text-xs text-gray-400 mt-1 italic">
-                  Debug: originFloor={deal.originFloor || 'leer'}, destFloor={deal.destinationFloor || 'leer'}
-                </div>
-              </>
             )}
           </div>
         </div>
@@ -142,12 +108,305 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
         {!isDraggable && onRemove && (
           <button 
             onClick={() => onRemove(deal.id)}
-            className="p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100"
+            className="p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 flex-shrink-0"
           >
-            <X size={18} />
+            <X size={14} />
           </button>
         )}
       </div>
+    </div>
+  );
+};
+
+// Sortierbarer Routenpunkt Komponente
+const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationChange, calculatedTime, tourDeals, manualOperationType, onOperationTypeChange }) => {
+  const ref = React.useRef(null);
+  
+  const [{ isDragging: isDraggingItem }, drag] = useDrag(() => ({
+    type: 'route-point',
+    item: { index },
+    collect: (monitor) => ({
+      isDragging: !!monitor.isDragging(),
+    }),
+  }), [index]);
+
+  const [{ isOver }, drop] = useDrop(() => ({
+    accept: 'route-point',
+    hover: (draggedItem, monitor) => {
+      if (!ref.current) return;
+      
+      const dragIndex = draggedItem.index;
+      const hoverIndex = index;
+
+      // Nicht ersetzen, wenn es das gleiche Element ist
+      if (dragIndex === hoverIndex) return;
+
+      // Bestimme die Mitte des Elements
+      const hoverBoundingRect = ref.current?.getBoundingClientRect();
+      const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
+      const clientOffset = monitor.getClientOffset();
+      const hoverClientY = clientOffset.y - hoverBoundingRect.top;
+
+      // Nur nach unten bewegen, wenn die Maus unter 50% ist
+      if (dragIndex < hoverIndex && hoverClientY < hoverMiddleY) return;
+      
+      // Nur nach oben bewegen, wenn die Maus über 50% ist
+      if (dragIndex > hoverIndex && hoverClientY > hoverMiddleY) return;
+
+      // Führe die Bewegung durch
+      onMove(dragIndex, hoverIndex);
+      
+      // Hinweis: Wir verändern das Item hier, um mehrfache Bewegungen zu vermeiden
+      draggedItem.index = hoverIndex;
+    },
+    collect: (monitor) => ({
+      isOver: !!monitor.isOver(),
+    }),
+  }), [index, onMove]);
+
+  // Verbinde drag und drop refs
+  drag(drop(ref));
+
+  // Verwende den effektiven Operationstyp aus dem Leg (wurde bereits in legsWithUpdatedPianos berechnet)
+  const effectiveOperationType = leg.effectiveOperationType || leg.operationType || 'intermediate';
+
+  return (
+    <div className="border-b last:border-b-0 bg-white group">
+      <div
+        ref={ref}
+        className={`flex items-center justify-between p-3 cursor-move hover:bg-gray-50 transition-colors ${
+          isDraggingItem ? 'opacity-50 border-dashed' : ''
+        } ${isOver ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'}`}
+      >
+        <div className="flex items-center space-x-3 flex-1">
+          <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+              effectiveOperationType === 'beladung' ? 'bg-blue-500 text-white' :
+              effectiveOperationType === 'entladung' ? 'bg-orange-500 text-white' :
+              effectiveOperationType === 'neutral' ? 'bg-purple-500 text-white' :
+              leg.stopType === 'pickup' ? 'bg-blue-500 text-white' :
+              leg.stopType === 'delivery' ? 'bg-orange-500 text-white' :
+              'bg-gray-500 text-white'
+            }`}>
+              {index + 1}
+            </span>
+          </div>
+          <div className="flex flex-col flex-1 min-w-0">
+            {/* Hauptadresse (Zieladresse = Station) */}
+            <div className="flex items-center space-x-2 flex-wrap">
+              <span className="font-semibold text-base truncate max-w-[300px]" title={leg.end_address}>
+                {leg.end_address?.split(',')[0] ?? '?'}
+              </span>
+              
+              {/* Operation Type Badge */}
+              {effectiveOperationType && (
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                  effectiveOperationType === 'beladung' ? 'bg-blue-100 text-blue-800' :
+                  effectiveOperationType === 'entladung' ? 'bg-orange-100 text-orange-800' :
+                  effectiveOperationType === 'neutral' ? 'bg-purple-100 text-purple-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {effectiveOperationType === 'beladung' ? '↑ Beladung' : 
+                   effectiveOperationType === 'entladung' ? '↓ Entladung' :
+                   effectiveOperationType === 'neutral' ? '↕ Be- & Entladung' : 
+                   effectiveOperationType}
+                </span>
+              )}
+              
+              {/* Zeige an, wenn mehrere Deals an dieser Adresse sind */}
+              {leg.consolidatedDeals && leg.consolidatedDeals.length > 1 && (
+                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                  {leg.consolidatedDeals.length} Deals
+                </span>
+              )}
+              
+              {/* Zeige Klavierbeladung an */}
+              {effectiveOperationType && (
+                <span className={`px-2 py-0.5 rounded text-xs font-semibold flex items-center gap-1 ${
+                  effectiveOperationType === 'beladung' ? 'bg-green-100 text-green-800' :
+                  effectiveOperationType === 'entladung' ? 'bg-red-100 text-red-800' :
+                  'bg-gray-100 text-gray-800'
+                }`} title={`${leg.pianoChange || ''} Klavier(e) | Geladen: ${leg.loadedPianosAfter || 0}`}>
+                  🎹 {leg.loadedPianosAfter !== undefined ? leg.loadedPianosAfter : '-'}
+                  {leg.pianoChange && leg.pianoChange !== '0' && (
+                    <span className="text-[10px]">({leg.pianoChange})</span>
+                  )}
+                </span>
+              )}
+            </div>
+            
+            {/* Optionale Info: Vollständige Adresse (klein, grau) - nur bei hover sichtbar */}
+            {leg.end_address && (
+              <div className="mt-0.5 text-xs text-gray-400 truncate max-w-[350px] opacity-70 group-hover:opacity-100 transition-opacity" title={leg.end_address}>
+                {leg.end_address}
+              </div>
+            )}
+            
+            {/* Zeige Details der konsolidierten Deals */}
+            {leg.consolidatedDeals && leg.consolidatedDeals.length > 1 && (
+              <div className="mt-1 text-xs text-gray-600">
+                <details className="cursor-pointer">
+                  <summary className="hover:text-gray-800">Details anzeigen ({leg.consolidatedDeals.length} Deals)</summary>
+                  <div className="mt-1 pl-2 space-y-1">
+                    {leg.consolidatedDeals.map((deal, dealIndex) => {
+                      const dealInfo = tourDeals.find(d => d.id === deal.dealId);
+                      return (
+                        <div key={dealIndex} className="text-xs text-gray-500">
+                          • {dealInfo?.title || `Deal ${deal.dealId}`} 
+                          {deal.originalAddress !== leg.end_address && (
+                            <span className="text-gray-400"> (urspr. {deal.originalAddress?.split(',')[0]})</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              </div>
+            )}
+            
+            {/* Berechnete Zeit anzeigen */}
+            {calculatedTime && (
+              <div className="mt-1 flex flex-col gap-1 text-xs">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-3 h-3 text-blue-600" />
+                  <span className="font-medium text-blue-700">
+                    Ankunft: {calculatedTime.startTime}
+                  </span>
+                  {calculatedTime.drivingTime > 0 && (
+                    <span className="text-gray-500">({calculatedTime.drivingTime} Min. Fahrt)</span>
+                  )}
+                </div>
+                {calculatedTime.duration > 0 && (
+                  <div className="flex items-center gap-2 ml-5">
+                    <span className="font-medium text-green-700">
+                      Fertig: {calculatedTime.endTime}
+                    </span>
+                    <span className="text-gray-500">({calculatedTime.duration} Min. Arbeit)</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="text-right text-xs whitespace-nowrap ml-2">
+          <div>{leg.distance?.text ?? '-'}</div>
+          <div className="text-gray-500">{leg.duration?.text ?? '-'}</div>
+        </div>
+      </div>
+      
+      {/* Dauer-Eingabe und Operationstyp-Auswahl für diese Station */}
+      <div className="px-3 py-2 bg-gray-50 border-t border-gray-100">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Operationstyp-Auswahl */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-600">
+              Typ:
+            </label>
+            <select
+              value={manualOperationType || 'auto'}
+              onChange={(e) => onOperationTypeChange(index, e.target.value)}
+              className={`px-2 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                manualOperationType && manualOperationType !== 'auto' 
+                  ? 'bg-yellow-50 border-yellow-400 font-semibold' 
+                  : 'bg-white border-gray-300'
+              }`}
+            >
+              <option value="auto">🤖 Automatisch</option>
+              <option value="beladung">↑ Beladung</option>
+              <option value="entladung">↓ Entladung</option>
+              <option value="neutral">↕ Be- & Entladung</option>
+            </select>
+            {manualOperationType && manualOperationType !== 'auto' && (
+              <span className="text-xs text-yellow-700 font-medium">✏️ Manuell</span>
+            )}
+          </div>
+          
+          {/* Arbeitsdauer */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Arbeitsdauer:
+            </label>
+            <input
+              type="number"
+              value={stationDuration || ''}
+              onChange={(e) => onDurationChange(index, e.target.value)}
+              placeholder="0"
+              min="0"
+              className="w-16 px-2 py-1 border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <span className="text-xs text-gray-500">Min.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Sortierbare Routenliste Komponente
+const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRoute, onRouteReorder, stationDurations, onDurationChange, calculatedTimes, totalDuration, tourDeals, manualOperationTypes, onOperationTypeChange }) => {
+  return (
+    <div className="bg-white p-4 rounded-xl shadow-sm">
+      <h3 className="text-lg font-semibold mb-3 flex items-center">
+        <Milestone className="mr-2 h-5 w-5 text-primary" />
+        Stationen ({filteredLegsForDisplay.length})
+      </h3>
+      <div className="mb-3 space-y-1">
+        <p className="text-xs text-gray-500">
+          Ziehen Sie die Stationen, um die Reihenfolge manuell anzupassen
+        </p>
+        <p className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded inline-block">
+          💡 Automatik: Abholadresse = ↑ Beladung, Lieferadresse = ↓ Entladung
+        </p>
+      </div>
+      
+      {optimizedRoute && filteredLegsForDisplay.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center text-sm font-medium bg-gradient-to-r from-blue-50 to-indigo-50 p-3 rounded-lg border border-blue-200">
+            <span className="font-semibold text-gray-700">Tourübersicht:</span>
+            <div className="text-right">
+              {optimizedRoute?.legs && (
+                <>
+                  <div className="font-semibold">{(optimizedRoute.legs.reduce((sum, leg) => sum + (leg.distance?.value || 0), 0) / 1000).toFixed(1)} km</div>
+                  <div className="text-xs text-gray-600">{Math.round(optimizedRoute.legs.reduce((sum, leg) => sum + (leg.duration?.value || 0), 0) / 60)} min Fahrt</div>
+                  {totalDuration && (
+                    <div className="text-xs text-green-700 font-semibold mt-1">
+                      + Arbeit = {totalDuration} Min. gesamt
+                    </div>
+                  )}
+                  <div className="text-xs text-blue-700 font-semibold mt-1 flex items-center justify-end gap-1">
+                    🎹 Max: {Math.max(...optimizedRoute.legs.map(leg => leg.loadedPianosAfter || 0), 0)}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+          
+          <div className="border rounded-lg overflow-hidden shadow-sm">
+            {filteredLegsForDisplay.map((leg, index, displayedArray) => (
+              <SortableRoutePoint
+                key={`route-point-${index}`}
+                leg={leg}
+                index={index}
+                onMove={onRouteReorder}
+                stationDuration={stationDurations[index]}
+                onDurationChange={onDurationChange}
+                calculatedTime={calculatedTimes[index]}
+                tourDeals={tourDeals}
+                manualOperationType={manualOperationTypes[index]}
+                onOperationTypeChange={onOperationTypeChange}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Fallback-Anzeige, wenn nach Filterung keine Legs mehr übrig sind */}
+      {optimizedRoute?.legs && filteredLegsForDisplay.length === 0 && !loadingRoute && (
+        <div className="text-center py-4 text-gray-500 text-sm">
+          Keine gültigen Routenschritte nach Filterung gefunden.
+        </div>
+      )}
     </div>
   );
 };
@@ -170,14 +429,19 @@ const TourArea = ({
   dealSpecificData,
   onGrandPianoSizeChange,
   optimizedRoute, // NEU: Route übergeben für Logik
-  onDealTypeChange
+  onDealTypeChange,
+  tourStartTime,
+  onTourStartTimeChange,
+  assignedEmployees,
+  onEmployeeAdd,
+  onEmployeeRemove
 }) => {
   return (
     <div
       ref={drop}
-      className={`bg-white p-4 rounded-xl border ${isOver ? 'border-primary border-dashed' : 'border-gray-200'} shadow-sm h-full flex flex-col`}
+      className={`bg-white p-3 rounded-xl border ${isOver ? 'border-primary border-dashed' : 'border-gray-200'} shadow-sm flex flex-col`}
     >
-      <div className="mb-4">
+      <div className="mb-3">
         <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
           <h3 className="text-lg font-semibold flex items-center">
             <Truck className="mr-2 h-5 w-5 text-primary" />
@@ -204,6 +468,16 @@ const TourArea = ({
               wrapperClassName="w-full"
             />
           </div>
+          <div className="flex-1 min-w-[120px]">
+            <label htmlFor="tourStartTime" className="block text-xs font-medium text-gray-500 mb-1">Startzeit</label>
+            <input
+              id="tourStartTime"
+              type="time"
+              value={tourStartTime}
+              onChange={(e) => onTourStartTimeChange(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+            />
+          </div>
           <div className="flex-1 min-w-[200px]">
             <label htmlFor="tourName" className="block text-xs font-medium text-gray-500 mb-1">Tourname (optional)</label>
             <input
@@ -216,6 +490,49 @@ const TourArea = ({
             />
           </div>
         </div>
+        
+        {/* Mitarbeiter für die gesamte Tour */}
+        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-sm font-medium text-gray-700">Mitarbeiter für diese Tour:</span>
+            
+            {/* Bestehende Mitarbeiter anzeigen */}
+            {assignedEmployees.map((employee, index) => (
+              <div key={index} className="flex items-center gap-1 bg-white px-2 py-1 rounded border text-sm">
+                <span className="font-medium">{employee.name}</span>
+                <button
+                  onClick={() => onEmployeeRemove(index)}
+                  className="text-red-500 hover:text-red-700 ml-1"
+                  title="Mitarbeiter entfernen"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+            
+            {/* Neuen Mitarbeiter hinzufügen */}
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  onEmployeeAdd({
+                    id: e.target.value,
+                    name: e.target.options[e.target.selectedIndex].text
+                  });
+                  e.target.value = '';
+                }
+              }}
+              className="px-2 py-1 border border-gray-300 rounded text-sm bg-white"
+              defaultValue=""
+            >
+              <option value="">+ Mitarbeiter hinzufügen</option>
+              <option value="emp1">Max Mustermann</option>
+              <option value="emp2">Anna Schmidt</option>
+              <option value="emp3">Tom Weber</option>
+              <option value="emp4">Lisa Müller</option>
+              <option value="emp5">Peter Klein</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div className={`flex-grow min-h-[200px] rounded-lg mb-4 flex items-center justify-center ${tourDeals.length === 0 ? 'border-2 border-dashed border-gray-300 bg-gray-50' : ''}`}>
         {tourDeals.length === 0 ? (
@@ -224,7 +541,7 @@ const TourArea = ({
             <Truck size={40} className="mx-auto text-gray-400" />
           </div>
         ) : (
-          <div className="w-full space-y-3 overflow-y-auto max-h-[calc(100vh-450px)] pr-2">
+          <div className="w-full space-y-3 overflow-y-auto max-h-[400px] pr-2">
             {tourDeals.map((deal) => {
               // Automatische Erkennung als Fallback
               const autoDetectedIsPiano = deal.title?.toLowerCase().includes('piano');
@@ -371,6 +688,11 @@ const TourArea = ({
               <h4 className="font-semibold text-blue-900">Tourübersicht</h4>
               <p className="text-sm text-blue-700 mt-1">
                 {tourDeals.length} Stationen • Reihenfolge anpassbar
+                {assignedEmployees.length > 0 && (
+                  <span className="ml-2 text-green-700">
+                    • {assignedEmployees.length} Mitarbeiter zugewiesen
+                  </span>
+                )}
               </p>
             </div>
             <button 
@@ -481,11 +803,21 @@ const TourPlannerContent = () => {
   const [optimizedRoute, setOptimizedRoute] = useState(null);
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [directionsService, setDirectionsService] = useState(null);
+  const [directionsRenderer, setDirectionsRenderer] = useState(null);
+  const [map, setMap] = useState(null);
   const [isSavingTour, setIsSavingTour] = useState(false);
   const [tourName, setTourName] = useState('');
   const [pianoCalculations, setPianoCalculations] = useState({}); // { dealId: { result: data, loading: bool, error: string } }
   // Erweitere dealSpecificData: { dealId: { size?: number, type?: 'auto' | 'piano' | 'grand_piano' } }
   const [dealSpecificData, setDealSpecificData] = useState({});
+  // Mitarbeiter für die gesamte Tour: [{ id: "emp1", name: "Max Mustermann" }]
+  const [assignedEmployees, setAssignedEmployees] = useState([]);
+  // Startzeit der Tour
+  const [tourStartTime, setTourStartTime] = useState('08:00');
+  // Dauer an jeder Station: { legIndex: durationInMinutes }
+  const [stationDurations, setStationDurations] = useState({});
+  // Manuelle Überschreibung der Operationstypen: { legIndex: 'beladung' | 'entladung' | 'auto' }
+  const [manualOperationTypes, setManualOperationTypes] = useState({});
 
   // Drop-Zone für die Tour
   const [{ isOver }, drop] = useDrop({
@@ -724,6 +1056,171 @@ const TourPlannerContent = () => {
     setOptimizedRoute(null);
   };
 
+  // Route neu ordnen durch Drag & Drop (SYNCHRON für flüssiges Drag & Drop)
+  const handleRouteReorder = useCallback((dragIndex, hoverIndex) => {
+    if (!optimizedRoute?.legs) return;
+    if (dragIndex === hoverIndex) return;
+    
+    setOptimizedRoute(prev => {
+      if (!prev?.legs) return prev;
+      
+      // Arbeite direkt mit den Legs (keine Filterung für bessere Performance)
+      const newLegs = [...prev.legs];
+      const [removed] = newLegs.splice(dragIndex, 1);
+      newLegs.splice(hoverIndex, 0, removed);
+      
+      // Berechne die Klavieranzahl für die neu sortierte Route neu - VEREINFACHTE LOGIK
+      let currentLoadedPianos = 0;
+      
+      const isSchlaileAddr = (addr) => addr?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]);
+      const isOfficeAddr = (addr) => addr?.includes(OFFICE_ADDRESS.split(',')[0]);
+      
+      newLegs.forEach((leg, index) => {
+        leg.loadedPianosBefore = currentLoadedPianos;
+        
+        const startAddr = leg.start_address;
+        const endAddr = leg.end_address;
+        
+        let changeCount = 0;
+        
+        // Schlaile - kann mehrere Klaviere auf einmal haben
+        if (isSchlaileAddr(endAddr)) {
+          if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+            const deliveryDeals = leg.consolidatedDeals.filter(d => d.type === 'delivery_from_schlaile');
+            const pickupDeals = leg.consolidatedDeals.filter(d => d.type === 'pickup_to_schlaile');
+            
+            if (deliveryDeals.length > 0) {
+              changeCount = deliveryDeals.length;
+              currentLoadedPianos += changeCount;
+              leg.pianoChange = `+${changeCount}`;
+              leg.operationType = 'beladung';
+            } else if (pickupDeals.length > 0) {
+              changeCount = pickupDeals.length;
+              currentLoadedPianos -= changeCount;
+              leg.pianoChange = `-${changeCount}`;
+              leg.operationType = 'entladung';
+            }
+          } else {
+            // Einzelne Fahrt zu Schlaile ohne consolidatedDeals
+            if (currentLoadedPianos > 0 || leg.operationType === 'entladung') {
+              changeCount = 1;
+              currentLoadedPianos -= changeCount;
+              leg.pianoChange = `-${changeCount}`;
+              leg.operationType = 'entladung';
+            } else if (leg.operationType === 'beladung') {
+              changeCount = 1;
+              currentLoadedPianos += changeCount;
+              leg.pianoChange = `+${changeCount}`;
+              leg.operationType = 'beladung';
+            }
+          }
+          leg.loadedPianosAfter = currentLoadedPianos;
+          return;
+        }
+        
+        // Von Schlaile weg = Entladung - aber nicht zum Office
+        if (isSchlaileAddr(startAddr) && !isSchlaileAddr(endAddr) && !isOfficeAddr(endAddr)) {
+          changeCount = leg.consolidatedDeals ? leg.consolidatedDeals.length : 1;
+          currentLoadedPianos -= changeCount;
+          leg.pianoChange = `-${changeCount}`;
+          leg.operationType = 'entladung';
+          leg.loadedPianosAfter = currentLoadedPianos;
+          return;
+        }
+        
+        // Zum/Vom Office = Keine Be-/Entladung
+        if (isOfficeAddr(startAddr) || isOfficeAddr(endAddr)) {
+          leg.pianoChange = '0';
+          leg.loadedPianosAfter = currentLoadedPianos;
+          return;
+        }
+        
+        // Normale Adressen - Origin = Beladung, Destination = Entladung
+        if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+          const loadingDeals = leg.consolidatedDeals.filter(d => 
+            d.type === 'normal_origin' || d.type === 'pickup_to_schlaile'
+          );
+          const unloadingDeals = leg.consolidatedDeals.filter(d => 
+            d.type === 'normal_dest' || d.type === 'delivery_from_schlaile'
+          );
+          
+          if (loadingDeals.length > 0) {
+            changeCount = loadingDeals.length;
+            currentLoadedPianos += changeCount;
+            leg.pianoChange = `+${changeCount}`;
+            leg.operationType = 'beladung';
+          } else if (unloadingDeals.length > 0) {
+            changeCount = unloadingDeals.length;
+            currentLoadedPianos -= changeCount;
+            leg.pianoChange = `-${changeCount}`;
+            leg.operationType = 'entladung';
+          }
+        } else {
+          // Fallback: Nutze vorhandenen operationType
+          changeCount = 1;
+          if (leg.operationType === 'beladung') {
+            currentLoadedPianos += changeCount;
+            leg.pianoChange = `+${changeCount}`;
+          } else if (leg.operationType === 'entladung') {
+            currentLoadedPianos -= changeCount;
+            leg.pianoChange = `-${changeCount}`;
+          } else {
+            leg.pianoChange = '0';
+          }
+        }
+        
+        leg.loadedPianosAfter = currentLoadedPianos;
+      });
+      
+      return {
+        ...prev,
+        legs: newLegs
+      };
+    });
+  }, [optimizedRoute, SCHLAILE_FIXED_ADDRESS, OFFICE_ADDRESS]);
+
+  // Hilfsfunktion zum Aktualisieren der tourDeals Reihenfolge
+  const updateTourDealsOrder = useCallback((newSequence) => {
+    if (!newSequence || newSequence.length <= 2) return; // Nur Start und Ende
+    
+    // Erstelle eine Map von Adressen zu Deals
+    const addressToDealMap = new Map();
+    tourDeals.forEach(deal => {
+      if (deal.originAddress && !deal.originAddress.includes(OFFICE_ADDRESS.split(',')[0])) {
+        addressToDealMap.set(deal.originAddress, deal);
+      }
+      if (deal.destinationAddress && !deal.destinationAddress.includes(OFFICE_ADDRESS.split(',')[0])) {
+        addressToDealMap.set(deal.destinationAddress, deal);
+      }
+    });
+    
+    // Erstelle neue Reihenfolge basierend auf der Sequenz
+    const newTourDealsOrder = [];
+    const processedDeals = new Set();
+    
+    newSequence.forEach(address => {
+      if (address === OFFICE_ADDRESS || address === SCHLAILE_FIXED_ADDRESS) return;
+      
+      const deal = addressToDealMap.get(address);
+      if (deal && !processedDeals.has(deal.id)) {
+        newTourDealsOrder.push(deal);
+        processedDeals.add(deal.id);
+      }
+    });
+    
+    // Füge alle nicht verarbeiteten Deals am Ende hinzu (falls welche fehlen)
+    tourDeals.forEach(deal => {
+      if (!processedDeals.has(deal.id)) {
+        newTourDealsOrder.push(deal);
+      }
+    });
+    
+    // Aktualisiere nur wenn sich die Reihenfolge geändert hat
+    if (JSON.stringify(newTourDealsOrder.map(d => d.id)) !== JSON.stringify(tourDeals.map(d => d.id))) {
+      setTourDeals(newTourDealsOrder);
+    }
+  }, [tourDeals, OFFICE_ADDRESS, SCHLAILE_FIXED_ADDRESS]);
+
   // Fetch-Logik mit API-Integration
   const fetchDeals = useCallback(async () => {
     setLoading(true);
@@ -846,6 +1343,292 @@ const TourPlannerContent = () => {
     setOptimizedRoute(null);
   };
 
+  // --- NEU: Berechne die gefilterte Liste der Legs für die Anzeige ---
+  const filteredLegsForDisplay = useMemo(() => {
+    if (!optimizedRoute || !optimizedRoute.legs) {
+      return [];
+    }
+
+    const originalLegs = optimizedRoute.legs;
+    const filtered = [];
+
+    for (let i = 0; i < originalLegs.length; i++) {
+      const currentLeg = originalLegs[i];
+      const isCurrentLegSchlaileToSchlaile =
+        currentLeg.start_address?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]) &&
+        currentLeg.end_address?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]) &&
+        currentLeg.distance?.value < 100; // Schlaile -> Schlaile mit kurzer Distanz
+
+      if (isCurrentLegSchlaileToSchlaile) {
+        // Prüfe das vorherige Leg
+        const previousLeg = i > 0 ? originalLegs[i - 1] : null;
+        const didPreviousLegEndAtSchlaile =
+          previousLeg?.end_address?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]);
+
+        // Entferne das aktuelle Leg NUR, wenn das vorherige auch bei Schlaile endete
+        if (didPreviousLegEndAtSchlaile) {
+          // Dies ist ein redundanter, aufeinanderfolgender Schlaile->Schlaile Schritt - überspringen
+          continue; // Gehe zum nächsten Leg in der Schleife
+        }
+        // Andernfalls (wenn das vorherige Leg NICHT bei Schlaile endete),
+        // behalte dieses Leg, da es den *ersten* Stopp bei Schlaile in einer Sequenz darstellt.
+      }
+
+      // Behalte das aktuelle Leg (entweder kein Schlaile->Schlaile oder der erste Stopp bei Schlaile)
+      filtered.push(currentLeg);
+    }
+    return filtered;
+
+  }, [optimizedRoute, SCHLAILE_FIXED_ADDRESS]); // Abhängigkeit von optimizedRoute
+  // --- ENDE NEU ---
+
+  // Mitarbeiter zur Tour hinzufügen
+  const handleEmployeeAdd = useCallback((employee) => {
+    setAssignedEmployees(prev => [...prev, employee]);
+  }, []);
+
+  // Mitarbeiter von der Tour entfernen
+  const handleEmployeeRemove = useCallback((index) => {
+    setAssignedEmployees(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // Dauer an einer Station ändern
+  const handleDurationChange = useCallback((legIndex, durationValue) => {
+    const duration = durationValue === '' ? 0 : parseInt(durationValue, 10);
+    setStationDurations(prev => ({
+      ...prev,
+      [legIndex]: isNaN(duration) ? 0 : duration
+    }));
+  }, []);
+
+  // Operationstyp einer Station manuell ändern
+  const handleOperationTypeChange = useCallback((legIndex, operationType) => {
+    setManualOperationTypes(prev => ({
+      ...prev,
+      [legIndex]: operationType
+    }));
+  }, []);
+
+  // Berechne die Klavierbeladung dynamisch - VEREINFACHTE LOGIK
+  const legsWithUpdatedPianos = useMemo(() => {
+    if (!filteredLegsForDisplay || filteredLegsForDisplay.length === 0) {
+      return [];
+    }
+
+    const updatedLegs = filteredLegsForDisplay.map((leg, index) => {
+      // Bestimme den effektiven Operationstyp
+      const manualType = manualOperationTypes[index];
+      const effectiveType = (manualType && manualType !== 'auto') ? manualType : leg.operationType;
+      
+      return {
+        ...leg,
+        effectiveOperationType: effectiveType
+      };
+    });
+
+    // Berechne die Klavieranzahl neu
+    let currentLoadedPianos = 0;
+    
+    console.log('[Klavierberechnung] === START ===');
+    console.log('[Klavierberechnung] Anzahl Legs:', updatedLegs.length);
+    updatedLegs.forEach((leg, i) => {
+      console.log(`[Klavierberechnung] Leg ${i} hat consolidatedDeals:`, leg.consolidatedDeals?.length || 0, leg.consolidatedDeals);
+    });
+    
+    // Hilfsfunktion: Ist Adresse Schlaile?
+    const isSchlaileAddr = (addr) => addr?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]);
+    // Hilfsfunktion: Ist Adresse Office?
+    const isOfficeAddr = (addr) => addr?.includes(OFFICE_ADDRESS.split(',')[0]);
+    
+    updatedLegs.forEach((leg, index) => {
+      leg.loadedPianosBefore = currentLoadedPianos;
+      
+      const startAddr = leg.start_address;
+      const endAddr = leg.end_address;
+      const effectiveType = leg.effectiveOperationType;
+      
+      console.log(`[Klavierberechnung] Leg ${index}: ${startAddr?.split(',')[0]} → ${endAddr?.split(',')[0]}`);
+      
+      let changeCount = 0;
+      
+      // REGEL 1: Schlaile - kann mehrere Klaviere auf einmal haben
+      if (isSchlaileAddr(endAddr)) {
+        // Bei Schlaile ankommen
+        console.log(`  → Schlaile erkannt, consolidatedDeals:`, leg.consolidatedDeals);
+        if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+          // Zähle alle Deals an dieser Schlaile-Station
+          const deliveryDeals = leg.consolidatedDeals.filter(d => d.type === 'delivery_from_schlaile');
+          const pickupDeals = leg.consolidatedDeals.filter(d => d.type === 'pickup_to_schlaile');
+          console.log(`  → deliveryDeals: ${deliveryDeals.length}, pickupDeals: ${pickupDeals.length}`);
+          
+          if (deliveryDeals.length > 0) {
+            // Beladung von Schlaile für spätere Lieferungen
+            changeCount = deliveryDeals.length;
+            currentLoadedPianos += changeCount;
+            leg.pianoChange = `+${changeCount}`;
+            leg.effectiveOperationType = 'beladung';
+            console.log(`  → Schlaile Beladung: +${changeCount}, Gesamt: ${currentLoadedPianos}`);
+          } else if (pickupDeals.length > 0) {
+            // Entladung bei Schlaile (Klaviere wurden vorher beim Kunden abgeholt)
+            changeCount = pickupDeals.length;
+            currentLoadedPianos -= changeCount;
+            leg.pianoChange = `-${changeCount}`;
+            leg.effectiveOperationType = 'entladung';
+            console.log(`  → Schlaile Entladung: -${changeCount}, Rest: ${currentLoadedPianos}`);
+          }
+        } else {
+          // Einzelne Fahrt zu Schlaile ohne consolidatedDeals
+          // Wenn wir Klaviere geladen haben, werden sie bei Schlaile entladen
+          if (currentLoadedPianos > 0 || effectiveType === 'entladung') {
+            changeCount = 1;
+            currentLoadedPianos -= changeCount;
+            leg.pianoChange = `-${changeCount}`;
+            leg.effectiveOperationType = 'entladung';
+            console.log(`  → Schlaile Entladung (einzeln): -${changeCount}, Rest: ${currentLoadedPianos}`);
+          } else if (effectiveType === 'beladung') {
+            // Beladung bei Schlaile
+            changeCount = 1;
+            currentLoadedPianos += changeCount;
+            leg.pianoChange = `+${changeCount}`;
+            leg.effectiveOperationType = 'beladung';
+            console.log(`  → Schlaile Beladung (einzeln): +${changeCount}, Gesamt: ${currentLoadedPianos}`);
+          }
+        }
+        leg.loadedPianosAfter = currentLoadedPianos;
+        return;
+      }
+      
+      // REGEL 2: Von Schlaile weg = Lieferung (Entladung) - aber nicht zum Office
+      if (isSchlaileAddr(startAddr) && !isSchlaileAddr(endAddr) && !isOfficeAddr(endAddr)) {
+        changeCount = leg.consolidatedDeals ? leg.consolidatedDeals.length : 1;
+        currentLoadedPianos -= changeCount;
+        leg.pianoChange = `-${changeCount}`;
+        leg.effectiveOperationType = 'entladung';
+        leg.loadedPianosAfter = currentLoadedPianos;
+        console.log(`  → Von Schlaile weg (Lieferung): -${changeCount}, Rest: ${currentLoadedPianos}`);
+        return;
+      }
+      
+      // REGEL 3: Zum/Vom Office = Keine Be-/Entladung
+      if (isOfficeAddr(startAddr) || isOfficeAddr(endAddr)) {
+        leg.pianoChange = '0';
+        leg.loadedPianosAfter = currentLoadedPianos;
+        console.log(`  → Office-Leg: Keine Änderung`);
+        return;
+      }
+      
+      // REGEL 4: Normale Adressen - Origin = Beladung, Destination = Entladung
+      // Prüfe die consolidatedDeals um den Typ zu bestimmen
+      if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+        // Zähle Beladungen (origin) und Entladungen (destination)
+        const loadingDeals = leg.consolidatedDeals.filter(d => 
+          d.type === 'normal_origin' || d.type === 'pickup_to_schlaile'
+        );
+        const unloadingDeals = leg.consolidatedDeals.filter(d => 
+          d.type === 'normal_dest' || d.type === 'delivery_from_schlaile'
+        );
+        
+        if (loadingDeals.length > 0) {
+          // Beladung
+          changeCount = loadingDeals.length;
+          currentLoadedPianos += changeCount;
+          leg.pianoChange = `+${changeCount}`;
+          leg.effectiveOperationType = 'beladung';
+          console.log(`  → Beladung: +${changeCount}, Gesamt: ${currentLoadedPianos}`);
+        } else if (unloadingDeals.length > 0) {
+          // Entladung
+          changeCount = unloadingDeals.length;
+          currentLoadedPianos -= changeCount;
+          leg.pianoChange = `-${changeCount}`;
+          leg.effectiveOperationType = 'entladung';
+          console.log(`  → Entladung: -${changeCount}, Rest: ${currentLoadedPianos}`);
+        }
+      } else {
+        // Fallback: Nutze den effectiveOperationType
+        changeCount = 1;
+        if (effectiveType === 'beladung') {
+          currentLoadedPianos += changeCount;
+          leg.pianoChange = `+${changeCount}`;
+          console.log(`  → Beladung (effectiveType): +${changeCount}, Gesamt: ${currentLoadedPianos}`);
+        } else if (effectiveType === 'entladung') {
+          currentLoadedPianos -= changeCount;
+          leg.pianoChange = `-${changeCount}`;
+          console.log(`  → Entladung (effectiveType): -${changeCount}, Rest: ${currentLoadedPianos}`);
+        } else {
+          leg.pianoChange = '0';
+          console.log(`  → Unbekannt: 0`);
+        }
+      }
+      
+      leg.loadedPianosAfter = currentLoadedPianos;
+    });
+
+    console.log('[Klavierberechnung] === ENDE ===');
+    return updatedLegs;
+  }, [filteredLegsForDisplay, manualOperationTypes, SCHLAILE_FIXED_ADDRESS, OFFICE_ADDRESS]);
+
+  // Berechne die Zeiten für jede Station
+  const calculatedTimes = useMemo(() => {
+    if (!optimizedRoute?.legs || !tourStartTime || legsWithUpdatedPianos.length === 0) {
+      return {};
+    }
+
+    const times = {};
+    let currentTime = tourStartTime; // Format: "HH:MM"
+    
+    // Hilfsfunktion zum Hinzufügen von Minuten zu einer Zeit
+    const addMinutes = (time, minutes) => {
+      const [hours, mins] = time.split(':').map(Number);
+      const totalMinutes = hours * 60 + mins + minutes;
+      const newHours = Math.floor(totalMinutes / 60) % 24;
+      const newMins = totalMinutes % 60;
+      return `${String(newHours).padStart(2, '0')}:${String(newMins).padStart(2, '0')}`;
+    };
+
+    legsWithUpdatedPianos.forEach((leg, index) => {
+      const drivingTimeMinutes = leg.duration?.value ? Math.round(leg.duration.value / 60) : 0;
+      const stationDuration = stationDurations[index] || 0;
+      
+      // KORRIGIERT: Zuerst fahren (Fahrtzeit addieren)
+      currentTime = addMinutes(currentTime, drivingTimeMinutes);
+      
+      // Startzeit der Station = Ankunftszeit (nach Fahrt)
+      const startTime = currentTime;
+      
+      // Arbeitszeit an der Station hinzufügen
+      currentTime = addMinutes(currentTime, stationDuration);
+      
+      // Endzeit der Station = nach Arbeitszeit
+      const endTime = currentTime;
+      
+      times[index] = {
+        startTime: startTime, // Ankunftszeit an der Station
+        endTime: endTime, // Fertigstellungszeit an der Station
+        duration: stationDuration, // Arbeitsdauer an der Station
+        drivingTime: drivingTimeMinutes // Fahrtzeit zu dieser Station
+      };
+    });
+
+    return times;
+  }, [optimizedRoute, tourStartTime, stationDurations, legsWithUpdatedPianos]);
+
+  // Berechne die Gesamtdauer der Tour
+  const totalTourDuration = useMemo(() => {
+    if (!optimizedRoute?.legs || legsWithUpdatedPianos.length === 0) {
+      return null;
+    }
+
+    // Summe aller Fahrtzeiten
+    const totalDrivingTime = legsWithUpdatedPianos.reduce((sum, leg) => {
+      return sum + (leg.duration?.value ? Math.round(leg.duration.value / 60) : 0);
+    }, 0);
+
+    // Summe aller Stationsdauern
+    const totalStationTime = Object.values(stationDurations).reduce((sum, duration) => sum + (duration || 0), 0);
+
+    return totalDrivingTime + totalStationTime;
+  }, [optimizedRoute, stationDurations, legsWithUpdatedPianos]);
+
   // Tour speichern - ÜBERARBEITET
   const handleSaveTour = useCallback(async () => {
     if (!selectedDate || !isValid(selectedDate)) {
@@ -878,7 +1661,52 @@ const TourPlannerContent = () => {
     let successCount = 0;
     let errorCount = 0;
 
-    const updatePromises = tourDeals.map(async (deal) => {
+    // Erstelle eine Sequenz-Information basierend auf der aktuellen Reihenfolge
+    const tourSequence = tourDeals.map((deal, index) => ({
+      order: index + 1,
+      dealId: deal.id,
+      title: deal.title,
+      address: deal.originAddress || deal.destinationAddress || 'Adresse unbekannt'
+    }));
+
+    // Erstelle Mitarbeiter-Information für die Tour
+    const employeeInfo = assignedEmployees.map(emp => ({
+      id: emp.id,
+      name: emp.name
+    }));
+
+    // Erstelle Zeitinformationen für jede Station
+    const stationTimeInfo = Object.entries(calculatedTimes).map(([index, time]) => {
+      const legIndex = parseInt(index);
+      const leg = legsWithUpdatedPianos[legIndex];
+      
+      // Versuche, die Deal-Informationen zu finden
+      let stationDescription = 'Unbekannte Station';
+      if (leg) {
+        // Verwende die end_address als Ziel (da die Arbeitszeit dort stattfindet)
+        stationDescription = leg.end_address?.split(',')[0] || 'Unbekannte Adresse';
+        
+        // Wenn consolidatedDeals vorhanden, füge Deal-Titel hinzu
+        if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+          const dealTitles = leg.consolidatedDeals.map(cd => {
+            const deal = tourDeals.find(d => d.id === cd.dealId);
+            return deal ? deal.title : `Deal ${cd.dealId}`;
+          }).join(', ');
+          stationDescription = `${stationDescription} (${dealTitles})`;
+        }
+      }
+      
+      return {
+        legIndex,
+        legDescription: stationDescription,
+        startTime: time.startTime, // Ankunftszeit
+        endTime: time.endTime, // Fertigstellungszeit
+        duration: time.duration, // Arbeitsdauer
+        drivingTime: time.drivingTime // Fahrtzeit
+      };
+    });
+
+    const updatePromises = tourDeals.map(async (deal, index) => {
       const projectId = deal.id;
       if (!projectId) {
         console.warn("Überspringe Deal ohne Projekt-ID:", deal.title);
@@ -890,6 +1718,8 @@ const TourPlannerContent = () => {
         phase_id: TARGET_PHASE_ID,
         [PROJECT_TOUR_DATE_FIELD_KEY]: tourDateFormatted, // Korrigiertes Datumsformat
         [PROJECT_TOUR_ID_FIELD_KEY]: finalTourId, // Verwendet den eingegebenen Namen oder Fallback
+        // Füge Reihenfolge-Information hinzu (falls ein entsprechendes Feld existiert)
+        // tour_sequence: JSON.stringify(tourSequence), // Optional: Falls ein Feld für die Sequenz existiert
       };
 
       try {
@@ -899,6 +1729,7 @@ const TourPlannerContent = () => {
         );
         if (response.data && response.data.success) {
           successCount++;
+          console.log(`Projekt ${projectId} (${deal.title}) erfolgreich aktualisiert - Position ${index + 1} in der Tour`);
         } else {
           console.error(`Fehler beim Aktualisieren von Projekt ${projectId}. Antwort:`, response.data);
           errorCount++;
@@ -913,12 +1744,41 @@ const TourPlannerContent = () => {
 
     setIsSavingTour(false); // End loading
 
-    if (errorCount === 0) {
-      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert und ${successCount} Projekte erfolgreich aktualisiert!`);
-    } else {
-      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert. ${successCount} Projekte aktualisiert, ${errorCount} Fehler aufgetreten. Details siehe Konsole.`);
+    // Zeige die gespeicherte Reihenfolge und Mitarbeiter-Zuweisungen in der Erfolgsmeldung
+    const sequenceInfo = tourSequence.map(item => `${item.order}. ${item.title}`).join('\n');
+    
+    let employeeInfoText = '';
+    if (employeeInfo.length > 0) {
+      employeeInfoText = '\n\nMitarbeiter für diese Tour:\n' + 
+        employeeInfo.map(emp => `  - ${emp.name}`).join('\n');
     }
-  }, [selectedDate, tourDeals, tourName, TARGET_PHASE_ID, PROJECT_TOUR_DATE_FIELD_KEY, PROJECT_TOUR_ID_FIELD_KEY]);
+    
+    let timeInfoText = '';
+    if (stationTimeInfo.length > 0 && tourStartTime) {
+      timeInfoText = '\n\nZeitplan (Tour-Start: ' + tourStartTime + '):\n' + 
+        stationTimeInfo.map(station => {
+          let stationText = `${station.legDescription}:\n  `;
+          stationText += `→ Ankunft: ${station.startTime}`;
+          if (station.drivingTime > 0) {
+            stationText += ` (${station.drivingTime} Min. Fahrt)`;
+          }
+          if (station.duration > 0) {
+            stationText += `\n  → Fertig: ${station.endTime} (${station.duration} Min. Arbeit)`;
+          }
+          return stationText;
+        }).join('\n\n');
+      
+      if (totalTourDuration) {
+        timeInfoText += `\n\n===================\nGesamtdauer (Fahrt + Arbeit): ${totalTourDuration} Min.`;
+      }
+    }
+    
+    if (errorCount === 0) {
+      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${employeeInfoText}${timeInfoText}\n\n${successCount} Projekte erfolgreich aktualisiert.`);
+    } else {
+      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${employeeInfoText}${timeInfoText}\n\n${successCount} Projekte aktualisiert, ${errorCount} Fehler aufgetreten. Details siehe Konsole.`);
+    }
+  }, [selectedDate, tourDeals, tourName, TARGET_PHASE_ID, PROJECT_TOUR_DATE_FIELD_KEY, PROJECT_TOUR_ID_FIELD_KEY, assignedEmployees, optimizedRoute, calculatedTimes, tourStartTime, totalTourDuration, legsWithUpdatedPianos]);
 
   // calculateOptimizedRoute (useCallback bleibt, aber fixWaypointOrder ist jetzt stabil)
   const calculateOptimizedRoute = useCallback(async () => {
@@ -933,6 +1793,43 @@ const TourPlannerContent = () => {
       // --- STUFE 1: Kundenadressen für Optimierung vorbereiten ---
       const customerAddresses = new Set();
       const addressToDealInfo = new Map();
+      const addressConsolidation = new Map(); // Map für Adressen-Zusammenfassung
+
+      // Hilfsfunktion zum Normalisieren von Adressen für Vergleich
+      const normalizeAddress = (address) => {
+        if (!address) return '';
+        return address.toLowerCase()
+          .replace(/\s+/g, ' ') // Mehrfache Leerzeichen zu einem
+          .replace(/[.,]/g, '') // Punkte und Kommas entfernen
+          .trim();
+      };
+
+      // Hilfsfunktion zum Finden ähnlicher Adressen
+      const findSimilarAddress = (newAddress, existingAddresses, dealType) => {
+        const normalizedNew = normalizeAddress(newAddress);
+        
+        // Spezielle Behandlung für Schlaile-Adressen: Diese sollen IMMER konsolidiert werden
+        if (newAddress === SCHLAILE_FIXED_ADDRESS) {
+          for (const existing of existingAddresses) {
+            if (existing === SCHLAILE_FIXED_ADDRESS) {
+              return existing;
+            }
+          }
+          return null; // Erste Schlaile-Adresse
+        }
+        
+        // Für normale Adressen: Prüfe auf exakte Übereinstimmung oder sehr ähnliche Adressen
+        for (const existing of existingAddresses) {
+          const normalizedExisting = normalizeAddress(existing);
+          // Prüfe auf exakte Übereinstimmung oder sehr ähnliche Adressen
+          if (normalizedNew === normalizedExisting || 
+              normalizedNew.includes(normalizedExisting.split(' ')[0]) ||
+              normalizedExisting.includes(normalizedNew.split(' ')[0])) {
+            return existing;
+          }
+        }
+        return null;
+      };
 
       tourDeals.forEach(deal => {
         const isSchlailePickup = deal.schlaileType === SCHLAILE_TYPE_PICKUP;
@@ -946,33 +1843,77 @@ const TourPlannerContent = () => {
 
         if (isSchlailePickup) {
           if (isValidAddress(origin)) {
-            customerAddresses.add(origin);
-            if (!addressToDealInfo.has(origin)) addressToDealInfo.set(origin, []);
-            addressToDealInfo.get(origin).push({ dealId: deal.id, type: 'pickup_to_schlaile' });
+            // Prüfe auf ähnliche Adressen
+            const similarAddress = findSimilarAddress(origin, Array.from(customerAddresses), 'pickup_to_schlaile');
+            const addressToUse = similarAddress || origin;
+            
+            if (similarAddress) {
+              // Konsolidiere mit bestehender Adresse
+              addressConsolidation.set(origin, similarAddress);
+              console.log(`[Adress-Konsolidierung] ${origin} → ${similarAddress}`);
+            } else {
+              customerAddresses.add(origin);
+            }
+            
+            if (!addressToDealInfo.has(addressToUse)) addressToDealInfo.set(addressToUse, []);
+            addressToDealInfo.get(addressToUse).push({ dealId: deal.id, type: 'pickup_to_schlaile', originalAddress: origin });
           } else {
              console.warn(`Ungültige Origin-Adresse für Schlaile Pickup Deal ${deal.id}`);
           }
         } else if (isSchlaileDelivery) {
           if (isValidAddress(destination)) {
-            customerAddresses.add(destination);
-            if (!addressToDealInfo.has(destination)) addressToDealInfo.set(destination, []);
-            addressToDealInfo.get(destination).push({ dealId: deal.id, type: 'delivery_from_schlaile' });
+            // Prüfe auf ähnliche Adressen
+            const similarAddress = findSimilarAddress(destination, Array.from(customerAddresses), 'delivery_from_schlaile');
+            const addressToUse = similarAddress || destination;
+            
+            if (similarAddress) {
+              // Konsolidiere mit bestehender Adresse
+              addressConsolidation.set(destination, similarAddress);
+              console.log(`[Adress-Konsolidierung] ${destination} → ${similarAddress}`);
+            } else {
+              customerAddresses.add(destination);
+            }
+            
+            if (!addressToDealInfo.has(addressToUse)) addressToDealInfo.set(addressToUse, []);
+            addressToDealInfo.get(addressToUse).push({ dealId: deal.id, type: 'delivery_from_schlaile', originalAddress: destination });
           } else {
              console.warn(`Ungültige Destination-Adresse für Schlaile Delivery Deal ${deal.id}`);
           }
         } else {
           // Normaler Umzug
           if (isValidAddress(origin)) {
-             customerAddresses.add(origin);
-             if (!addressToDealInfo.has(origin)) addressToDealInfo.set(origin, []);
-             addressToDealInfo.get(origin).push({ dealId: deal.id, type: 'normal_origin' });
+            // Prüfe auf ähnliche Adressen
+            const similarAddress = findSimilarAddress(origin, Array.from(customerAddresses), 'normal_origin');
+            const addressToUse = similarAddress || origin;
+            
+            if (similarAddress) {
+              // Konsolidiere mit bestehender Adresse
+              addressConsolidation.set(origin, similarAddress);
+              console.log(`[Adress-Konsolidierung] ${origin} → ${similarAddress}`);
+            } else {
+              customerAddresses.add(origin);
+            }
+            
+            if (!addressToDealInfo.has(addressToUse)) addressToDealInfo.set(addressToUse, []);
+            addressToDealInfo.get(addressToUse).push({ dealId: deal.id, type: 'normal_origin', originalAddress: origin });
           } else {
              console.warn(`Ungültige Origin-Adresse für normalen Deal ${deal.id}`);
           }
           if (isValidAddress(destination)) {
-             customerAddresses.add(destination);
-             if (!addressToDealInfo.has(destination)) addressToDealInfo.set(destination, []);
-             addressToDealInfo.get(destination).push({ dealId: deal.id, type: 'normal_dest' });
+            // Prüfe auf ähnliche Adressen
+            const similarAddress = findSimilarAddress(destination, Array.from(customerAddresses), 'normal_dest');
+            const addressToUse = similarAddress || destination;
+            
+            if (similarAddress) {
+              // Konsolidiere mit bestehender Adresse
+              addressConsolidation.set(destination, similarAddress);
+              console.log(`[Adress-Konsolidierung] ${destination} → ${similarAddress}`);
+            } else {
+              customerAddresses.add(destination);
+            }
+            
+            if (!addressToDealInfo.has(addressToUse)) addressToDealInfo.set(addressToUse, []);
+            addressToDealInfo.get(addressToUse).push({ dealId: deal.id, type: 'normal_dest', originalAddress: destination });
           } else {
              console.warn(`Ungültige Destination-Adresse für normalen Deal ${deal.id}`);
           }
@@ -1002,52 +1943,83 @@ const TourPlannerContent = () => {
       }
       const optimizedCustomerOrder = optimizationResponse.routes[0].waypoint_order.map(index => waypointsForOptimization[index].location);
 
-      // --- STUFE 2: Logische Sequenz mit Schlaile erstellen ---
+      // --- STUFE 2: Logische Sequenz mit Schlaile erstellen (OPTIMIERT) ---
+      console.log('[Route-Optimierung] Schlaile-Strategie: Beladung ZUERST, Entladung ZULETZT');
+      
       let finalSequence = [OFFICE_ADDRESS];
-      let pendingSchlaileVisit = false;
       let visitedAddressesForDeal = new Map();
 
-      const addSchlaileIfNeeded = () => {
-        if (pendingSchlaileVisit && finalSequence[finalSequence.length - 1] !== SCHLAILE_FIXED_ADDRESS) {
-          finalSequence.push(SCHLAILE_FIXED_ADDRESS);
-          pendingSchlaileVisit = false;
-        }
-      };
-
+      // Kategorisiere alle Adressen nach Typ
+      const schlailePickupAddresses = []; // Adressen für pickup_to_schlaile (Kunde → Schlaile)
+      const schlaileDeliveryAddresses = []; // Adressen für delivery_from_schlaile (Schlaile → Kunde)
+      const normalAddresses = []; // Normale Umzüge
+      
       optimizedCustomerOrder.forEach(customerAddress => {
         const dealInfos = addressToDealInfo.get(customerAddress) || [];
         dealInfos.forEach(info => {
-            const visitKey = `${info.dealId}-${info.type}`;
-            if (visitedAddressesForDeal.has(visitKey)) return;
-
-
-            if (info.type === 'delivery_from_schlaile') {
-              addSchlaileIfNeeded();
-              if (finalSequence[finalSequence.length - 1] !== SCHLAILE_FIXED_ADDRESS) {
-                 finalSequence.push(SCHLAILE_FIXED_ADDRESS);
-              }
-              finalSequence.push(customerAddress);
-              visitedAddressesForDeal.set(visitKey, true);
-            } else if (info.type === 'pickup_to_schlaile') {
-              addSchlaileIfNeeded();
-              finalSequence.push(customerAddress);
-              pendingSchlaileVisit = true;
-              visitedAddressesForDeal.set(visitKey, true);
-            } else {
-              addSchlaileIfNeeded();
-              finalSequence.push(customerAddress);
-              visitedAddressesForDeal.set(visitKey, true);
-            }
+          const visitKey = `${info.dealId}-${info.type}`;
+          if (visitedAddressesForDeal.has(visitKey)) return;
+          
+          if (info.type === 'delivery_from_schlaile') {
+            schlaileDeliveryAddresses.push({ address: customerAddress, info: info });
+            visitedAddressesForDeal.set(visitKey, true);
+          } else if (info.type === 'pickup_to_schlaile') {
+            schlailePickupAddresses.push({ address: customerAddress, info: info });
+            visitedAddressesForDeal.set(visitKey, true);
+          } else {
+            normalAddresses.push({ address: customerAddress, info: info });
+            visitedAddressesForDeal.set(visitKey, true);
+          }
         });
       });
 
-      addSchlaileIfNeeded();
+      // STRATEGIE: Schlaile-Beladung ZUERST, Schlaile-Entladung ZULETZT
+      
+      // 1. Wenn es Schlaile-Lieferungen gibt (delivery_from_schlaile):
+      //    → Schlaile als ERSTES besuchen, beladen, dann alle Lieferadressen
+      if (schlaileDeliveryAddresses.length > 0) {
+        console.log(`[Schlaile-Beladung ZUERST] ${schlaileDeliveryAddresses.length} Lieferung(en) von Schlaile`);
+        finalSequence.push(SCHLAILE_FIXED_ADDRESS); // Schlaile ZUERST
+        // Füge alle Lieferadressen hinzu
+        schlaileDeliveryAddresses.forEach(item => {
+          finalSequence.push(item.address);
+        });
+      }
 
+      // 2. Füge normale Adressen in der Mitte hinzu (Pickups vor Deliveries)
+      const normalPickups = normalAddresses.filter(item => item.info.type === 'normal_origin');
+      const normalDeliveries = normalAddresses.filter(item => item.info.type === 'normal_dest');
+      
+      // Füge zuerst alle Pickups hinzu
+      normalPickups.forEach(item => {
+        finalSequence.push(item.address);
+      });
+      
+      // Dann alle Deliveries
+      normalDeliveries.forEach(item => {
+        finalSequence.push(item.address);
+      });
+
+      // 3. Wenn es Schlaile-Abholungen gibt (pickup_to_schlaile):
+      //    → Alle Abholadressen ZUERST besuchen, dann Schlaile als LETZTES
+      if (schlailePickupAddresses.length > 0) {
+        console.log(`[Schlaile-Entladung ZULETZT] ${schlailePickupAddresses.length} Abholung(en) zu Schlaile`);
+        // Füge alle Abholadressen hinzu
+        schlailePickupAddresses.forEach(item => {
+          finalSequence.push(item.address);
+        });
+        finalSequence.push(SCHLAILE_FIXED_ADDRESS); // Schlaile ZULETZT
+      }
+
+      // 4. Rückkehr zum Büro
       if (finalSequence[finalSequence.length - 1] !== OFFICE_ADDRESS) {
          finalSequence.push(OFFICE_ADDRESS);
       }
 
+      // Entferne Duplikate (falls vorhanden)
       finalSequence = finalSequence.filter((addr, index, self) => index === 0 || addr !== self[index - 1]);
+      
+      console.log('[Route-Sequenz]', finalSequence.map(addr => addr.split(',')[0]));
 
       // --- STUFE 3: Finale Route für die feste Sequenz abrufen ---
       if (finalSequence.length <= 1) {
@@ -1074,29 +2046,335 @@ const TourPlannerContent = () => {
       const finalRouteResult = finalRouteResponse.routes[0];
       finalRouteResult.custom_waypoint_order = finalSequence; // Speichere die *gesamte* Sequenz
 
-      // TODO: Bessere stopType Zuordnung basierend auf finalSequence und addressToDealInfo
+      // Erweiterte stopType Zuordnung basierend auf finalSequence und addressToDealInfo
       finalRouteResult.legs.forEach((leg, index) => {
           leg.stopType = 'intermediate'; // Platzhalter
           const startAddr = finalSequence[index];
           const endAddr = finalSequence[index + 1];
 
-          if (startAddr === OFFICE_ADDRESS) leg.stopType = 'office_start';
-          else if (endAddr === OFFICE_ADDRESS) leg.stopType = 'office_return';
-          else if (startAddr === SCHLAILE_FIXED_ADDRESS) leg.stopType = 'delivery'; // Lieferung VON Schlaile
-          else if (endAddr === SCHLAILE_FIXED_ADDRESS) leg.stopType = 'pickup'; // Abholung ZU Schlaile
-          // Hier könnte man noch feiner differenzieren, wenn nötig
+          // Zuerst: Bestimme die operationType basierend auf der Zieladresse
+          if (endAddr === OFFICE_ADDRESS) {
+              leg.stopType = 'office_return';
+              // Keine operationType für Rückkehr zum Büro
+          } else if (startAddr === SCHLAILE_FIXED_ADDRESS && endAddr !== SCHLAILE_FIXED_ADDRESS) {
+              // Von Schlaile weg = Entladung (Lieferung)
+              leg.stopType = 'delivery';
+              leg.operationType = 'entladung';
+              // Setze consolidatedDeals für Schlaile-Lieferungen
+              const dealInfo = addressToDealInfo.get(endAddr);
+              if (dealInfo && dealInfo.length > 0) {
+                  leg.consolidatedDeals = dealInfo.map(info => ({
+                      dealId: info.dealId,
+                      type: info.type,
+                      originalAddress: info.originalAddress
+                  }));
+              }
+          } else if (endAddr === SCHLAILE_FIXED_ADDRESS && startAddr !== OFFICE_ADDRESS) {
+              // Zu Schlaile hin (nicht vom Office) = Entladung bei Schlaile
+              leg.stopType = 'pickup';
+              leg.operationType = 'entladung';
+              // Setze consolidatedDeals für Schlaile-Abholungen
+              const dealInfo = addressToDealInfo.get(startAddr);
+              if (dealInfo && dealInfo.length > 0) {
+                  const pickupDeals = dealInfo.filter(info => info.type === 'pickup_to_schlaile');
+                  if (pickupDeals.length > 0) {
+                      leg.consolidatedDeals = pickupDeals.map(info => ({
+                          dealId: info.dealId,
+                          type: info.type,
+                          originalAddress: info.originalAddress
+                      }));
+                  }
+              }
+          } else if (endAddr === SCHLAILE_FIXED_ADDRESS && startAddr === OFFICE_ADDRESS) {
+              // Vom Office zu Schlaile = Beladung bei Schlaile
+              leg.stopType = 'pickup';
+              leg.operationType = 'beladung';
+              // Sammle ALLE delivery_from_schlaile Deals für diesen Schlaile-Besuch
+              const allSchlaileDeliveries = [];
+              addressToDealInfo.forEach((dealInfos, address) => {
+                  dealInfos.forEach(info => {
+                      if (info.type === 'delivery_from_schlaile') {
+                          allSchlaileDeliveries.push({
+                              dealId: info.dealId,
+                              type: info.type,
+                              originalAddress: info.originalAddress
+                          });
+                      }
+                  });
+              });
+              if (allSchlaileDeliveries.length > 0) {
+                  leg.consolidatedDeals = allSchlaileDeliveries;
+              }
+          } else {
+                // Normale Kundenadressen - prüfe ob es sich um Abholung oder Lieferung handelt
+                const dealInfo = addressToDealInfo.get(endAddr);
+                if (dealInfo && dealInfo.length > 0) {
+                    const dealType = dealInfo[0].type;
+                    
+                    // Speichere konsolidierte Deals für die UI
+                    leg.consolidatedDeals = dealInfo.map(info => ({
+                      dealId: info.dealId,
+                      type: info.type,
+                      originalAddress: info.originalAddress
+                    }));
+                    
+                    // KORRIGIERTE LOGIK: 
+                    // - normal_origin und pickup_to_schlaile = BELADUNG (erste Adresse des Auftrags)
+                    // - normal_dest und delivery_from_schlaile = ENTLADUNG (zweite Adresse des Auftrags)
+                    if (dealType === 'pickup_to_schlaile' || dealType === 'normal_origin') {
+                        leg.stopType = 'pickup';
+                        leg.operationType = 'beladung'; // Erste Adresse = Beladung
+                    } else if (dealType === 'delivery_from_schlaile' || dealType === 'normal_dest') {
+                        leg.stopType = 'delivery';
+                        leg.operationType = 'entladung'; // Zweite Adresse = Entladung
+                    }
+                } else {
+                    // Fallback: Wenn keine Deal-Info vorhanden ist, verwende die Reihenfolge basierend auf der Adresse
+                    // Prüfe ob die Adresse in den tourDeals als origin oder destination vorkommt
+                    const dealWithOrigin = tourDeals.find(deal => deal.originAddress === endAddr);
+                    const dealWithDestination = tourDeals.find(deal => deal.destinationAddress === endAddr);
+                    
+                    if (dealWithOrigin) {
+                        // Wenn die End-Adresse als Origin-Adresse eines Deals gefunden wird = Beladung
+                        leg.operationType = 'beladung';
+                        leg.stopType = 'pickup';
+                    } else if (dealWithDestination) {
+                        // Wenn die End-Adresse als Destination-Adresse eines Deals gefunden wird = Entladung
+                        leg.operationType = 'entladung';
+                        leg.stopType = 'delivery';
+                    } else {
+                        // Letzter Fallback: Verwende Index-basierte Logik
+                        const currentIndex = finalRouteResult.legs.indexOf(leg);
+                        const isEvenIndex = currentIndex % 2 === 0;
+                        
+                        if (isEvenIndex) {
+                            leg.operationType = 'beladung';
+                            leg.stopType = 'pickup';
+                        } else {
+                            leg.operationType = 'entladung';
+                            leg.stopType = 'delivery';
+                        }
+                    }
+                }
+          }
+          
+          // Setze visuelle Marker für Büro-Start (überschreibt operationType NICHT)
+          if (startAddr === OFFICE_ADDRESS) {
+              leg.stopType = 'office_start';
+          }
       });
 
-      setOptimizedRoute(finalRouteResult);
+      // Berechne die Anzahl der geladenen Klaviere für jeden Leg
+      let currentLoadedPianos = 0;
+      
+      // Zuerst: Finde heraus, wie viele Klaviere bei Schlaile geladen/entladen werden
+      let schlaileLoadCount = 0; // Klaviere, die VON Schlaile zum Kunden geliefert werden (delivery_from_schlaile)
+      let schlaileUnloadCount = 0; // Klaviere, die ZU Schlaile gebracht werden (pickup_to_schlaile)
+      let schlaileLoadIndex = -1;
+      let schlaileIsFirstStop = false;
+      
+      for (let i = 0; i < finalRouteResult.legs.length; i++) {
+          const startAddr = finalSequence[i];
+          const endAddr = finalSequence[i + 1];
+          
+          // Fall 1: Wenn wir BEI Schlaile ankommen (Ziel ist Schlaile)
+          if (endAddr === SCHLAILE_FIXED_ADDRESS) {
+              schlaileLoadIndex = i;
+              
+              // Zähle, wie viele Klaviere bei Schlaile ENTLADEN werden (pickup_to_schlaile)
+              // Durchsuche ALLE vorherigen Legs nach pickup_to_schlaile Deals
+              for (let j = 0; j < i; j++) {
+                  const prevLeg = finalRouteResult.legs[j];
+                  if (prevLeg.consolidatedDeals) {
+                      const pickupDeals = prevLeg.consolidatedDeals.filter(deal => 
+                          deal.type === 'pickup_to_schlaile'
+                      );
+                      schlaileUnloadCount += pickupDeals.length;
+                  }
+              }
+              console.log(`[DEBUG] ${schlaileUnloadCount} Klaviere werden bei Schlaile ENTLADEN (pickup_to_schlaile, von allen vorherigen Stops)`);
+              console.log(`[DEBUG] Schlaile gefunden bei Leg ${i}, zähle alle nachfolgenden Schlaile-Lieferungen...`);
+              
+              // Zähle ALLE Legs nach Schlaile, die delivery_from_schlaile sind
+              // Die Route ist: Schlaile → Kunde1 → Kunde2 → Kunde3 (ohne Rückkehr zu Schlaile)
+              for (let j = i + 1; j < finalRouteResult.legs.length; j++) {
+                  const nextStartAddr = finalSequence[j];
+                  const nextEndAddr = finalSequence[j + 1];
+                  const nextLeg = finalRouteResult.legs[j];
+                  
+                  console.log(`[DEBUG] Leg ${j}: Start=${nextStartAddr?.split(',')[0]}, Ende=${nextEndAddr?.split(',')[0]}, operationType=${nextLeg.operationType}, consolidatedDeals=${nextLeg.consolidatedDeals?.length || 0}`);
+                  
+                  // Prüfe, ob dieses Leg eine Schlaile-Lieferung ist
+                  let isSchlaileDelivery = false;
+                  
+                  // Option 1: Das erste Leg nach Schlaile startet bei Schlaile
+                  if (j === i + 1 && nextStartAddr === SCHLAILE_FIXED_ADDRESS) {
+                      isSchlaileDelivery = true;
+                      console.log(`[DEBUG] Leg ${j} ist erste Lieferung direkt von Schlaile`);
+                  }
+                  // Option 2: Prüfe consolidatedDeals auf delivery_from_schlaile
+                  else if (nextLeg.consolidatedDeals && nextLeg.consolidatedDeals.length > 0) {
+                      const hasSchlaileDelivery = nextLeg.consolidatedDeals.some(deal => 
+                          deal.type === 'delivery_from_schlaile'
+                      );
+                      if (hasSchlaileDelivery) {
+                          isSchlaileDelivery = true;
+                          console.log(`[DEBUG] Leg ${j} hat delivery_from_schlaile in consolidatedDeals`);
+                      }
+                  }
+                  // Option 3: Prüfe, ob es eine Entladung ist und noch innerhalb der Schlaile-Lieferungskette
+                  else if ((nextLeg.stopType === 'delivery' || nextLeg.operationType === 'entladung') && schlaileLoadCount < 10) {
+                      // Prüfe, ob dieses Ziel eine bekannte Schlaile-Lieferadresse ist
+                      // (Heuristik: Bis zur nächsten Beladung oder Rückkehr zum Büro)
+                      const isBeforeNextPickup = !nextLeg.operationType || nextLeg.operationType === 'entladung';
+                      if (isBeforeNextPickup && nextEndAddr !== OFFICE_ADDRESS) {
+                          isSchlaileDelivery = true;
+                          console.log(`[DEBUG] Leg ${j} ist wahrscheinlich eine Schlaile-Lieferung (Entladung zwischen Schlaile und nächster Beladung)`);
+                      }
+                  }
+                  
+                  if (isSchlaileDelivery) {
+                      schlaileLoadCount += 1;
+                  } else if (nextLeg.operationType === 'beladung' || nextEndAddr === OFFICE_ADDRESS) {
+                      // Stoppe, wenn eine neue Beladung kommt oder wir zum Büro zurückkehren
+                      console.log(`[DEBUG] Leg ${j}: Neue Beladung oder Büro-Rückkehr, stoppe Schlaile-Zählung`);
+                      break;
+                  }
+              }
+              
+              // Log für bessere Nachvollziehbarkeit
+              if (schlaileUnloadCount > 0 && schlaileLoadCount > 0) {
+                  console.log(`[Schlaile Kombination] Bei Schlaile: ${schlaileUnloadCount} Klaviere ENTLADEN (pickup) + ${schlaileLoadCount} Klaviere BELADEN (delivery) = Netto ${schlaileLoadCount - schlaileUnloadCount} (Leg-Index: ${i})`);
+              } else if (schlaileUnloadCount > 0) {
+                  console.log(`[Schlaile Entladung] Bei Schlaile ${schlaileUnloadCount} Klaviere ENTLADEN (pickup_to_schlaile) (Leg-Index: ${i})`);
+              } else if (schlaileLoadCount > 0) {
+                  console.log(`[Schlaile Beladung] Bei Schlaile ${schlaileLoadCount} Klaviere BELADEN (delivery_from_schlaile) (Leg-Index: ${i})`);
+              }
+              break; // Nur einmal Schlaile besuchen
+          }
+          // Fall 2: Wenn Route direkt bei Schlaile STARTET (erster nicht-Büro Stop)
+          else if (startAddr === SCHLAILE_FIXED_ADDRESS && schlaileLoadIndex === -1) {
+              schlaileLoadIndex = i;
+              schlaileIsFirstStop = true;
+              // Zähle alle Legs, die VON Schlaile wegführen
+              for (let j = i; j < finalRouteResult.legs.length; j++) {
+                  const nextStartAddr = finalSequence[j];
+                  if (nextStartAddr === SCHLAILE_FIXED_ADDRESS) {
+                      const nextLeg = finalRouteResult.legs[j];
+                      if (nextLeg.consolidatedDeals && nextLeg.consolidatedDeals.length > 0) {
+                          const deliveryDeals = nextLeg.consolidatedDeals.filter(deal => 
+                              deal.type === 'delivery_from_schlaile'
+                          );
+                          schlaileLoadCount += deliveryDeals.length;
+                      } else if (nextLeg.stopType === 'delivery' || nextLeg.operationType === 'entladung') {
+                          schlaileLoadCount += 1;
+                      }
+                  } else {
+                      break;
+                  }
+              }
+              
+              // Log für bessere Nachvollziehbarkeit
+              if (schlaileLoadCount > 0) {
+                  console.log(`[Schlaile Beladung] Route startet bei Schlaile - ${schlaileLoadCount} Klaviere werden geladen (Leg-Index: ${i})`);
+              }
+              break;
+          }
+      }
+      
+      finalRouteResult.legs.forEach((leg, index) => {
+          // Anzahl vor der Aktion an diesem Stop
+          leg.loadedPianosBefore = currentLoadedPianos;
+          
+          // Bestimme, wie viele Klaviere an diesem Stop geladen/entladen werden
+          let changeCount = 0;
+          
+          const startAddr = finalSequence[index];
+          const endAddr = finalSequence[index + 1];
+          
+          // Fall 1: Wenn wir BEI Schlaile ankommen oder Route bei Schlaile startet
+          if (index === schlaileLoadIndex && (schlaileLoadCount > 0 || schlaileUnloadCount > 0)) {
+              // Bei Schlaile: Erst Entladung (pickup_to_schlaile), dann Beladung (delivery_from_schlaile)
+              currentLoadedPianos -= schlaileUnloadCount; // Klaviere werden bei Schlaile abgegeben
+              currentLoadedPianos += schlaileLoadCount;   // Klaviere werden für Lieferung geladen
+              
+              // Netto-Änderung berechnen
+              const nettoChange = schlaileLoadCount - schlaileUnloadCount;
+              changeCount = Math.abs(nettoChange);
+              
+              // Setze operationType basierend auf Netto-Änderung
+              if (nettoChange > 0) {
+                  leg.operationType = 'beladung'; // Mehr Beladung als Entladung
+                  leg.pianoChange = `+${nettoChange}`;
+              } else if (nettoChange < 0) {
+                  leg.operationType = 'entladung'; // Mehr Entladung als Beladung
+                  leg.pianoChange = `${nettoChange}`; // Negatives Vorzeichen bereits enthalten
+              } else {
+                  leg.operationType = 'neutral'; // Gleich viele Be- und Entladungen
+                  leg.pianoChange = '±0';
+              }
+              
+              console.log(`[Schlaile Operation] Leg ${index}: Entladen -${schlaileUnloadCount}, Beladen +${schlaileLoadCount}, Netto ${nettoChange > 0 ? '+' : ''}${nettoChange}, Gesamt: ${currentLoadedPianos}`);
+          }
+          // Fall 2: Von Schlaile weg = Entladung beim Kunden (nach dem Beladen)
+          else if (startAddr === SCHLAILE_FIXED_ADDRESS && index > schlaileLoadIndex) {
+              if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+                  changeCount = leg.consolidatedDeals.length;
+              } else {
+                  changeCount = 1;
+              }
+              leg.operationType = 'entladung';
+              currentLoadedPianos -= changeCount;
+              console.log(`[Schlaile Lieferung] Leg ${index}: -${changeCount} Klavier(e) an ${endAddr?.split(',')[0]}, Rest: ${currentLoadedPianos}`);
+          }
+          // Fall 3: Normale Beladung/Entladung (Nicht-Schlaile)
+          else if (leg.operationType === 'beladung') {
+              // Beladung bei originAddress (Kunde gibt Klavier ab)
+              if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+                  changeCount = leg.consolidatedDeals.length;
+              } else {
+                  changeCount = 1; // Standard: 1 Klavier pro Beladung
+              }
+              currentLoadedPianos += changeCount;
+              console.log(`[Normale Beladung] Leg ${index}: +${changeCount} Klavier(e) bei ${endAddr?.split(',')[0]}, Gesamt: ${currentLoadedPianos}`);
+          } else if (leg.operationType === 'entladung') {
+              // Entladung bei destinationAddress (Klavier wird beim Kunden abgeliefert)
+              if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+                  changeCount = leg.consolidatedDeals.length;
+              } else {
+                  changeCount = 1; // Standard: 1 Klavier pro Entladung
+              }
+              currentLoadedPianos -= changeCount;
+              console.log(`[Normale Entladung] Leg ${index}: -${changeCount} Klavier(e) bei ${endAddr?.split(',')[0]}, Rest: ${currentLoadedPianos}`);
+          }
+          
+          // Anzahl nach der Aktion an diesem Stop
+          leg.loadedPianosAfter = currentLoadedPianos;
+          if (!leg.pianoChange) { // Nur setzen, wenn nicht schon gesetzt (Schlaile-Fall)
+              leg.pianoChange = leg.operationType === 'beladung' ? `+${changeCount}` : 
+                               leg.operationType === 'entladung' ? `-${changeCount}` : '0';
+          }
+      });
 
-    } catch (error) {
-      console.error("Fehler bei der Routenberechnung:", error);
-      alert(`Fehler bei der Routenberechnung: ${error.message}`);
-      setOptimizedRoute(null);
-    } finally {
-      setLoadingRoute(false);
-    }
-  }, [directionsService, tourDeals, OFFICE_ADDRESS, SCHLAILE_FIXED_ADDRESS, SCHLAILE_TYPE_PICKUP, SCHLAILE_TYPE_DELIVERY]);
+       setOptimizedRoute(finalRouteResult);
+
+       // Zeige die Route auf der Karte an
+       if (directionsRenderer) {
+         const directionsResult = {
+           routes: [finalRouteResult],
+           request: finalRouteRequest
+         };
+         directionsRenderer.setDirections(directionsResult);
+       }
+
+     } catch (error) {
+       console.error("Fehler bei der Routenberechnung:", error);
+       alert(`Fehler bei der Routenberechnung: ${error.message}`);
+       setOptimizedRoute(null);
+     } finally {
+       setLoadingRoute(false);
+     }
+   }, [directionsService, directionsRenderer, tourDeals, OFFICE_ADDRESS, SCHLAILE_FIXED_ADDRESS, SCHLAILE_TYPE_PICKUP, SCHLAILE_TYPE_DELIVERY]);
 
   // useEffect Hook, der die Route neu berechnet
   useEffect(() => {
@@ -1105,8 +2383,12 @@ const TourPlannerContent = () => {
     } else if (tourDeals.length === 0) {
       setOptimizedRoute(null);
       setLoadingRoute(false);
+      // Karte leeren wenn keine Deals vorhanden
+      if (directionsRenderer) {
+        directionsRenderer.setDirections({ routes: [] });
+      }
     }
-  }, [tourDeals, directionsService, calculateOptimizedRoute]);
+  }, [tourDeals, directionsService, calculateOptimizedRoute, directionsRenderer]);
 
   // handleOpenRouteInGoogleMaps (angepasst, um die gesamte Sequenz zu verwenden)
   const handleOpenRouteInGoogleMaps = () => {
@@ -1150,67 +2432,38 @@ const TourPlannerContent = () => {
     }
   };
 
-  // Google Directions Service Initialisierung
+  // Google Maps Initialisierung (wie in DailyRoutePlanner)
   useEffect(() => {
-    if (window.google && window.google.maps && !directionsService) {
-      setDirectionsService(new window.google.maps.DirectionsService());
-    } else if (!window.google || !window.google.maps) {
-      const existingScript = document.getElementById('googleMapsScript');
-      if (!existingScript) {
-        const script = document.createElement('script');
-        script.id = 'googleMapsScript';
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places`;
-        script.async = true;
-        script.defer = true;
-        script.onload = () => {
-          if (window.google && window.google.maps) {
-            setDirectionsService(new window.google.maps.DirectionsService());
-          }
-        };
-        script.onerror = () => console.error("Fehler beim Laden des Google Maps Scripts.");
-        document.body.appendChild(script);
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    script.onload = initializeMap;
+    document.body.appendChild(script);
+
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
       }
-    }
-  }, [directionsService]);
+    };
+  }, []);
 
-  // --- NEU: Berechne die gefilterte Liste der Legs für die Anzeige ---
-  const filteredLegsForDisplay = useMemo(() => {
-    if (!optimizedRoute || !optimizedRoute.legs) {
-      return [];
-    }
+  const initializeMap = () => {
+    const mapInstance = new window.google.maps.Map(document.getElementById('tour-route-map'), {
+      zoom: 7,
+      center: { lat: 51.1657, lng: 10.4515 },
+    });
+    
+    const directionsServiceInstance = new window.google.maps.DirectionsService();
+    const directionsRendererInstance = new window.google.maps.DirectionsRenderer({
+      map: mapInstance,
+      draggable: false, // Deaktiviert Drag & Drop auf der Karte
+      suppressMarkers: false, // Zeigt Marker für alle Wegpunkte
+    });
 
-    const originalLegs = optimizedRoute.legs;
-    const filtered = [];
-
-    for (let i = 0; i < originalLegs.length; i++) {
-      const currentLeg = originalLegs[i];
-      const isCurrentLegSchlaileToSchlaile =
-        currentLeg.start_address?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]) &&
-        currentLeg.end_address?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]) &&
-        currentLeg.distance?.value < 100; // Schlaile -> Schlaile mit kurzer Distanz
-
-      if (isCurrentLegSchlaileToSchlaile) {
-        // Prüfe das vorherige Leg
-        const previousLeg = i > 0 ? originalLegs[i - 1] : null;
-        const didPreviousLegEndAtSchlaile =
-          previousLeg?.end_address?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]);
-
-        // Entferne das aktuelle Leg NUR, wenn das vorherige auch bei Schlaile endete
-        if (didPreviousLegEndAtSchlaile) {
-          // Dies ist ein redundanter, aufeinanderfolgender Schlaile->Schlaile Schritt - überspringen
-          continue; // Gehe zum nächsten Leg in der Schleife
-        }
-        // Andernfalls (wenn das vorherige Leg NICHT bei Schlaile endete),
-        // behalte dieses Leg, da es den *ersten* Stopp bei Schlaile in einer Sequenz darstellt.
-      }
-
-      // Behalte das aktuelle Leg (entweder kein Schlaile->Schlaile oder der erste Stopp bei Schlaile)
-      filtered.push(currentLeg);
-    }
-    return filtered;
-
-  }, [optimizedRoute]); // Abhängigkeit von optimizedRoute (SCHLAILE_FIXED_ADDRESS und OFFICE_ADDRESS sind Konstanten)
-  // --- ENDE NEU ---
+    setMap(mapInstance);
+    setDirectionsService(directionsServiceInstance);
+    setDirectionsRenderer(directionsRendererInstance);
+  };
 
   // Funktion zum Aktualisieren der Flügelgröße (bleibt gleich)
   const handleGrandPianoSizeChange = (dealId, size) => {
@@ -1677,34 +2930,41 @@ const TourPlannerContent = () => {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6">
-        <div className="w-full md:w-1/2">
-          <div className="bg-white p-4 rounded-xl shadow-sm h-full flex flex-col">
-            <div className="flex-grow max-h-[calc(100vh-350px)] overflow-y-auto p-1 -m-1">
-              {loading ? (
-                <div className="text-center py-20">
-                  <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
-                  <p className="mt-4 text-gray-500">Lade Aufträge...</p>
-                </div>
-              ) : filteredDeals.length === 0 ? (
-                <div className="text-center py-10 text-gray-500">
-                  Keine Aufträge für die aktuelle Auswahl gefunden.
-                </div>
-              ) : (
-                filteredDeals.map((deal, index) => (
-                  <PipedriveDeal
-                    key={deal.id}
-                    deal={deal}
-                    index={index}
-                    isDraggable={!!((deal.originAddress && deal.destinationAddress) || deal.schlaileType)}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+         <div className="space-y-6">
+           <div className="bg-white p-4 rounded-xl shadow-sm">
+             <h3 className="text-lg font-semibold mb-3 flex items-center">
+               <Search className="mr-2 h-5 w-5 text-primary" />
+               Verfügbare Aufträge
+             </h3>
+             <div className="max-h-[500px] overflow-y-auto">
+               {loading ? (
+                 <div className="text-center py-10">
+                   <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
+                   <p className="mt-2 text-gray-500 text-sm">Lade Aufträge...</p>
+                 </div>
+               ) : filteredDeals.length === 0 ? (
+                 <div className="text-center py-8 text-gray-500 text-sm">
+                   Keine Aufträge für die aktuelle Auswahl gefunden.
+                 </div>
+               ) : (
+                 <div className="space-y-2">
+                   {filteredDeals.map((deal, index) => (
+                     <div key={deal.id} className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                       <PipedriveDeal
+                         deal={deal}
+                         index={index}
+                         isDraggable={!!((deal.originAddress && deal.destinationAddress) || deal.schlaileType)}
+                       />
+                     </div>
+                   ))}
+                 </div>
+               )}
+             </div>
+           </div>
+         </div>
 
-        <div className="w-full md:w-1/2 flex flex-col gap-6">
+         <div className="space-y-4">
           <TourArea
             isOver={isOver}
             drop={drop}
@@ -1721,103 +2981,71 @@ const TourPlannerContent = () => {
             onCalculatePianoPrice={handleCalculatePianoPrice}
             dealSpecificData={dealSpecificData}
             onGrandPianoSizeChange={handleGrandPianoSizeChange}
-            optimizedRoute={optimizedRoute} // NEU: Route übergeben
+            optimizedRoute={optimizedRoute}
             onDealTypeChange={handleDealTypeChange}
+            tourStartTime={tourStartTime}
+            onTourStartTimeChange={setTourStartTime}
+            assignedEmployees={assignedEmployees}
+            onEmployeeAdd={handleEmployeeAdd}
+            onEmployeeRemove={handleEmployeeRemove}
           />
 
-          <div className="bg-white p-4 rounded-xl shadow-sm">
-            <h3 className="text-lg font-semibold mb-3 flex items-center">
-              <Milestone className="mr-2 h-5 w-5 text-primary" />
-              Optimierte Route
-            </h3>
-            {loadingRoute && (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
-                <p className="text-gray-500 mt-2 text-sm">Berechne Route...</p>
-              </div>
-            )}
-            {!loadingRoute && !optimizedRoute && tourDeals.length > 0 && (
-              <div className="text-center py-4 text-gray-500 text-sm">
-                Klicken Sie auf "Route berechnen".
-              </div>
-            )}
-            {!loadingRoute && !optimizedRoute && tourDeals.length === 0 && (
-              <div className="text-center py-4 text-gray-500 text-sm">
-                Fügen Sie Aufträge zur Tour hinzu, um die Route zu berechnen.
-              </div>
-            )}
-            {optimizedRoute && filteredLegsForDisplay.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm font-medium bg-gray-50 p-2 rounded">
-                  <span>Gesamt:</span>
-                  <div className="text-right">
-                    {optimizedRoute?.routes?.[0]?.legs && (
-                      <>
-                        <div>{(optimizedRoute.routes[0].legs.reduce((sum, leg) => sum + (leg.distance?.value || 0), 0) / 1000).toFixed(1)} km</div>
-                        <div className="text-xs text-gray-500">{Math.round(optimizedRoute.routes[0].legs.reduce((sum, leg) => sum + (leg.duration?.value || 0), 0) / 60)} min Fahrzeit</div>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-1 max-h-[300px] overflow-y-auto text-sm">
-                  {filteredLegsForDisplay.map((leg, index, displayedArray) => (
-                      <div key={index} className="flex items-center justify-between p-2 border-b last:border-b-0">
-                        <div className="flex items-center space-x-2">
-                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${
-                            (index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'bg-green-500 text-white' :
-                            (index === displayedArray.length - 1 && leg.end_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'bg-green-500 text-white' :
-                            leg.stopType === 'pickup' ? 'bg-blue-500 text-white' :
-                            leg.stopType === 'delivery' ? 'bg-orange-500 text-white' :
-                            'bg-gray-400 text-white'
-                          }`}>
-                            {(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'S' :
-                             (index === displayedArray.length - 1 && leg.end_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'Z' :
-                             leg.stopType === 'pickup' ? <Building size={12}/> :
-                             leg.stopType === 'delivery' ? <Home size={12}/> :
-                             index + 1}
-                          </span>
-                          <span className="truncate max-w-[180px]" title={leg.start_address}>
-                            {(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'Büro' : leg.start_address?.split(',')[0] ?? '?'}
-                          </span>
-                          <span className="text-gray-400">→</span>
-                          <span className="truncate max-w-[180px]" title={leg.end_address}>
-                            {(index === displayedArray.length - 1 && leg.end_address?.includes(OFFICE_ADDRESS.split(',')[0])) ? 'Büro' : leg.end_address?.split(',')[0] ?? '?'}
-                          </span>
-                        </div>
-                        <div className="text-right text-xs whitespace-nowrap">
-                          {/* --- Bedingung entfernt, um Distanz/Dauer IMMER anzuzeigen --- */}
-                          {/* {!(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) && ( */}
-                            <>
-                              <div>{leg.distance?.text ?? '-'}</div>
-                              <div className="text-gray-500">{leg.duration?.text ?? '-'}</div>
-                            </>
-                          {/* )} */}
-                          {/* --- Die separate "Start"-Anzeige kann entfernt werden, da jetzt die Daten angezeigt werden --- */}
-                          {/* {(index === 0 && leg.start_address?.includes(OFFICE_ADDRESS.split(',')[0])) && (
-                             <div>Start</div>
-                          )} */}
-                        </div>
-                      </div>
-                  ))}
-                </div>
-                 {/* Button zum Öffnen in Google Maps */}
-                 <button
-                    onClick={handleOpenRouteInGoogleMaps}
-                    className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm"
-                    disabled={loadingRoute || !optimizedRoute} // Deaktivieren während Laden oder wenn keine Route
-                  >
-                    <MapPin className="w-4 h-4" />
-                    In Google Maps öffnen
-                  </button>
-              </div>
-            )}
-             {/* Fallback-Anzeige, wenn nach Filterung keine Legs mehr übrig sind */}
-             {optimizedRoute?.legs && filteredLegsForDisplay.length === 0 && !loadingRoute && (
-                 <div className="text-center py-4 text-gray-500 text-sm">
-                    Keine gültigen Routenschritte nach Filterung gefunden.
-                 </div>
+           {/* Google Maps Karte */}
+           <div className="bg-white p-3 rounded-xl shadow-sm">
+             <h3 className="text-lg font-semibold mb-3 flex items-center">
+               <MapPin className="mr-2 h-5 w-5 text-primary" />
+               Interaktive Route
+             </h3>
+             <div className="h-[300px] bg-gray-100 rounded-lg">
+               <div id="tour-route-map" className="w-full h-full rounded-lg"></div>
+             </div>
+             {loadingRoute && (
+               <div className="text-center py-4">
+                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+                 <p className="text-gray-500 mt-2 text-sm">Berechne Route...</p>
+               </div>
              )}
-          </div>
+             {!loadingRoute && !optimizedRoute && tourDeals.length > 0 && (
+               <div className="text-center py-4 text-gray-500 text-sm">
+                 Klicken Sie auf "Route berechnen".
+               </div>
+             )}
+             {!loadingRoute && !optimizedRoute && tourDeals.length === 0 && (
+               <div className="text-center py-4 text-gray-500 text-sm">
+                 Fügen Sie Aufträge zur Tour hinzu, um die Route zu berechnen.
+               </div>
+             )}
+             {optimizedRoute && (
+               <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                 <p className="text-sm text-blue-800 mb-2">
+                   <strong>Hinweis:</strong> Sie können die Wegpunkte auf der Karte per Drag & Drop verschieben, um die Route manuell anzupassen.
+                 </p>
+                 <button
+                   onClick={handleOpenRouteInGoogleMaps}
+                   className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm"
+                   disabled={loadingRoute || !optimizedRoute}
+                 >
+                   <MapPin className="w-4 h-4" />
+                   In Google Maps öffnen
+                 </button>
+               </div>
+             )}
+           </div>
+
+           {/* Routenliste */}
+           <SortableRouteList 
+             optimizedRoute={optimizedRoute}
+             filteredLegsForDisplay={legsWithUpdatedPianos}
+             loadingRoute={loadingRoute}
+             onRouteReorder={handleRouteReorder}
+             stationDurations={stationDurations}
+             onDurationChange={handleDurationChange}
+             calculatedTimes={calculatedTimes}
+             totalDuration={totalTourDuration}
+             tourDeals={tourDeals}
+             manualOperationTypes={manualOperationTypes}
+             onOperationTypeChange={handleOperationTypeChange}
+           />
         </div>
       </div>
     </div>

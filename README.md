@@ -1,6 +1,95 @@
-# Getting Started with Create React App
+# Moving Assistant - Tourenplanungs-App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+
+## SPTimeSchedule Integration
+
+Die App integriert sich automatisch mit dem SPTimeSchedule-System für:
+1. **Mitarbeiter-Abfrage**: Dynamisches Laden verfügbarer Mitarbeiter basierend auf Datum und Skills
+2. **Terminbuchung**: Automatisches Erstellen von Kalendereinträgen
+
+### 🎨 Neue UI-Features
+
+- **📊 Mitarbeiter-Übersicht Panel**: Alle verfügbaren Mitarbeiter auf einen Blick mit Skills, Terminen und Ein-Klick-Zuweisung
+- **📅 Terminart-Auswahl**: Wählen Sie die passende Terminart (Klaviertransport, Umzug, Flügel, etc.) pro Tour
+
+**➡️ Siehe:** [SCHNELLSTART_NEUE_FEATURES.md](./SCHNELLSTART_NEUE_FEATURES.md) für Details
+
+### Erforderliche Umgebungsvariablen
+
+Fügen Sie folgende Variablen zu Ihrer `.env`-Datei hinzu:
+
+```bash
+# 🔑 StressFrei Solutions (SFS) API-Token
+# WICHTIG: Token von Jonathan/Administrator anfordern!
+REACT_APP_SFS_API_TOKEN=ihr-token-hier
+
+# 🌐 SFS API-URLs (Produktionssystem Riedlin)
+REACT_APP_SERVICEPROVIDER_API_URL=https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider
+REACT_APP_SPTIMESCHEDULE_API_URL=https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule
+
+# 📋 Tour-Konfiguration (Terminart-ID aus CSV-Übersetzungstabelle)
+REACT_APP_DEFAULT_TERMINART_ID=ihre-terminart-uuid-hier
+REACT_APP_DEFAULT_KENNZEICHEN=KA-RD 1234
+
+# Bestehende Pipedrive & Google Maps Variablen
+REACT_APP_PIPEDRIVE_API_TOKEN=ihr-pipedrive-token
+REACT_APP_GOOGLE_MAPS_API_KEY=ihr-google-maps-key
+# ... weitere Variablen
+```
+
+**📖 Detaillierte Setup-Anleitung:** Siehe [SETUP_ANLEITUNG.md](./SETUP_ANLEITUNG.md)
+
+### Wie es funktioniert
+
+1. **Tourenplanung**: Benutzer erstellen eine Tour mit mehreren Aufträgen
+2. **Mitarbeiter-Abfrage**: System lädt automatisch verfügbare Mitarbeiter für das gewählte Datum
+   - ✅ Verfügbare Mitarbeiter werden zuerst angezeigt
+   - ⚠️ Bereits verplante Mitarbeiter werden ausgegraut dargestellt
+3. **Mitarbeiter zuweisen**: Benutzer wählt aus den verfügbaren Mitarbeitern
+4. **Zeitplanung**: Start- und Endzeiten werden automatisch berechnet
+5. **Tour speichern**: Beim Speichern werden automatisch:
+   - Pipedrive-Projekte aktualisiert
+   - Termine im SPTimeSchedule-System für alle zugewiesenen Mitarbeiter gebucht
+
+### API-Struktur
+
+Die SPTimeSchedule-API erwartet folgende Daten pro Termin:
+
+```json
+{
+  "personalid": "uuid-des-mitarbeiters",
+  "terminart": "uuid-der-terminart",
+  "vorgangsno": "deal-id",
+  "angebotsno": "projekt-id",
+  "datum": "2025-10-02",
+  "startzeit": "09:00:00",
+  "endzeit": "17:00:00",
+  "kommentar": "Tour-Details mit Stationen",
+  "rolle": ["Monteur"],
+  "kennzeichen": "KA-RD 1234"
+}
+```
+
+### Mitarbeiter-ID Mapping
+
+Die Mitarbeiter-IDs werden **automatisch** von der ServiceProvider API geladen - keine manuelle Konfiguration nötig! 
+
+Das System:
+- Fragt verfügbare Mitarbeiter ab basierend auf Tour-Datum
+- Filtert nach benötigten Skills (LKW-Führerschein, eigenes Fahrzeug)
+- Prüft Verfügbarkeit (bereits gebuchte Termine)
+- Verwendet echte UUIDs aus dem SPTimeSchedule-System
+
+**Skill-Anforderungen anpassen**: Siehe `TourPlanner.js` Zeile 1453-1464
+
+### Terminarten & Rollen
+
+Kontaktieren Sie Ihren SPTimeSchedule-Administrator für:
+- Liste der verfügbaren Terminart-UUIDs (benötigt für `.env`)
+- Liste der verfügbaren Rollen (z.B. "Monteur", "Fahrer")
+
+**Hinweis**: Mitarbeiter-UUIDs werden automatisch abgefragt - kein manueller Export nötig!
 
 ## Available Scripts
 

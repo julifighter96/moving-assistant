@@ -15,6 +15,24 @@ const SCHLAILE_FIXED_ADDRESS = "Kaiserstraße 175, 76133 Karlsruhe, Deutschland"
 const SCHLAILE_TYPE_DELIVERY = "148";
 const SCHLAILE_TYPE_PICKUP = "149";
 
+// Terminarten-Liste (aus CSV - für Dropdown)
+const TERMINARTEN = [
+  { id: '5fd2037-9c', name: 'Klaviertransport', icon: '🎹' },
+  { id: '67179cf2-69c', name: 'Klaviertransport (Alt. 1)', icon: '🎹' },
+  { id: '63a4163-3d', name: 'Klaviertransport (Alt. 2)', icon: '🎹' },
+  { id: '3a4df8a1-23', name: 'Umzug', icon: '📦' },
+  { id: '67179cd1-9c', name: 'Flügeltransport', icon: '🎹' },
+  { id: '67179c00-e1', name: 'Flügeltransport (Alt. 1)', icon: '🎹' },
+  { id: '67179c6c-72', name: 'Flügeltransport (Alt. 2)', icon: '🎹' },
+  { id: '612f3c50-06e', name: 'Maschinen', icon: '⚙️' },
+  { id: '1c4ba741-23', name: 'Kartonanlief', icon: '📦' },
+  { id: '67179e4b-41', name: 'Kartonabhol', icon: '📦' },
+  { id: '5e3a990f-bd', name: 'Besichtigung', icon: '👁️' },
+  { id: '63930de7-e4', name: 'Aufstellung', icon: '🔧' },
+  { id: '67179f19-4c', name: 'Abholung', icon: '📍' },
+  { id: '63932fa1-44', name: 'Laden TÜR', icon: '🚪' }
+];
+
 // Definiere die PipedriveDeal und TourArea als separate Komponenten außerhalb der Hauptkomponente
 const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
   const [{ isDragging }, drag] = useDrag(() => ({
@@ -119,7 +137,7 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
 };
 
 // Sortierbarer Routenpunkt Komponente
-const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationChange, calculatedTime, tourDeals, manualOperationType, onOperationTypeChange }) => {
+const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationChange, calculatedTime, tourDeals, manualOperationType, onOperationTypeChange, dealPairInfo }) => {
   const ref = React.useRef(null);
   
   const [{ isDragging: isDraggingItem }, drag] = useDrag(() => ({
@@ -169,28 +187,47 @@ const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationCha
 
   // Verwende den effektiven Operationstyp aus dem Leg (wurde bereits in legsWithUpdatedPianos berechnet)
   const effectiveOperationType = leg.effectiveOperationType || leg.operationType || 'intermediate';
+  
+  // Prüfe auf Reihenfolge-Fehler
+  const hasOrderError = dealPairInfo?.hasError || false;
+  const pairColor = dealPairInfo?.color || null;
+  const pairNumber = dealPairInfo?.pairNumber || null;
+  const pairType = dealPairInfo?.type || null; // 'pickup' oder 'delivery'
 
   return (
-    <div className="border-b last:border-b-0 bg-white group">
+    <div className={`border-b last:border-b-0 bg-white group ${hasOrderError ? 'bg-red-50' : ''}`}>
       <div
         ref={ref}
         className={`flex items-center justify-between p-3 cursor-move hover:bg-gray-50 transition-colors ${
           isDraggingItem ? 'opacity-50 border-dashed' : ''
-        } ${isOver ? 'bg-blue-50 border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent'}`}
+        } ${isOver ? 'bg-blue-50 border-l-4 border-l-blue-500' : hasOrderError ? 'border-l-4 border-l-red-500' : pairColor ? `border-l-4 border-l-[${pairColor}]` : 'border-l-4 border-l-transparent'}`}
+        style={pairColor && !isOver && !hasOrderError ? { borderLeftColor: pairColor } : {}}
       >
         <div className="flex items-center space-x-3 flex-1">
           <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
-              effectiveOperationType === 'beladung' ? 'bg-blue-500 text-white' :
-              effectiveOperationType === 'entladung' ? 'bg-orange-500 text-white' :
-              effectiveOperationType === 'neutral' ? 'bg-purple-500 text-white' :
-              leg.stopType === 'pickup' ? 'bg-blue-500 text-white' :
-              leg.stopType === 'delivery' ? 'bg-orange-500 text-white' :
-              'bg-gray-500 text-white'
-            }`}>
-              {index + 1}
-            </span>
+            <div className="relative">
+              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+                effectiveOperationType === 'beladung' ? 'bg-blue-500 text-white' :
+                effectiveOperationType === 'entladung' ? 'bg-orange-500 text-white' :
+                effectiveOperationType === 'neutral' ? 'bg-purple-500 text-white' :
+                leg.stopType === 'pickup' ? 'bg-blue-500 text-white' :
+                leg.stopType === 'delivery' ? 'bg-orange-500 text-white' :
+                'bg-gray-500 text-white'
+              }`}>
+                {index + 1}
+              </span>
+              {/* Paar-Nummer Badge */}
+              {pairNumber && (
+                <span 
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center text-white"
+                  style={{ backgroundColor: pairColor }}
+                  title={`Deal-Paar ${pairNumber}`}
+                >
+                  {pairNumber}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex flex-col flex-1 min-w-0">
             {/* Hauptadresse (Zieladresse = Station) */}
@@ -233,6 +270,16 @@ const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationCha
                     <span className="text-[10px]">({leg.pianoChange})</span>
                   )}
                 </span>
+              )}
+              
+              {/* Warnung bei falscher Reihenfolge */}
+              {hasOrderError && (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-800 rounded text-xs font-semibold">
+                  <span>⚠️ Falsche Reihenfolge!</span>
+                  {pairType === 'delivery' && (
+                    <span className="text-[10px]">Entladung vor Beladung</span>
+                  )}
+                </div>
               )}
             </div>
             
@@ -345,7 +392,7 @@ const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationCha
 };
 
 // Sortierbare Routenliste Komponente
-const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRoute, onRouteReorder, stationDurations, onDurationChange, calculatedTimes, totalDuration, tourDeals, manualOperationTypes, onOperationTypeChange }) => {
+const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRoute, onRouteReorder, stationDurations, onDurationChange, calculatedTimes, totalDuration, tourDeals, manualOperationTypes, onOperationTypeChange, dealPairInfos }) => {
   return (
     <div className="bg-white p-4 rounded-xl shadow-sm">
       <h3 className="text-lg font-semibold mb-3 flex items-center">
@@ -358,6 +405,9 @@ const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRout
         </p>
         <p className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded inline-block">
           💡 Automatik: Abholadresse = ↑ Beladung, Lieferadresse = ↓ Entladung
+        </p>
+        <p className="text-xs text-purple-600 bg-purple-50 px-2 py-1 rounded inline-block">
+          🔗 Gleiche Farbe & Nummer = Zusammengehörige Be-/Entladung
         </p>
       </div>
       
@@ -396,6 +446,7 @@ const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRout
                 tourDeals={tourDeals}
                 manualOperationType={manualOperationTypes[index]}
                 onOperationTypeChange={onOperationTypeChange}
+                dealPairInfo={dealPairInfos[index]}
               />
             ))}
           </div>
@@ -405,6 +456,167 @@ const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRout
       {optimizedRoute?.legs && filteredLegsForDisplay.length === 0 && !loadingRoute && (
         <div className="text-center py-4 text-gray-500 text-sm">
           Keine gültigen Routenschritte nach Filterung gefunden.
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Mitarbeiter-Übersicht Panel Komponente
+const EmployeeOverviewPanel = ({ availableEmployees, loadingEmployees, selectedDate, onEmployeeAdd, assignedEmployees }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Filtere bereits zugewiesene Mitarbeiter aus
+  const availableToAdd = availableEmployees.filter(emp => 
+    !assignedEmployees.some(assigned => assigned.id === emp.id)
+  );
+  
+  const availableCount = availableToAdd.filter(emp => emp.isAvailable).length;
+  const busyCount = availableToAdd.filter(emp => !emp.isAvailable).length;
+  
+  return (
+    <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between text-left hover:bg-gray-50 p-2 rounded-lg transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-semibold flex items-center">
+            <Building className="mr-2 h-5 w-5 text-primary" />
+            Mitarbeiter-Übersicht
+          </h3>
+          {!loadingEmployees && (
+            <span className="text-sm text-gray-500">
+              ({availableCount} verfügbar, {busyCount} verplant)
+            </span>
+          )}
+        </div>
+        <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+      </button>
+      
+      {isExpanded && (
+        <div className="mt-4 space-y-2">
+          {loadingEmployees ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+              <p className="text-gray-500 mt-2 text-sm">Lade Mitarbeiter...</p>
+            </div>
+          ) : availableToAdd.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">
+              {availableEmployees.length === 0 
+                ? 'Keine Mitarbeiter für dieses Datum gefunden.' 
+                : 'Alle verfügbaren Mitarbeiter sind bereits zugewiesen.'}
+            </div>
+          ) : (
+            <>
+              {/* Verfügbare Mitarbeiter */}
+              {availableToAdd.filter(emp => emp.isAvailable).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-green-700 mb-2 flex items-center">
+                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                    Verfügbar ({availableToAdd.filter(emp => emp.isAvailable).length})
+                  </h4>
+                  <div className="space-y-2">
+                    {availableToAdd.filter(emp => emp.isAvailable).map(employee => (
+                      <div 
+                        key={employee.id}
+                        className="border border-green-200 rounded-lg p-3 bg-green-50 hover:bg-green-100 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-gray-900">{employee.name}</span>
+                              <span className="text-green-600 text-xs">✓ Verfügbar</span>
+                            </div>
+                            {/* Skills anzeigen */}
+                            {employee.eigenschaften && Object.keys(employee.eigenschaften).length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {employee.eigenschaften.personal_properties_Fhrerscheinklasse && (
+                                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                    🚗 {employee.eigenschaften.personal_properties_Fhrerscheinklasse}
+                                  </span>
+                                )}
+                                {employee.eigenschaften.personal_properties_Klavierträger === 'Ja' && (
+                                  <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                                    🎹 Klavierträger
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => onEmployeeAdd({ 
+                              id: employee.id, 
+                              name: employee.name,
+                              isAvailable: true 
+                            })}
+                            className="ml-2 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                          >
+                            Hinzufügen
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Verplante Mitarbeiter */}
+              {availableToAdd.filter(emp => !emp.isAvailable).length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold text-yellow-700 mb-2 flex items-center">
+                    <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
+                    Verplant ({availableToAdd.filter(emp => !emp.isAvailable).length})
+                  </h4>
+                  <div className="space-y-2">
+                    {availableToAdd.filter(emp => !emp.isAvailable).map(employee => (
+                      <div 
+                        key={employee.id}
+                        className="border border-yellow-200 rounded-lg p-3 bg-yellow-50"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-gray-900">{employee.name}</span>
+                              <span className="text-yellow-600 text-xs">⚠️ Verplant</span>
+                            </div>
+                            {/* Termine anzeigen */}
+                            {employee.termine && employee.termine.length > 0 && (
+                              <div className="mt-1 text-xs text-gray-600">
+                                <details className="cursor-pointer">
+                                  <summary className="hover:text-gray-800">
+                                    {employee.termine.length} Termin{employee.termine.length > 1 ? 'e' : ''}
+                                  </summary>
+                                  <div className="mt-1 pl-2 space-y-1">
+                                    {employee.termine.slice(0, 3).map((termin, idx) => (
+                                      <div key={idx} className="text-xs">
+                                        • {termin.startzeit || '?'} - {termin.endzeit || '?'}: {termin.terminart || 'Termin'}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => onEmployeeAdd({ 
+                              id: employee.id, 
+                              name: employee.name,
+                              isAvailable: false 
+                            })}
+                            className="ml-2 px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 transition-colors"
+                            title="Trotzdem hinzufügen (Überbuchung!)"
+                          >
+                            Trotzdem +
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -434,7 +646,11 @@ const TourArea = ({
   onTourStartTimeChange,
   assignedEmployees,
   onEmployeeAdd,
-  onEmployeeRemove
+  onEmployeeRemove,
+  availableEmployees, // NEU: Verfügbare Mitarbeiter
+  loadingEmployees, // NEU: Lade-Status
+  selectedTerminartId, // NEU: Gewählte Terminart
+  onTerminartChange // NEU: Terminart ändern
 }) => {
   return (
     <div
@@ -489,6 +705,21 @@ const TourArea = ({
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
             />
           </div>
+          <div className="flex-1 min-w-[200px]">
+            <label htmlFor="terminart" className="block text-xs font-medium text-gray-500 mb-1">Terminart</label>
+            <select
+              id="terminart"
+              value={selectedTerminartId}
+              onChange={(e) => onTerminartChange(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm bg-white"
+            >
+              {TERMINARTEN.map(terminart => (
+                <option key={terminart.id} value={terminart.id}>
+                  {terminart.icon} {terminart.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         
         {/* Mitarbeiter für die gesamte Tour */}
@@ -498,8 +729,19 @@ const TourArea = ({
             
             {/* Bestehende Mitarbeiter anzeigen */}
             {assignedEmployees.map((employee, index) => (
-              <div key={index} className="flex items-center gap-1 bg-white px-2 py-1 rounded border text-sm">
+              <div 
+                key={index} 
+                className={`flex items-center gap-1 px-2 py-1 rounded border text-sm ${
+                  employee.isAvailable === false 
+                    ? 'bg-yellow-50 border-yellow-300' 
+                    : 'bg-white border-gray-300'
+                }`}
+                title={employee.isAvailable === false ? 'Achtung: Mitarbeiter bereits verplant!' : ''}
+              >
                 <span className="font-medium">{employee.name}</span>
+                {employee.isAvailable === false && (
+                  <span className="text-yellow-600 text-xs">⚠️</span>
+                )}
                 <button
                   onClick={() => onEmployeeRemove(index)}
                   className="text-red-500 hover:text-red-700 ml-1"
@@ -514,9 +756,13 @@ const TourArea = ({
             <select
               onChange={(e) => {
                 if (e.target.value) {
+                  const selectedEmployee = e.target.options[e.target.selectedIndex];
+                  const isAvailable = selectedEmployee.dataset.available === 'true';
+                  
                   onEmployeeAdd({
                     id: e.target.value,
-                    name: e.target.options[e.target.selectedIndex].text
+                    name: selectedEmployee.text.replace(/\s*\(.*?\)\s*$/, ''), // Entferne Status-Suffix
+                    isAvailable: isAvailable
                   });
                   e.target.value = '';
                 }
@@ -525,11 +771,39 @@ const TourArea = ({
               defaultValue=""
             >
               <option value="">+ Mitarbeiter hinzufügen</option>
-              <option value="emp1">Max Mustermann</option>
-              <option value="emp2">Anna Schmidt</option>
-              <option value="emp3">Tom Weber</option>
-              <option value="emp4">Lisa Müller</option>
-              <option value="emp5">Peter Klein</option>
+              {/* Lade-Indikator */}
+              {loadingEmployees && (
+                <option disabled>Lade Mitarbeiter...</option>
+              )}
+              {/* Verfügbare Mitarbeiter zuerst */}
+              {!loadingEmployees && availableEmployees.filter(emp => emp.isAvailable).map(employee => (
+                <option 
+                  key={employee.id} 
+                  value={employee.id}
+                  data-available="true"
+                >
+                  {employee.name} ✓
+                </option>
+              ))}
+              {/* Nicht verfügbare Mitarbeiter (ausgegraut) */}
+              {!loadingEmployees && availableEmployees.filter(emp => !emp.isAvailable).length > 0 && (
+                <optgroup label="─── Bereits verplant ───">
+                  {availableEmployees.filter(emp => !emp.isAvailable).map(employee => (
+                    <option 
+                      key={employee.id} 
+                      value={employee.id}
+                      data-available="false"
+                      style={{ color: '#999' }}
+                    >
+                      {employee.name} (verplant)
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {/* Fallback wenn keine Mitarbeiter gefunden */}
+              {!loadingEmployees && availableEmployees.length === 0 && (
+                <option disabled>Keine Mitarbeiter verfügbar</option>
+              )}
             </select>
           </div>
         </div>
@@ -790,6 +1064,17 @@ const TourPlannerContent = () => {
   const SCHLAILE_DELIVERY_FLOOR_FIELD_KEY = "2c2118401f79c6d3276e7bce4aaa41e4decd7592";
   
   const OFFICE_POSTAL_PREFIX = OFFICE_ADDRESS.match(/\b(\d{2})\d{3}\b/)?.[1] || "76";
+  
+  // --- KONSTANTEN FÜR SPTIMESCHEDULE API ---
+  const SPTIMESCHEDULE_API_URL = process.env.REACT_APP_SPTIMESCHEDULE_API_URL || 'https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule';
+  const DEFAULT_TERMINART_ID = process.env.REACT_APP_DEFAULT_TERMINART_ID || '3fa85f64-5717-4562-b3fc-2c963f66afa6'; // Bitte echte ID in .env setzen
+  const DEFAULT_KENNZEICHEN = process.env.REACT_APP_DEFAULT_KENNZEICHEN || 'KA-RD 1234';
+  
+  // --- KONSTANTEN FÜR SERVICEPROVIDER API ---
+  const SERVICEPROVIDER_API_URL = process.env.REACT_APP_SERVICEPROVIDER_API_URL || 'https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider';
+  
+  // --- API TOKEN (für Authentifizierung) ---
+  const SFS_API_TOKEN = process.env.REACT_APP_SFS_API_TOKEN; // Token von Jonathan/Administrator
   // --- ENDE KONSTANTEN ---
 
   const [allDeals, setAllDeals] = useState([]);
@@ -812,6 +1097,15 @@ const TourPlannerContent = () => {
   const [dealSpecificData, setDealSpecificData] = useState({});
   // Mitarbeiter für die gesamte Tour: [{ id: "emp1", name: "Max Mustermann" }]
   const [assignedEmployees, setAssignedEmployees] = useState([]);
+  // Verfügbare Mitarbeiter vom ServiceProvider
+  const [availableEmployees, setAvailableEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  // Mitarbeiter-Übersicht Panel (aufgeklappt/zugeklappt)
+  const [showEmployeePanel, setShowEmployeePanel] = useState(false);
+  // Gewählte Terminart für diese Tour (nutze direkt env oder Fallback)
+  const [selectedTerminartId, setSelectedTerminartId] = useState(
+    process.env.REACT_APP_DEFAULT_TERMINART_ID || '5fd2037-9c'
+  );
   // Startzeit der Tour
   const [tourStartTime, setTourStartTime] = useState('08:00');
   // Dauer an jeder Station: { legIndex: durationInMinutes }
@@ -1392,6 +1686,84 @@ const TourPlannerContent = () => {
     setAssignedEmployees(prev => prev.filter((_, i) => i !== index));
   }, []);
 
+  // Lade verfügbare Mitarbeiter vom ServiceProvider
+  const fetchAvailableEmployees = useCallback(async (date) => {
+    if (!date || !isValid(date)) return;
+
+    setLoadingEmployees(true);
+    
+    try {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      
+      const requestBody = {
+        date_from: dateStr,
+        date_to: dateStr,
+        skill: {
+          personal_properties_Fhrerscheinklasse: ["C1", "C", "CE", "C1E"],
+          personal_properties_Auto: "Ja"
+          // Optional: Weitere spezifische Anforderungen
+          // personal_properties_Klavierträger: "Ja",
+          // personal_properties_Vorarbeiter: "Ja",
+          // personal_properties_Montagen: "Ja",
+          // OR: {
+          //   personal_properties_Klavierträger: "Ja",
+          //   personal_properties_Vorarbeiter: "Ja"
+          // }
+        },
+        joins: [
+          "Vertraege",
+          "Eigenschaften",
+          "Termine"
+        ]
+      };
+
+      if (!SFS_API_TOKEN) {
+        console.error('Kein API-Token konfiguriert! Bitte REACT_APP_SFS_API_TOKEN in .env setzen.');
+        setAvailableEmployees([]);
+        setLoadingEmployees(false);
+        return;
+      }
+
+      const response = await axios.post(SERVICEPROVIDER_API_URL, requestBody, {
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SFS_API_TOKEN}`
+        }
+      });
+
+      if (response.data && Array.isArray(response.data)) {
+        const employees = response.data.map(emp => ({
+          id: emp.id || emp.personalid || emp.uuid,
+          name: emp.name || `${emp.vorname || ''} ${emp.nachname || ''}`.trim() || 'Unbekannt',
+          eigenschaften: emp.Eigenschaften || {},
+          vertraege: emp.Vertraege || [],
+          termine: emp.Termine || [],
+          isAvailable: !emp.Termine || emp.Termine.length === 0 || 
+                       !emp.Termine.some(termin => {
+                         return termin.datum === dateStr;
+                       })
+        }));
+
+        setAvailableEmployees(employees);
+      } else {
+        setAvailableEmployees([]);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Mitarbeiter:', error);
+      setAvailableEmployees([]);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  }, [SERVICEPROVIDER_API_URL, SFS_API_TOKEN]);
+
+  // Lade verfügbare Mitarbeiter wenn sich das Tour-Datum ändert
+  useEffect(() => {
+    if (selectedDate && isValid(selectedDate)) {
+      fetchAvailableEmployees(selectedDate);
+    }
+  }, [selectedDate, fetchAvailableEmployees]);
+
   // Dauer an einer Station ändern
   const handleDurationChange = useCallback((legIndex, durationValue) => {
     const duration = durationValue === '' ? 0 : parseInt(durationValue, 10);
@@ -1430,10 +1802,6 @@ const TourPlannerContent = () => {
     let currentLoadedPianos = 0;
     
     console.log('[Klavierberechnung] === START ===');
-    console.log('[Klavierberechnung] Anzahl Legs:', updatedLegs.length);
-    updatedLegs.forEach((leg, i) => {
-      console.log(`[Klavierberechnung] Leg ${i} hat consolidatedDeals:`, leg.consolidatedDeals?.length || 0, leg.consolidatedDeals);
-    });
     
     // Hilfsfunktion: Ist Adresse Schlaile?
     const isSchlaileAddr = (addr) => addr?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]);
@@ -1454,12 +1822,10 @@ const TourPlannerContent = () => {
       // REGEL 1: Schlaile - kann mehrere Klaviere auf einmal haben
       if (isSchlaileAddr(endAddr)) {
         // Bei Schlaile ankommen
-        console.log(`  → Schlaile erkannt, consolidatedDeals:`, leg.consolidatedDeals);
         if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
           // Zähle alle Deals an dieser Schlaile-Station
           const deliveryDeals = leg.consolidatedDeals.filter(d => d.type === 'delivery_from_schlaile');
           const pickupDeals = leg.consolidatedDeals.filter(d => d.type === 'pickup_to_schlaile');
-          console.log(`  → deliveryDeals: ${deliveryDeals.length}, pickupDeals: ${pickupDeals.length}`);
           
           if (deliveryDeals.length > 0) {
             // Beladung von Schlaile für spätere Lieferungen
@@ -1567,6 +1933,89 @@ const TourPlannerContent = () => {
     return updatedLegs;
   }, [filteredLegsForDisplay, manualOperationTypes, SCHLAILE_FIXED_ADDRESS, OFFICE_ADDRESS]);
 
+  // Berechne Deal-Paare und Reihenfolge-Fehler
+  const dealPairInfos = useMemo(() => {
+    if (!legsWithUpdatedPianos || legsWithUpdatedPianos.length === 0) {
+      return [];
+    }
+
+    // Farben für die Paare (rotierend)
+    const pairColors = [
+      '#8B5CF6', // Lila
+      '#EF4444', // Rot
+      '#10B981', // Grün
+      '#F59E0B', // Orange
+      '#3B82F6', // Blau
+      '#EC4899', // Pink
+      '#14B8A6', // Türkis
+      '#F97316', // Orange-Rot
+    ];
+
+    const infos = new Array(legsWithUpdatedPianos.length).fill(null);
+    const dealPairs = new Map(); // dealId -> { pickupIndex, deliveryIndex, pairNumber, color }
+    let pairNumber = 1;
+
+    // Schritt 1: Finde alle Deal-Paare (normale Umzüge)
+    tourDeals.forEach(deal => {
+      const isSchlaileDeal = !!deal.schlaileType;
+      if (isSchlaileDeal) return; // Schlaile-Deals separat behandeln
+
+      let pickupIndex = -1;
+      let deliveryIndex = -1;
+
+      // Finde Beladung (origin) und Entladung (destination)
+      legsWithUpdatedPianos.forEach((leg, index) => {
+        if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+          leg.consolidatedDeals.forEach(cd => {
+            if (cd.dealId === deal.id) {
+              if (cd.type === 'normal_origin') {
+                pickupIndex = index;
+              } else if (cd.type === 'normal_dest') {
+                deliveryIndex = index;
+              }
+            }
+          });
+        }
+      });
+
+      // Wenn beide gefunden, füge Paar hinzu
+      if (pickupIndex !== -1 && deliveryIndex !== -1) {
+        const color = pairColors[(pairNumber - 1) % pairColors.length];
+        const hasError = deliveryIndex < pickupIndex; // Fehler: Entladung vor Beladung
+
+        dealPairs.set(deal.id, {
+          pickupIndex,
+          deliveryIndex,
+          pairNumber,
+          color,
+          hasError
+        });
+
+        // Setze Info für Beladung
+        infos[pickupIndex] = {
+          pairNumber,
+          color,
+          type: 'pickup',
+          hasError: false, // Beladung selbst hat keinen Fehler
+          dealId: deal.id
+        };
+
+        // Setze Info für Entladung
+        infos[deliveryIndex] = {
+          pairNumber,
+          color,
+          type: 'delivery',
+          hasError: hasError, // Entladung hat Fehler, wenn sie vor Beladung kommt
+          dealId: deal.id
+        };
+
+        pairNumber++;
+      }
+    });
+
+    return infos;
+  }, [legsWithUpdatedPianos, tourDeals]);
+
   // Berechne die Zeiten für jede Station
   const calculatedTimes = useMemo(() => {
     if (!optimizedRoute?.legs || !tourStartTime || legsWithUpdatedPianos.length === 0) {
@@ -1628,6 +2077,69 @@ const TourPlannerContent = () => {
 
     return totalDrivingTime + totalStationTime;
   }, [optimizedRoute, stationDurations, legsWithUpdatedPianos]);
+
+  // Funktion zum Speichern der Termine im SPTimeSchedule System
+  const saveTourToSPTimeSchedule = useCallback(async (tourInfo) => {
+    const { tourDate, tourId, employees, stations } = tourInfo;
+    
+    if (!employees || employees.length === 0) {
+      return { success: true, skipped: true };
+    }
+
+    try {
+      const appointments = employees.map(employee => {
+        const firstStation = stations[0];
+        const lastStation = stations[stations.length - 1];
+        
+        const startzeit = firstStation?.startTime || tourStartTime || '08:00';
+        const endzeit = lastStation?.endTime || '17:00';
+        
+        const stationsText = stations.map((station, idx) => 
+          `${idx + 1}. ${station.legDescription} (${station.startTime}${station.duration > 0 ? ` - ${station.endTime}` : ''})`
+        ).join(', ');
+        
+        const kommentar = `Tour: ${tourId} | Stationen: ${stationsText}`;
+        
+        return {
+          personalid: employee.id,
+          terminart: tourInfo.selectedTerminartId || '5fd2037-9c',
+          vorgangsno: tourDeals[0]?.dealId?.toString() || '',
+          angebotsno: tourDeals[0]?.id?.toString() || '',
+          datum: format(tourDate, 'yyyy-MM-dd'),
+          startzeit: startzeit.length === 5 ? `${startzeit}:00` : startzeit,
+          endzeit: endzeit.length === 5 ? `${endzeit}:00` : endzeit,
+          kommentar: kommentar.substring(0, 500),
+          rolle: ['Monteur'],
+          kennzeichen: DEFAULT_KENNZEICHEN
+        };
+      });
+
+      if (!SFS_API_TOKEN) {
+        console.error('Kein API-Token konfiguriert! Bitte REACT_APP_SFS_API_TOKEN in .env setzen.');
+        return { success: false, error: 'API-Token fehlt. Bitte Administrator kontaktieren.' };
+      }
+
+      const response = await axios.post(SPTIMESCHEDULE_API_URL, appointments, {
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SFS_API_TOKEN}`
+        }
+      });
+
+      if (response.status === 200 || response.status === 201) {
+        return { success: true, data: response.data };
+      } else {
+        return { success: false, error: `Unerwarteter Status: ${response.status}` };
+      }
+    } catch (error) {
+      console.error('Fehler beim Erstellen der Termine:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.message || error.message || 'Unbekannter Fehler beim Terminbuchen'
+      };
+    }
+  }, [tourStartTime, tourDeals, DEFAULT_KENNZEICHEN, SPTIMESCHEDULE_API_URL, SFS_API_TOKEN]);
 
   // Tour speichern - ÜBERARBEITET
   const handleSaveTour = useCallback(async () => {
@@ -1742,6 +2254,18 @@ const TourPlannerContent = () => {
 
     await Promise.all(updatePromises);
 
+    // Speichere Termine im SPTimeSchedule System
+    let scheduleResult = null;
+    if (assignedEmployees.length > 0 && stationTimeInfo.length > 0) {
+      scheduleResult = await saveTourToSPTimeSchedule({
+        tourDate: selectedDate,
+        tourId: finalTourId,
+        employees: employeeInfo,
+        stations: stationTimeInfo,
+        selectedTerminartId: selectedTerminartId // NEU: Gewählte Terminart übergeben
+      });
+    }
+
     setIsSavingTour(false); // End loading
 
     // Zeige die gespeicherte Reihenfolge und Mitarbeiter-Zuweisungen in der Erfolgsmeldung
@@ -1772,13 +2296,25 @@ const TourPlannerContent = () => {
         timeInfoText += `\n\n===================\nGesamtdauer (Fahrt + Arbeit): ${totalTourDuration} Min.`;
       }
     }
+
+    // Füge SPTimeSchedule-Status zur Meldung hinzu
+    let scheduleInfoText = '';
+    if (scheduleResult) {
+      if (scheduleResult.success && !scheduleResult.skipped) {
+        scheduleInfoText = '\n\n✅ Termine erfolgreich im Kalender gebucht!';
+      } else if (scheduleResult.skipped) {
+        scheduleInfoText = '\n\nℹ️ Keine Termine gebucht (keine Mitarbeiter zugewiesen).';
+      } else {
+        scheduleInfoText = `\n\n⚠️ Terminbuchung fehlgeschlagen: ${scheduleResult.error}`;
+      }
+    }
     
     if (errorCount === 0) {
-      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${employeeInfoText}${timeInfoText}\n\n${successCount} Projekte erfolgreich aktualisiert.`);
+      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${employeeInfoText}${timeInfoText}${scheduleInfoText}\n\n${successCount} Projekte erfolgreich aktualisiert.`);
     } else {
-      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${employeeInfoText}${timeInfoText}\n\n${successCount} Projekte aktualisiert, ${errorCount} Fehler aufgetreten. Details siehe Konsole.`);
+      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${employeeInfoText}${timeInfoText}${scheduleInfoText}\n\n${successCount} Projekte aktualisiert, ${errorCount} Fehler aufgetreten. Details siehe Konsole.`);
     }
-  }, [selectedDate, tourDeals, tourName, TARGET_PHASE_ID, PROJECT_TOUR_DATE_FIELD_KEY, PROJECT_TOUR_ID_FIELD_KEY, assignedEmployees, optimizedRoute, calculatedTimes, tourStartTime, totalTourDuration, legsWithUpdatedPianos]);
+  }, [selectedDate, tourDeals, tourName, TARGET_PHASE_ID, PROJECT_TOUR_DATE_FIELD_KEY, PROJECT_TOUR_ID_FIELD_KEY, assignedEmployees, optimizedRoute, calculatedTimes, tourStartTime, totalTourDuration, legsWithUpdatedPianos, saveTourToSPTimeSchedule, selectedTerminartId]);
 
   // calculateOptimizedRoute (useCallback bleibt, aber fixWaypointOrder ist jetzt stabil)
   const calculateOptimizedRoute = useCallback(async () => {
@@ -2965,6 +3501,15 @@ const TourPlannerContent = () => {
          </div>
 
          <div className="space-y-4">
+          {/* NEU: Mitarbeiter-Übersicht Panel */}
+          <EmployeeOverviewPanel
+            availableEmployees={availableEmployees}
+            loadingEmployees={loadingEmployees}
+            selectedDate={selectedDate}
+            onEmployeeAdd={handleEmployeeAdd}
+            assignedEmployees={assignedEmployees}
+          />
+          
           <TourArea
             isOver={isOver}
             drop={drop}
@@ -2988,6 +3533,10 @@ const TourPlannerContent = () => {
             assignedEmployees={assignedEmployees}
             onEmployeeAdd={handleEmployeeAdd}
             onEmployeeRemove={handleEmployeeRemove}
+            availableEmployees={availableEmployees}
+            loadingEmployees={loadingEmployees}
+            selectedTerminartId={selectedTerminartId}
+            onTerminartChange={setSelectedTerminartId}
           />
 
            {/* Google Maps Karte */}
@@ -3045,6 +3594,7 @@ const TourPlannerContent = () => {
              tourDeals={tourDeals}
              manualOperationTypes={manualOperationTypes}
              onOperationTypeChange={handleOperationTypeChange}
+             dealPairInfos={dealPairInfos}
            />
         </div>
       </div>

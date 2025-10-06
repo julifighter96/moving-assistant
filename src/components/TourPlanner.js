@@ -1688,12 +1688,19 @@ const TourPlannerContent = () => {
 
   // Lade verfügbare Mitarbeiter vom ServiceProvider
   const fetchAvailableEmployees = useCallback(async (date) => {
-    if (!date || !isValid(date)) return;
+    console.log('🔍 [DEBUG] fetchAvailableEmployees aufgerufen mit Datum:', date);
+    
+    if (!date || !isValid(date)) {
+      console.log('❌ [DEBUG] Datum ungültig oder fehlt');
+      return;
+    }
 
+    console.log('⏳ [DEBUG] Starte Mitarbeiter-Laden...');
     setLoadingEmployees(true);
     
     try {
       const dateStr = format(date, 'yyyy-MM-dd');
+      console.log('📅 [DEBUG] Formatiertes Datum:', dateStr);
       
       const requestBody = {
         date_from: dateStr,
@@ -1717,50 +1724,74 @@ const TourPlannerContent = () => {
         ]
       };
 
+      console.log('🔑 [DEBUG] API Token vorhanden?', !!SFS_API_TOKEN);
+      console.log('🌐 [DEBUG] API URL:', SERVICEPROVIDER_API_URL);
+      
       if (!SFS_API_TOKEN) {
-        console.error('Kein API-Token konfiguriert! Bitte REACT_APP_SFS_API_TOKEN in .env setzen.');
+        console.error('❌ Kein API-Token konfiguriert! Bitte REACT_APP_SFS_API_TOKEN in .env setzen.');
         setAvailableEmployees([]);
         setLoadingEmployees(false);
         return;
       }
 
+      console.log('📤 [DEBUG] Sende Request an API...');
+      console.log('📋 [DEBUG] Request Body:', JSON.stringify(requestBody, null, 2));
+
       const response = await axios.post(SERVICEPROVIDER_API_URL, requestBody, {
         headers: {
           'accept': 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SFS_API_TOKEN}`
+          'Authorization': `${SFS_API_TOKEN}`
         }
       });
 
-      if (response.data && Array.isArray(response.data)) {
-        const employees = response.data.map(emp => ({
-          id: emp.id || emp.personalid || emp.uuid,
-          name: emp.name || `${emp.vorname || ''} ${emp.nachname || ''}`.trim() || 'Unbekannt',
-          eigenschaften: emp.Eigenschaften || {},
-          vertraege: emp.Vertraege || [],
-          termine: emp.Termine || [],
-          isAvailable: !emp.Termine || emp.Termine.length === 0 || 
-                       !emp.Termine.some(termin => {
-                         return termin.datum === dateStr;
-                       })
-        }));
+      console.log('✅ [DEBUG] API Response erhalten:', response.status);
+      console.log('📊 [DEBUG] Response Data:', response.data);
 
+      if (response.data && Array.isArray(response.data)) {
+        console.log('👥 [DEBUG] Anzahl Mitarbeiter in Response:', response.data.length);
+        
+        const employees = response.data.map(item => {
+          // Die API gibt { Teammitglied: {...} } zurück, nicht direkt die Daten
+          const emp = item.Teammitglied || item;
+          
+          return {
+            id: emp.Id || emp.id || emp.personalid || emp.uuid,
+            name: emp.name || `${emp.Vorname || emp.vorname || ''} ${emp.Nachname || emp.nachname || ''}`.trim() || 'Unbekannt',
+            eigenschaften: item.Eigenschaften || emp.Eigenschaften || {},
+            vertraege: item.Vertraege || emp.Vertraege || [],
+            termine: item.Termine || emp.Termine || [],
+            isAvailable: !item.Termine || item.Termine.length === 0 || 
+                         !item.Termine.some(termin => {
+                           return termin.datum === dateStr;
+                         })
+          };
+        });
+
+        console.log('✅ [DEBUG] Mitarbeiter verarbeitet:', employees);
         setAvailableEmployees(employees);
       } else {
+        console.warn('⚠️ [DEBUG] Response ist kein Array oder leer');
         setAvailableEmployees([]);
       }
     } catch (error) {
-      console.error('Fehler beim Laden der Mitarbeiter:', error);
+      console.error('❌ [DEBUG] Fehler beim Laden der Mitarbeiter:', error);
+      console.error('📋 [DEBUG] Fehler Details:', error.response?.data || error.message);
       setAvailableEmployees([]);
     } finally {
+      console.log('🏁 [DEBUG] Mitarbeiter-Laden abgeschlossen');
       setLoadingEmployees(false);
     }
   }, [SERVICEPROVIDER_API_URL, SFS_API_TOKEN]);
 
   // Lade verfügbare Mitarbeiter wenn sich das Tour-Datum ändert
   useEffect(() => {
+    console.log('🔄 [DEBUG] useEffect für Mitarbeiter-Laden triggered. Datum:', selectedDate);
     if (selectedDate && isValid(selectedDate)) {
+      console.log('✅ [DEBUG] Datum ist valid, rufe fetchAvailableEmployees auf...');
       fetchAvailableEmployees(selectedDate);
+    } else {
+      console.log('❌ [DEBUG] Datum ist nicht valid');
     }
   }, [selectedDate, fetchAvailableEmployees]);
 
@@ -2123,7 +2154,7 @@ const TourPlannerContent = () => {
         headers: {
           'accept': 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SFS_API_TOKEN}`
+          'Authorization': `${SFS_API_TOKEN}`
         }
       });
 

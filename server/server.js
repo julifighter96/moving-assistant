@@ -1419,10 +1419,136 @@ Antworte im folgenden JSON-Format:
       }
     });
 
+    // ============================================
+    // 🔄 StressFrei Solutions API Proxy (CORS-Workaround)
+    // ============================================
+    
+    // Proxy für ServiceProvider API
+    app.post('/api/serviceprovider/getServiceprovider', async (req, res) => {
+      const timestamp = new Date().toISOString();
+      console.log('\n' + '='.repeat(80));
+      console.log(`🔄 [PROXY] ${timestamp}`);
+      console.log('='.repeat(80));
+      console.log('📥 Anfrage von Frontend erhalten!');
+      console.log('   Endpoint: /api/serviceprovider/getServiceprovider');
+      console.log('   Client IP:', req.ip || req.connection.remoteAddress);
+      console.log('   Authorization:', req.headers.authorization ? '✅ Bearer Token vorhanden' : '❌ Kein Token!');
+      console.log('   Body:', JSON.stringify(req.body, null, 2));
+      
+      try {
+        console.log('\n📤 Leite Anfrage weiter an StressFrei Solutions API...');
+        console.log('   URL: https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider');
+        
+        const response = await axios.post(
+          'https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider',
+          req.body,
+          {
+            headers: {
+              'accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Authorization': req.headers.authorization || ''
+            }
+          }
+        );
+
+        console.log('\n✅ Antwort von StressFrei Solutions erhalten!');
+        console.log('   Status:', response.status);
+        console.log('   Mitarbeiter gefunden:', Array.isArray(response.data) ? response.data.length : 'keine Array-Antwort');
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          console.log('   Beispiel:', response.data[0].name || 'Name nicht verfügbar');
+        }
+        console.log('\n📤 Sende Antwort zurück an Frontend...');
+        console.log('='.repeat(80) + '\n');
+
+        res.json(response.data);
+      } catch (error) {
+        console.log('\n❌ FEHLER beim Proxy-Request!');
+        console.log('   Error Message:', error.message);
+        console.log('   Error Code:', error.code);
+        console.log('   Response Status:', error.response?.status);
+        console.log('   Response Data:', JSON.stringify(error.response?.data, null, 2));
+        console.log('='.repeat(80) + '\n');
+        
+        res.status(error.response?.status || 500).json({
+          success: false,
+          error: error.message,
+          details: error.response?.data
+        });
+      }
+    });
+
+    // Proxy für SPTimeSchedule API
+    app.post('/api/sptimeschedule/saveSptimeschedule', async (req, res) => {
+      const timestamp = new Date().toISOString();
+      console.log('\n' + '='.repeat(80));
+      console.log(`📅 [PROXY-SCHEDULE] ${timestamp}`);
+      console.log('='.repeat(80));
+      console.log('📥 Termin-Buchung von Frontend erhalten!');
+      console.log('   Endpoint: /api/sptimeschedule/saveSptimeschedule');
+      console.log('   Client IP:', req.ip || req.connection.remoteAddress);
+      console.log('   Authorization:', req.headers.authorization ? '✅ Bearer Token vorhanden' : '❌ Kein Token!');
+      console.log('   Termine:', Array.isArray(req.body) ? req.body.length : 'keine Array');
+      if (Array.isArray(req.body) && req.body.length > 0) {
+        console.log('   Beispiel-Termin:', {
+          personalid: req.body[0].personalid,
+          terminart: req.body[0].terminart,
+          datum: req.body[0].datum
+        });
+      }
+      
+      try {
+        console.log('\n📤 Leite Termin-Buchung weiter an StressFrei Solutions API...');
+        console.log('   URL: https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule');
+        
+        const response = await axios.post(
+          'https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule',
+          req.body,
+          {
+            headers: {
+              'accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Authorization': req.headers.authorization || ''
+            }
+          }
+        );
+
+        console.log('\n✅ Termin-Buchung erfolgreich!');
+        console.log('   Status:', response.status);
+        console.log('   Antwort:', JSON.stringify(response.data, null, 2));
+        console.log('\n📤 Sende Bestätigung zurück an Frontend...');
+        console.log('='.repeat(80) + '\n');
+
+        res.json(response.data);
+      } catch (error) {
+        console.log('\n❌ FEHLER bei Termin-Buchung!');
+        console.log('   Error Message:', error.message);
+        console.log('   Error Code:', error.code);
+        console.log('   Response Status:', error.response?.status);
+        console.log('   Response Data:', JSON.stringify(error.response?.data, null, 2));
+        console.log('='.repeat(80) + '\n');
+        
+        res.status(error.response?.status || 500).json({
+          success: false,
+          error: error.message,
+          details: error.response?.data
+        });
+      }
+    });
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Database location: ${path.join(__dirname, 'recognition.db')}`);
+  console.log('\n' + '='.repeat(80));
+  console.log('🚀 SERVER GESTARTET');
+  console.log('='.repeat(80));
+  console.log(`✅ Server läuft auf Port ${PORT}`);
+  console.log(`✅ Database: ${path.join(__dirname, 'recognition.db')}`);
+  console.log('\n📡 Proxy-Endpoints registriert:');
+  console.log('   POST /api/serviceprovider/getServiceprovider');
+  console.log('      → https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider');
+  console.log('   POST /api/sptimeschedule/saveSptimeschedule');
+  console.log('      → https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule');
+  console.log('\n💡 Tipp: Logs mit "pm2 logs moving-assistant-api" anzeigen');
+  console.log('='.repeat(80) + '\n');
 });
     
   } catch (error) {

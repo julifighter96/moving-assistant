@@ -2,3 +2,9 @@
     from = "/*"
     to = "/index.html"
     status = 200
+
+# Fix service worker MIME type
+[[headers]]
+    for = "/service-worker.js"
+    [headers.values]
+        Content-Type = "application/javascript"

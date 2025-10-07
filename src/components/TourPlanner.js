@@ -2,12 +2,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { MapPin, Calendar, Truck, X, Clock, Search, ChevronRight, Globe, Milestone, Building, Home, GripVertical } from 'lucide-react';
+import { MapPin, Calendar, Truck, X, Clock, Search, ChevronRight, Globe, Milestone, Building, Home, GripVertical, ArrowRight } from 'lucide-react';
 import axios from 'axios';
 import { format, parseISO, isValid } from 'date-fns';
 import { de } from 'date-fns/locale';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
+import TourEmployeeAssignment from './TourEmployeeAssignment';
 
 // Konstanten können hier außerhalb bleiben, wenn sie wirklich global sind
 const OFFICE_ADDRESS = "Greschbachstraße 29, 76229 Karlsruhe";
@@ -462,167 +463,6 @@ const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRout
   );
 };
 
-// Mitarbeiter-Übersicht Panel Komponente
-const EmployeeOverviewPanel = ({ availableEmployees, loadingEmployees, selectedDate, onEmployeeAdd, assignedEmployees }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  
-  // Filtere bereits zugewiesene Mitarbeiter aus
-  const availableToAdd = availableEmployees.filter(emp => 
-    !assignedEmployees.some(assigned => assigned.id === emp.id)
-  );
-  
-  const availableCount = availableToAdd.filter(emp => emp.isAvailable).length;
-  const busyCount = availableToAdd.filter(emp => !emp.isAvailable).length;
-  
-  return (
-    <div className="bg-white p-4 rounded-xl shadow-sm mb-4">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between text-left hover:bg-gray-50 p-2 rounded-lg transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold flex items-center">
-            <Building className="mr-2 h-5 w-5 text-primary" />
-            Mitarbeiter-Übersicht
-          </h3>
-          {!loadingEmployees && (
-            <span className="text-sm text-gray-500">
-              ({availableCount} verfügbar, {busyCount} verplant)
-            </span>
-          )}
-        </div>
-        <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-      </button>
-      
-      {isExpanded && (
-        <div className="mt-4 space-y-2">
-          {loadingEmployees ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-              <p className="text-gray-500 mt-2 text-sm">Lade Mitarbeiter...</p>
-            </div>
-          ) : availableToAdd.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 text-sm">
-              {availableEmployees.length === 0 
-                ? 'Keine Mitarbeiter für dieses Datum gefunden.' 
-                : 'Alle verfügbaren Mitarbeiter sind bereits zugewiesen.'}
-            </div>
-          ) : (
-            <>
-              {/* Verfügbare Mitarbeiter */}
-              {availableToAdd.filter(emp => emp.isAvailable).length > 0 && (
-                <div>
-                  <h4 className="text-sm font-semibold text-green-700 mb-2 flex items-center">
-                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                    Verfügbar ({availableToAdd.filter(emp => emp.isAvailable).length})
-                  </h4>
-                  <div className="space-y-2">
-                    {availableToAdd.filter(emp => emp.isAvailable).map(employee => (
-                      <div 
-                        key={employee.id}
-                        className="border border-green-200 rounded-lg p-3 bg-green-50 hover:bg-green-100 transition-colors"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-900">{employee.name}</span>
-                              <span className="text-green-600 text-xs">✓ Verfügbar</span>
-                            </div>
-                            {/* Skills anzeigen */}
-                            {employee.eigenschaften && Object.keys(employee.eigenschaften).length > 0 && (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {employee.eigenschaften.personal_properties_Fhrerscheinklasse && (
-                                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                    🚗 {employee.eigenschaften.personal_properties_Fhrerscheinklasse}
-                                  </span>
-                                )}
-                                {employee.eigenschaften.personal_properties_Klavierträger === 'Ja' && (
-                                  <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
-                                    🎹 Klavierträger
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => onEmployeeAdd({ 
-                              id: employee.id, 
-                              name: employee.name,
-                              isAvailable: true 
-                            })}
-                            className="ml-2 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
-                          >
-                            Hinzufügen
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* Verplante Mitarbeiter */}
-              {availableToAdd.filter(emp => !emp.isAvailable).length > 0 && (
-                <div className="mt-4">
-                  <h4 className="text-sm font-semibold text-yellow-700 mb-2 flex items-center">
-                    <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
-                    Verplant ({availableToAdd.filter(emp => !emp.isAvailable).length})
-                  </h4>
-                  <div className="space-y-2">
-                    {availableToAdd.filter(emp => !emp.isAvailable).map(employee => (
-                      <div 
-                        key={employee.id}
-                        className="border border-yellow-200 rounded-lg p-3 bg-yellow-50"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-900">{employee.name}</span>
-                              <span className="text-yellow-600 text-xs">⚠️ Verplant</span>
-                            </div>
-                            {/* Termine anzeigen */}
-                            {employee.termine && employee.termine.length > 0 && (
-                              <div className="mt-1 text-xs text-gray-600">
-                                <details className="cursor-pointer">
-                                  <summary className="hover:text-gray-800">
-                                    {employee.termine.length} Termin{employee.termine.length > 1 ? 'e' : ''}
-                                  </summary>
-                                  <div className="mt-1 pl-2 space-y-1">
-                                    {employee.termine.slice(0, 3).map((termin, idx) => (
-                                      <div key={idx} className="text-xs">
-                                        • {termin.startzeit || '?'} - {termin.endzeit || '?'}: {termin.terminart || 'Termin'}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </details>
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => onEmployeeAdd({ 
-                              id: employee.id, 
-                              name: employee.name,
-                              isAvailable: false 
-                            })}
-                            className="ml-2 px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700 transition-colors"
-                            title="Trotzdem hinzufügen (Überbuchung!)"
-                          >
-                            Trotzdem +
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
 // Tour Area Komponente mit Drop Funktionalität
 const TourArea = ({
   isOver,
@@ -644,13 +484,10 @@ const TourArea = ({
   onDealTypeChange,
   tourStartTime,
   onTourStartTimeChange,
-  assignedEmployees,
-  onEmployeeAdd,
-  onEmployeeRemove,
-  availableEmployees, // NEU: Verfügbare Mitarbeiter
-  loadingEmployees, // NEU: Lade-Status
   selectedTerminartId, // NEU: Gewählte Terminart
-  onTerminartChange // NEU: Terminart ändern
+  onTerminartChange, // NEU: Terminart ändern
+  savedTourData, // NEU: Gespeicherte Tour-Daten
+  onProceedToEmployeeAssignment // NEU: Callback für "Weiter"
 }) => {
   return (
     <div
@@ -663,13 +500,17 @@ const TourArea = ({
             <Truck className="mr-2 h-5 w-5 text-primary" />
             Tourplanung
           </h3>
-          <button
-            onClick={handleSaveTour}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-            disabled={!selectedDate || !isValid(selectedDate) || tourDeals.length === 0 || isSavingTour}
-          >
-            {isSavingTour ? 'Speichern...' : 'Tour speichern'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onProceedToEmployeeAssignment}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-semibold"
+              disabled={!selectedDate || !isValid(selectedDate) || tourDeals.length === 0}
+              title="Mitarbeiter auswählen und dann Tour speichern"
+            >
+              Weiter zur Mitarbeiterplanung
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-4 items-center">
           <div className="flex-1 min-w-[150px]">
@@ -718,92 +559,6 @@ const TourArea = ({
                   {terminart.icon} {terminart.name}
                 </option>
               ))}
-            </select>
-          </div>
-        </div>
-        
-        {/* Mitarbeiter für die gesamte Tour */}
-        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-          <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-sm font-medium text-gray-700">Mitarbeiter für diese Tour:</span>
-            
-            {/* Bestehende Mitarbeiter anzeigen */}
-            {assignedEmployees.map((employee, index) => (
-              <div 
-                key={index} 
-                className={`flex items-center gap-1 px-2 py-1 rounded border text-sm ${
-                  employee.isAvailable === false 
-                    ? 'bg-yellow-50 border-yellow-300' 
-                    : 'bg-white border-gray-300'
-                }`}
-                title={employee.isAvailable === false ? 'Achtung: Mitarbeiter bereits verplant!' : ''}
-              >
-                <span className="font-medium">{employee.name}</span>
-                {employee.isAvailable === false && (
-                  <span className="text-yellow-600 text-xs">⚠️</span>
-                )}
-                <button
-                  onClick={() => onEmployeeRemove(index)}
-                  className="text-red-500 hover:text-red-700 ml-1"
-                  title="Mitarbeiter entfernen"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
-            
-            {/* Neuen Mitarbeiter hinzufügen */}
-            <select
-              onChange={(e) => {
-                if (e.target.value) {
-                  const selectedEmployee = e.target.options[e.target.selectedIndex];
-                  const isAvailable = selectedEmployee.dataset.available === 'true';
-                  
-                  onEmployeeAdd({
-                    id: e.target.value,
-                    name: selectedEmployee.text.replace(/\s*\(.*?\)\s*$/, ''), // Entferne Status-Suffix
-                    isAvailable: isAvailable
-                  });
-                  e.target.value = '';
-                }
-              }}
-              className="px-2 py-1 border border-gray-300 rounded text-sm bg-white"
-              defaultValue=""
-            >
-              <option value="">+ Mitarbeiter hinzufügen</option>
-              {/* Lade-Indikator */}
-              {loadingEmployees && (
-                <option disabled>Lade Mitarbeiter...</option>
-              )}
-              {/* Verfügbare Mitarbeiter zuerst */}
-              {!loadingEmployees && availableEmployees.filter(emp => emp.isAvailable).map(employee => (
-                <option 
-                  key={employee.id} 
-                  value={employee.id}
-                  data-available="true"
-                >
-                  {employee.name} ✓
-                </option>
-              ))}
-              {/* Nicht verfügbare Mitarbeiter (ausgegraut) */}
-              {!loadingEmployees && availableEmployees.filter(emp => !emp.isAvailable).length > 0 && (
-                <optgroup label="─── Bereits verplant ───">
-                  {availableEmployees.filter(emp => !emp.isAvailable).map(employee => (
-                    <option 
-                      key={employee.id} 
-                      value={employee.id}
-                      data-available="false"
-                      style={{ color: '#999' }}
-                    >
-                      {employee.name} (verplant)
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {/* Fallback wenn keine Mitarbeiter gefunden */}
-              {!loadingEmployees && availableEmployees.length === 0 && (
-                <option disabled>Keine Mitarbeiter verfügbar</option>
-              )}
             </select>
           </div>
         </div>
@@ -962,11 +717,6 @@ const TourArea = ({
               <h4 className="font-semibold text-blue-900">Tourübersicht</h4>
               <p className="text-sm text-blue-700 mt-1">
                 {tourDeals.length} Stationen • Reihenfolge anpassbar
-                {assignedEmployees.length > 0 && (
-                  <span className="ml-2 text-green-700">
-                    • {assignedEmployees.length} Mitarbeiter zugewiesen
-                  </span>
-                )}
               </p>
             </div>
             <button 
@@ -1066,12 +816,14 @@ const TourPlannerContent = () => {
   const OFFICE_POSTAL_PREFIX = OFFICE_ADDRESS.match(/\b(\d{2})\d{3}\b/)?.[1] || "76";
   
   // --- KONSTANTEN FÜR SPTIMESCHEDULE API ---
-  const SPTIMESCHEDULE_API_URL = process.env.REACT_APP_SPTIMESCHEDULE_API_URL || 'https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule';
+  // WICHTIG: URLs müssen über den Proxy gehen (lolworlds.online/api/...)
+  const SPTIMESCHEDULE_API_URL = process.env.REACT_APP_SPTIMESCHEDULE_API_URL || 'https://lolworlds.online/api/sptimeschedule/saveSptimeschedule';
   const DEFAULT_TERMINART_ID = process.env.REACT_APP_DEFAULT_TERMINART_ID || '3fa85f64-5717-4562-b3fc-2c963f66afa6'; // Bitte echte ID in .env setzen
   const DEFAULT_KENNZEICHEN = process.env.REACT_APP_DEFAULT_KENNZEICHEN || 'KA-RD 1234';
   
   // --- KONSTANTEN FÜR SERVICEPROVIDER API ---
-  const SERVICEPROVIDER_API_URL = process.env.REACT_APP_SERVICEPROVIDER_API_URL || 'https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider';
+  // WICHTIG: URLs müssen über den Proxy gehen (lolworlds.online/api/...)
+  const SERVICEPROVIDER_API_URL = process.env.REACT_APP_SERVICEPROVIDER_API_URL || 'https://lolworlds.online/api/serviceprovider/getServiceprovider';
   
   // --- API TOKEN (für Authentifizierung) ---
   const SFS_API_TOKEN = process.env.REACT_APP_SFS_API_TOKEN; // Token von Jonathan/Administrator
@@ -1112,6 +864,10 @@ const TourPlannerContent = () => {
   const [stationDurations, setStationDurations] = useState({});
   // Manuelle Überschreibung der Operationstypen: { legIndex: 'beladung' | 'entladung' | 'auto' }
   const [manualOperationTypes, setManualOperationTypes] = useState({});
+  // Workflow-State: 'planning' oder 'employee_assignment'
+  const [workflowStep, setWorkflowStep] = useState('planning');
+  // Gespeicherte Tour-Daten für Mitarbeiterplanung
+  const [savedTourData, setSavedTourData] = useState(null);
 
   // Drop-Zone für die Tour
   const [{ isOver }, drop] = useDrop({
@@ -1741,7 +1497,7 @@ const TourPlannerContent = () => {
         headers: {
           'accept': 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': `${SFS_API_TOKEN}`
+          'Authorization': SFS_API_TOKEN  // Direktes Token ohne "Bearer"
         }
       });
 
@@ -2150,15 +1906,32 @@ const TourPlannerContent = () => {
         return { success: false, error: 'API-Token fehlt. Bitte Administrator kontaktieren.' };
       }
 
+      console.log('📤 [Frontend] Sende Termine an API:', {
+        url: SPTIMESCHEDULE_API_URL,
+        appointmentsCount: appointments.length,
+        appointments: appointments
+      });
+
       const response = await axios.post(SPTIMESCHEDULE_API_URL, appointments, {
         headers: {
           'accept': 'application/json',
           'Content-Type': 'application/json',
-          'Authorization': `${SFS_API_TOKEN}`
+          'Authorization': SFS_API_TOKEN  // Direktes Token ohne "Bearer"
         }
       });
 
+      console.log('✅ [Frontend] API Response erhalten:', {
+        status: response.status,
+        dataType: typeof response.data,
+        data: response.data
+      });
+
       if (response.status === 200 || response.status === 201) {
+        // Prüfe auf leeren Response (häufig bei erfolgreichen POST-Requests)
+        if (response.data === '' || response.data === null || response.data === undefined) {
+          console.log('ℹ️ [Frontend] API gab leeren Response zurück - interpretiere als Erfolg');
+          return { success: true, data: { created: appointments.length } };
+        }
         return { success: true, data: response.data };
       } else {
         return { success: false, error: `Unerwarteter Status: ${response.status}` };
@@ -2172,7 +1945,7 @@ const TourPlannerContent = () => {
     }
   }, [tourStartTime, tourDeals, DEFAULT_KENNZEICHEN, SPTIMESCHEDULE_API_URL, SFS_API_TOKEN]);
 
-  // Tour speichern - ÜBERARBEITET
+  // Tour speichern - ÜBERARBEITET (ohne Mitarbeiter-Buchung)
   const handleSaveTour = useCallback(async () => {
     if (!selectedDate || !isValid(selectedDate)) {
       alert("Bitte wählen Sie ein gültiges Datum aus, um die Tour zu speichern.");
@@ -2210,12 +1983,6 @@ const TourPlannerContent = () => {
       dealId: deal.id,
       title: deal.title,
       address: deal.originAddress || deal.destinationAddress || 'Adresse unbekannt'
-    }));
-
-    // Erstelle Mitarbeiter-Information für die Tour
-    const employeeInfo = assignedEmployees.map(emp => ({
-      id: emp.id,
-      name: emp.name
     }));
 
     // Erstelle Zeitinformationen für jede Station
@@ -2285,28 +2052,22 @@ const TourPlannerContent = () => {
 
     await Promise.all(updatePromises);
 
-    // Speichere Termine im SPTimeSchedule System
-    let scheduleResult = null;
-    if (assignedEmployees.length > 0 && stationTimeInfo.length > 0) {
-      scheduleResult = await saveTourToSPTimeSchedule({
-        tourDate: selectedDate,
-        tourId: finalTourId,
-        employees: employeeInfo,
-        stations: stationTimeInfo,
-        selectedTerminartId: selectedTerminartId // NEU: Gewählte Terminart übergeben
-      });
-    }
-
     setIsSavingTour(false); // End loading
 
-    // Zeige die gespeicherte Reihenfolge und Mitarbeiter-Zuweisungen in der Erfolgsmeldung
+    // Speichere Tour-Daten für Mitarbeiterplanung
+    setSavedTourData({
+      tourId: finalTourId,
+      tourName: tourName,
+      selectedDate: selectedDate,
+      tourDeals: tourDeals,
+      stations: stationTimeInfo,
+      tourStartTime: tourStartTime,
+      selectedTerminartId: selectedTerminartId,
+      totalDuration: totalTourDuration
+    });
+
+    // Zeige Erfolgsmeldung
     const sequenceInfo = tourSequence.map(item => `${item.order}. ${item.title}`).join('\n');
-    
-    let employeeInfoText = '';
-    if (employeeInfo.length > 0) {
-      employeeInfoText = '\n\nMitarbeiter für diese Tour:\n' + 
-        employeeInfo.map(emp => `  - ${emp.name}`).join('\n');
-    }
     
     let timeInfoText = '';
     if (stationTimeInfo.length > 0 && tourStartTime) {
@@ -2327,25 +2088,13 @@ const TourPlannerContent = () => {
         timeInfoText += `\n\n===================\nGesamtdauer (Fahrt + Arbeit): ${totalTourDuration} Min.`;
       }
     }
-
-    // Füge SPTimeSchedule-Status zur Meldung hinzu
-    let scheduleInfoText = '';
-    if (scheduleResult) {
-      if (scheduleResult.success && !scheduleResult.skipped) {
-        scheduleInfoText = '\n\n✅ Termine erfolgreich im Kalender gebucht!';
-      } else if (scheduleResult.skipped) {
-        scheduleInfoText = '\n\nℹ️ Keine Termine gebucht (keine Mitarbeiter zugewiesen).';
-      } else {
-        scheduleInfoText = `\n\n⚠️ Terminbuchung fehlgeschlagen: ${scheduleResult.error}`;
-      }
-    }
     
     if (errorCount === 0) {
-      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${employeeInfoText}${timeInfoText}${scheduleInfoText}\n\n${successCount} Projekte erfolgreich aktualisiert.`);
+      alert(`✅ Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${timeInfoText}\n\n${successCount} Projekte erfolgreich aktualisiert.\n\nKlicken Sie auf "Weiter zur Mitarbeiterplanung" um Mitarbeiter zuzuweisen.`);
     } else {
-      alert(`Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${employeeInfoText}${timeInfoText}${scheduleInfoText}\n\n${successCount} Projekte aktualisiert, ${errorCount} Fehler aufgetreten. Details siehe Konsole.`);
+      alert(`⚠️ Tour "${finalTourId}" für ${tourDateFormatted} gespeichert!\n\nReihenfolge:\n${sequenceInfo}${timeInfoText}\n\n${successCount} Projekte aktualisiert, ${errorCount} Fehler aufgetreten. Details siehe Konsole.`);
     }
-  }, [selectedDate, tourDeals, tourName, TARGET_PHASE_ID, PROJECT_TOUR_DATE_FIELD_KEY, PROJECT_TOUR_ID_FIELD_KEY, assignedEmployees, optimizedRoute, calculatedTimes, tourStartTime, totalTourDuration, legsWithUpdatedPianos, saveTourToSPTimeSchedule, selectedTerminartId]);
+  }, [selectedDate, tourDeals, tourName, TARGET_PHASE_ID, PROJECT_TOUR_DATE_FIELD_KEY, PROJECT_TOUR_ID_FIELD_KEY, calculatedTimes, tourStartTime, totalTourDuration, legsWithUpdatedPianos, selectedTerminartId]);
 
   // calculateOptimizedRoute (useCallback bleibt, aber fixWaypointOrder ist jetzt stabil)
   const calculateOptimizedRoute = useCallback(async () => {
@@ -3463,6 +3212,22 @@ const TourPlannerContent = () => {
   ]);
   // --- ENDE ANGEPASST ---
 
+  // Wenn Mitarbeiterplanung aktiv ist, zeige diese Seite
+  if (workflowStep === 'employee_assignment') {
+    return (
+      <TourEmployeeAssignment
+        tourData={savedTourData}
+        onBack={() => setWorkflowStep('planning')}
+        onComplete={(employees) => {
+          console.log('Mitarbeiter zugewiesen:', employees);
+          // Optional: Reset oder zurück zur Planung
+          setWorkflowStep('planning');
+        }}
+      />
+    );
+  }
+
+  // Standard-Ansicht: Tourenplanung
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <h1 className="text-2xl font-bold mb-6">Tourenplanung</h1>
@@ -3532,15 +3297,6 @@ const TourPlannerContent = () => {
          </div>
 
          <div className="space-y-4">
-          {/* NEU: Mitarbeiter-Übersicht Panel */}
-          <EmployeeOverviewPanel
-            availableEmployees={availableEmployees}
-            loadingEmployees={loadingEmployees}
-            selectedDate={selectedDate}
-            onEmployeeAdd={handleEmployeeAdd}
-            assignedEmployees={assignedEmployees}
-          />
-          
           <TourArea
             isOver={isOver}
             drop={drop}
@@ -3561,13 +3317,56 @@ const TourPlannerContent = () => {
             onDealTypeChange={handleDealTypeChange}
             tourStartTime={tourStartTime}
             onTourStartTimeChange={setTourStartTime}
-            assignedEmployees={assignedEmployees}
-            onEmployeeAdd={handleEmployeeAdd}
-            onEmployeeRemove={handleEmployeeRemove}
-            availableEmployees={availableEmployees}
-            loadingEmployees={loadingEmployees}
             selectedTerminartId={selectedTerminartId}
             onTerminartChange={setSelectedTerminartId}
+            savedTourData={savedTourData}
+            onProceedToEmployeeAssignment={() => {
+              // Erstelle Tour-Daten auch ohne Speicherung
+              const tourId = tourName.trim() !== ''
+                ? tourName.trim()
+                : `Tour-${format(selectedDate, 'yyyy-MM-dd')}-${tourDeals.length}-${Date.now()}`;
+              
+              const stationTimeInfo = Object.entries(calculatedTimes).map(([index, time]) => {
+                const legIndex = parseInt(index);
+                const leg = legsWithUpdatedPianos[legIndex];
+                
+                let stationDescription = 'Unbekannte Station';
+                if (leg) {
+                  stationDescription = leg.end_address?.split(',')[0] || 'Unbekannte Adresse';
+                  
+                  if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+                    const dealTitles = leg.consolidatedDeals.map(cd => {
+                      const deal = tourDeals.find(d => d.id === cd.dealId);
+                      return deal ? deal.title : `Deal ${cd.dealId}`;
+                    }).join(', ');
+                    stationDescription = `${stationDescription} (${dealTitles})`;
+                  }
+                }
+                
+                return {
+                  legIndex,
+                  legDescription: stationDescription,
+                  startTime: time.startTime,
+                  endTime: time.endTime,
+                  duration: time.duration,
+                  drivingTime: time.drivingTime
+                };
+              });
+              
+              setSavedTourData({
+                tourId: tourId,
+                tourName: tourName,
+                selectedDate: selectedDate,
+                tourDeals: tourDeals,
+                stations: stationTimeInfo,
+                tourStartTime: tourStartTime,
+                selectedTerminartId: selectedTerminartId,
+                totalDuration: totalTourDuration,
+                isSaved: false // Markiere als noch nicht gespeichert
+              });
+              
+              setWorkflowStep('employee_assignment');
+            }}
           />
 
            {/* Google Maps Karte */}

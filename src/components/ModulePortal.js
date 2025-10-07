@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ClipboardList, Users, Truck, Package, BarChart3, Calendar, ArrowLeft } from 'lucide-react';
 import App from '../App';
+import EmployeeScheduling from '../pages/EmployeeScheduling';
 import logo from '../assets/images/Riedlin-Logo-512px_Neu.webp';
 
 const ModulePortal = () => {
@@ -19,7 +20,7 @@ const ModulePortal = () => {
       name: 'Personalmanagement',
       description: 'Mitarbeiter- und Teameinsatzplanung',
       icon: Users,
-      component: null
+      component: EmployeeScheduling
     },
     {
       id: 'fleet',

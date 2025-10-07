@@ -1486,18 +1486,18 @@ Antworte im folgenden JSON-Format:
       console.log('📥 Termin-Buchung von Frontend erhalten!');
       console.log('   Endpoint: /api/sptimeschedule/saveSptimeschedule');
       console.log('   Client IP:', req.ip || req.connection.remoteAddress);
-      console.log('   Authorization:', req.headers.authorization ? '✅ Bearer Token vorhanden' : '❌ Kein Token!');
+      console.log('   Authorization:', req.headers.authorization ? '✅ Token vorhanden' : '❌ Kein Token!');
       console.log('   Termine:', Array.isArray(req.body) ? req.body.length : 'keine Array');
       if (Array.isArray(req.body) && req.body.length > 0) {
-        console.log('   Beispiel-Termin:', {
+        console.log('   Beispiel:', {
           personalid: req.body[0].personalid,
-          terminart: req.body[0].terminart,
-          datum: req.body[0].datum
+          datum: req.body[0].datum,
+          startzeit: req.body[0].startzeit
         });
       }
       
       try {
-        console.log('\n📤 Leite Termin-Buchung weiter an StressFrei Solutions API...');
+        console.log('\n📤 Leite Anfrage weiter an StressFrei Solutions API...');
         console.log('   URL: https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule');
         
         const response = await axios.post(
@@ -1512,15 +1512,16 @@ Antworte im folgenden JSON-Format:
           }
         );
 
-        console.log('\n✅ Termin-Buchung erfolgreich!');
+        console.log('\n✅ Antwort von StressFrei Solutions erhalten!');
         console.log('   Status:', response.status);
-        console.log('   Antwort:', JSON.stringify(response.data, null, 2));
-        console.log('\n📤 Sende Bestätigung zurück an Frontend...');
+        console.log('   Response Typ:', typeof response.data);
+        console.log('   Response:', response.data === '' ? '(LEER)' : JSON.stringify(response.data));
+        console.log('\n📤 Sende Antwort zurück an Frontend...');
         console.log('='.repeat(80) + '\n');
 
         res.json(response.data);
       } catch (error) {
-        console.log('\n❌ FEHLER bei Termin-Buchung!');
+        console.log('\n❌ FEHLER beim Proxy-Request!');
         console.log('   Error Message:', error.message);
         console.log('   Error Code:', error.code);
         console.log('   Response Status:', error.response?.status);

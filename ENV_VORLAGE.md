@@ -23,9 +23,11 @@
 # API-Token (von Jonathan/Administrator)
 REACT_APP_SFS_API_TOKEN=HIER_TOKEN_EINFUEGEN
 
-# API-URLs (Produktionssystem Riedlin)
-REACT_APP_SERVICEPROVIDER_API_URL=https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider
-REACT_APP_SPTIMESCHEDULE_API_URL=https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule
+# API-URLs (über Backend-Proxy auf lolworlds.online)
+# WICHTIG: URLs müssen über Proxy gehen wegen CORS
+# Der Proxy auf Port 3001 leitet dann an StressFrei weiter
+REACT_APP_SERVICEPROVIDER_API_URL=https://lolworlds.online/api/serviceprovider/getServiceprovider
+REACT_APP_SPTIMESCHEDULE_API_URL=https://lolworlds.online/api/sptimeschedule/saveSptimeschedule
 
 # ============================================
 # 📋 Tour-Konfiguration

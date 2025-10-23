@@ -268,7 +268,7 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
   ];
 
   // Konstanten aus .env
-  // WICHTIG: URL OHNE "/backend" - API ist direkt unter /sptimeschedule erreichbar
+  // WICHTIG: URL muss "/api" am Anfang haben - API ist unter /api/sptimeschedule erreichbar
   // WICHTIG: URLs müssen über den Proxy gehen (lolworlds.online/api/...)
   const SPTIMESCHEDULE_API_URL = process.env.REACT_APP_SPTIMESCHEDULE_API_URL || 'https://lolworlds.online/api/sptimeschedule/saveSptimeschedule';
   const SERVICEPROVIDER_API_URL = process.env.REACT_APP_SERVICEPROVIDER_API_URL || 'https://lolworlds.online/api/serviceprovider/getServiceprovider';
@@ -467,6 +467,211 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
     });
   }, []);
 
+  // TEST: API-Pfad-Debugging mit verschiedenen Pfadvariationen
+  const handleTestApiPaths = useCallback(async () => {
+    console.log('🔍 ========== API-PFAD-DEBUGGING ==========');
+    console.log('🔍 Teste verschiedene API-Pfadvariationen...');
+    
+    // Umgebungsvariablen loggen
+    console.log('🔍 ========== UMWELTVARIABLEN ==========');
+    console.log('REACT_APP_SPTIMESCHEDULE_API_URL:', process.env.REACT_APP_SPTIMESCHEDULE_API_URL);
+    console.log('REACT_APP_SERVICEPROVIDER_API_URL:', process.env.REACT_APP_SERVICEPROVIDER_API_URL);
+    console.log('REACT_APP_SFS_API_TOKEN vorhanden:', !!process.env.REACT_APP_SFS_API_TOKEN);
+    console.log('REACT_APP_SFS_API_TOKEN (erste 20 Zeichen):', process.env.REACT_APP_SFS_API_TOKEN?.substring(0, 20) + '...');
+    console.log('REACT_APP_DEFAULT_KENNZEICHEN:', process.env.REACT_APP_DEFAULT_KENNZEICHEN);
+    
+    // Verschiedene Pfadvariationen definieren
+    const pathVariations = [
+      {
+        name: 'Aktueller Pfad (aus ENV)',
+        url: SPTIMESCHEDULE_API_URL,
+        description: 'Verwendet die URL aus REACT_APP_SPTIMESCHEDULE_API_URL'
+      },
+      {
+        name: 'Mit /api/ Präfix',
+        url: 'https://lolworlds.online/api/sptimeschedule/saveSptimeschedule',
+        description: 'Explizit mit /api/ am Anfang'
+      },
+      {
+        name: 'Ohne /api/ Präfix',
+        url: 'https://lolworlds.online/sptimeschedule/saveSptimeschedule',
+        description: 'Ohne /api/ am Anfang'
+      },
+      {
+        name: 'Direkt zu Stressfrei',
+        url: 'https://www.stressfrei-solutions.de/dl2238205/backend/api/sptimeschedule/saveSptimeschedule',
+        description: 'Direkt zur Stressfrei API (ohne Proxy)'
+      },
+      {
+        name: 'Stressfrei ohne /api/',
+        url: 'https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule',
+        description: 'Stressfrei ohne /api/ Präfix'
+      }
+    ];
+    
+    // Test-Mitarbeiter erstellen
+    const testEmployee = {
+      personalid: 'TEST-EMPLOYEE-001',
+      terminart: '3a4df8a1-2387-11e8-839c-00113241b9d5', // Standard Umzugsausführung
+      vorgangsno: 'TEST-DEAL-001',
+      angebotsno: 'TEST-OFFER-001',
+      datum: format(new Date(), 'yyyy-MM-dd'),
+      startzeit: '08:00:00',
+      endzeit: '12:00:00',
+      kommentar: '[API-PFAD-TEST] Test-Termin für Pfad-Debugging',
+      rolle: ['Monteur'],
+      kennzeichen: DEFAULT_KENNZEICHEN
+    };
+    
+    const testPayload = [testEmployee];
+    
+    console.log('🔍 ========== TEST-PAYLOAD ==========');
+    console.log(JSON.stringify(testPayload, null, 2));
+    
+    const results = [];
+    
+    for (const variation of pathVariations) {
+      console.log(`🔍 ========== TESTE: ${variation.name} ==========`);
+      console.log(`URL: ${variation.url}`);
+      console.log(`Beschreibung: ${variation.description}`);
+      
+      const startTime = Date.now();
+      
+      try {
+        const response = await axios.post(variation.url, testPayload, {
+          headers: {
+            'accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': SFS_API_TOKEN
+          },
+          timeout: 10000 // 10 Sekunden Timeout
+        });
+        
+        const duration = Date.now() - startTime;
+        
+        const result = {
+          name: variation.name,
+          url: variation.url,
+          success: true,
+          status: response.status,
+          duration: duration,
+          responseType: typeof response.data,
+          isHtml: typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>'),
+          responsePreview: typeof response.data === 'string' 
+            ? response.data.substring(0, 200) + '...'
+            : JSON.stringify(response.data).substring(0, 200) + '...',
+          fullResponse: response.data
+        };
+        
+        console.log(`✅ ERFOLG: ${variation.name}`);
+        console.log(`Status: ${response.status}`);
+        console.log(`Dauer: ${duration}ms`);
+        console.log(`Response Type: ${typeof response.data}`);
+        console.log(`Ist HTML: ${result.isHtml}`);
+        console.log(`Response Preview: ${result.responsePreview}`);
+        console.log(`📦 VOLLSTÄNDIGER RESPONSE:`, response.data);
+        console.log(`🔍 RESPONSE IST EXAKT "true":`, response.data === true);
+        console.log(`🔍 RESPONSE IST EXAKT "false":`, response.data === false);
+        console.log(`🔍 RESPONSE STRING:`, JSON.stringify(response.data));
+        
+        results.push(result);
+        
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        
+        const result = {
+          name: variation.name,
+          url: variation.url,
+          success: false,
+          error: error.message,
+          status: error.response?.status,
+          duration: duration,
+          responseType: typeof error.response?.data,
+          isHtml: typeof error.response?.data === 'string' && error.response?.data?.includes('<!DOCTYPE html>'),
+          responsePreview: error.response?.data 
+            ? (typeof error.response.data === 'string' 
+                ? error.response.data.substring(0, 200) + '...'
+                : JSON.stringify(error.response.data).substring(0, 200) + '...')
+            : 'Keine Response',
+          fullError: error.response?.data
+        };
+        
+        console.log(`❌ FEHLER: ${variation.name}`);
+        console.log(`Error: ${error.message}`);
+        console.log(`Status: ${error.response?.status}`);
+        console.log(`Dauer: ${duration}ms`);
+        console.log(`Response Type: ${typeof error.response?.data}`);
+        console.log(`Ist HTML: ${result.isHtml}`);
+        console.log(`Response Preview: ${result.responsePreview}`);
+        
+        results.push(result);
+      }
+      
+      // Kurze Pause zwischen Tests
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    console.log('🔍 ========== ZUSAMMENFASSUNG ==========');
+    
+    // Erfolgreiche Tests
+    const successfulTests = results.filter(r => r.success && !r.isHtml);
+    const htmlResponses = results.filter(r => r.isHtml);
+    const errors = results.filter(r => !r.success);
+    
+    console.log(`✅ Erfolgreiche Tests: ${successfulTests.length}`);
+    successfulTests.forEach(r => {
+      console.log(`  • ${r.name}: Status ${r.status}, ${r.duration}ms`);
+    });
+    
+    console.log(`🌐 HTML-Responses (Login-Seiten): ${htmlResponses.length}`);
+    htmlResponses.forEach(r => {
+      console.log(`  • ${r.name}: ${r.url}`);
+    });
+    
+    console.log(`❌ Fehler: ${errors.length}`);
+    errors.forEach(r => {
+      console.log(`  • ${r.name}: ${r.error}`);
+    });
+    
+    // Detaillierte Ergebnisse anzeigen
+    let summaryMessage = `🔍 API-PFAD-DEBUGGING ABGESCHLOSSEN\n\n`;
+    summaryMessage += `Getestete Pfade: ${pathVariations.length}\n`;
+    summaryMessage += `✅ Erfolgreich: ${successfulTests.length}\n`;
+    summaryMessage += `🌐 HTML-Responses: ${htmlResponses.length}\n`;
+    summaryMessage += `❌ Fehler: ${errors.length}\n\n`;
+    
+    if (successfulTests.length > 0) {
+      summaryMessage += `✅ FUNKTIONIERENDE PFADE:\n`;
+      successfulTests.forEach(r => {
+        summaryMessage += `• ${r.name}\n`;
+        summaryMessage += `  URL: ${r.url}\n`;
+        summaryMessage += `  Status: ${r.status}\n`;
+        summaryMessage += `  Response: ${JSON.stringify(r.fullResponse)}\n`;
+        summaryMessage += `  Response Type: ${r.responseType}\n\n`;
+      });
+    }
+    
+    if (htmlResponses.length > 0) {
+      summaryMessage += `🌐 PFADE MIT LOGIN-SEITE (falsch):\n`;
+      htmlResponses.forEach(r => {
+        summaryMessage += `• ${r.name}\n`;
+        summaryMessage += `  URL: ${r.url}\n\n`;
+      });
+    }
+    
+    if (errors.length > 0) {
+      summaryMessage += `❌ FEHLERHAFTE PFADE:\n`;
+      errors.forEach(r => {
+        summaryMessage += `• ${r.name}: ${r.error}\n`;
+      });
+    }
+    
+    summaryMessage += `\n📋 VOLLSTÄNDIGE LOGS IN DER BROWSER-KONSOLE (F12)`;
+    
+    alert(summaryMessage);
+    
+  }, [SPTIMESCHEDULE_API_URL, SFS_API_TOKEN, DEFAULT_KENNZEICHEN]);
+
   // TEST: Nur Termine an SPTimeSchedule senden (ohne Pipedrive)
   const handleTestSync = useCallback(async () => {
     if (assignedEmployees.length === 0) {
@@ -485,6 +690,11 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
       assignedEmployees.forEach((employee, employeeIndex) => {
         const employeeRolle = employeeRoles[employeeIndex] || ['Monteur'];
         
+        // Prüfe ob Mitarbeiter bereits Termine an diesem Tag hat
+        const existingAppointments = employee.termine?.filter(termin => 
+          termin.datum === format(tourData.selectedDate, 'yyyy-MM-dd')
+        ) || [];
+
         // Erstelle einen Termin pro Station
         tourData.stations?.forEach((station, stationIndex) => {
           const transportType = stationTransportTypes[stationIndex];
@@ -513,13 +723,83 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
             return time.length === 5 ? `${time}:00` : time;
           };
           
+          // Berechne die Dauer der Station
+          const calculateDuration = (startTime, endTime) => {
+            const start = new Date(`2000-01-01T${startTime}:00`);
+            const end = new Date(`2000-01-01T${endTime}:00`);
+            const diffMs = end - start;
+            return Math.floor(diffMs / (1000 * 60)); // Minuten
+          };
+          
           // Berechne Start- und Endzeit für diese Station
-          const stationStart = formatTime(station.startTime);
-          const stationEnd = station.endTime 
+          let stationStart = formatTime(station.startTime);
+          let stationEnd = station.endTime 
             ? formatTime(station.endTime) 
             : formatTime(station.startTime); // Falls keine Endzeit, nutze Startzeit
+
+          // Berechne Dauer der Station
+          const stationDuration = calculateDuration(stationStart, stationEnd);
           
-          const kommentar = `[TEST] Tour: ${tourData.tourId} | Station ${stationIndex + 1}/${tourData.stations.length} | ${station.legDescription}`;
+          // Finde den nächsten freien Zeitraum für diese Station
+          if (existingAppointments.length > 0) {
+            // Sortiere bestehende Termine nach Startzeit
+            const sortedAppointments = existingAppointments.sort((a, b) => 
+              a.startzeit?.localeCompare(b.startzeit) || 0
+            );
+
+            // Finde Lücke zwischen Terminen oder nach dem letzten Termin
+            let foundGap = false;
+            
+            for (let i = 0; i < sortedAppointments.length; i++) {
+              const currentAppointment = sortedAppointments[i];
+              const nextAppointment = sortedAppointments[i + 1];
+              
+              const currentEnd = currentAppointment.endzeit || currentAppointment.startzeit;
+              const nextStart = nextAppointment?.startzeit;
+              
+              // Prüfe ob zwischen currentEnd und nextStart genug Zeit ist
+              if (nextStart) {
+                const gapStart = new Date(`2000-01-01T${currentEnd}:00`);
+                const gapEnd = new Date(`2000-01-01T${nextStart}:00`);
+                const gapMinutes = (gapEnd - gapStart) / (1000 * 60);
+                
+                if (gapMinutes >= stationDuration) {
+                  stationStart = currentEnd;
+                  const gapStartTime = new Date(gapStart.getTime() + 1 * 60 * 1000); // +1 Minute Puffer
+                  const newEndTime = new Date(gapStartTime.getTime() + stationDuration * 60 * 1000);
+                  stationEnd = newEndTime.toTimeString().slice(0, 8);
+                  foundGap = true;
+                  break;
+                }
+              } else {
+                // Nach dem letzten Termin
+                const lastEnd = new Date(`2000-01-01T${currentEnd}:00`);
+                const newStart = new Date(lastEnd.getTime() + 15 * 60 * 1000); // +15 Minuten Puffer
+                const newEnd = new Date(newStart.getTime() + stationDuration * 60 * 1000);
+                
+                stationStart = newStart.toTimeString().slice(0, 8);
+                stationEnd = newEnd.toTimeString().slice(0, 8);
+                foundGap = true;
+                break;
+              }
+            }
+            
+            if (!foundGap) {
+              // Keine Lücke gefunden, Termin am Ende des Tages
+              const lastAppointment = sortedAppointments[sortedAppointments.length - 1];
+              const lastEnd = lastAppointment.endzeit || lastAppointment.startzeit;
+              const lastEndTime = new Date(`2000-01-01T${lastEnd}:00`);
+              const newStart = new Date(lastEndTime.getTime() + 15 * 60 * 1000); // +15 Minuten Puffer
+              const newEnd = new Date(newStart.getTime() + stationDuration * 60 * 1000);
+              
+              stationStart = newStart.toTimeString().slice(0, 8);
+              stationEnd = newEnd.toTimeString().slice(0, 8);
+            }
+          }
+
+          console.log(`📅 [TEST] ${employee.name} - Station ${stationIndex + 1}: ${stationStart} - ${stationEnd} (${stationDuration} Min)`);
+          
+          const kommentar = `[TEST] Tour: ${tourData.tourId} | Station ${stationIndex + 1}/${tourData.stations.length} | ${station.legDescription} | Dauer: ${stationDuration} Min`;
           
           appointments.push({
             personalid: employee.id,
@@ -718,6 +998,11 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
       assignedEmployees.forEach((employee, employeeIndex) => {
         const employeeRolle = employeeRoles[employeeIndex] || ['Monteur'];
         
+        // Prüfe ob Mitarbeiter bereits Termine an diesem Tag hat
+        const existingAppointments = employee.termine?.filter(termin => 
+          termin.datum === format(tourData.selectedDate, 'yyyy-MM-dd')
+        ) || [];
+
         // Erstelle einen Termin pro Station
         tourData.stations?.forEach((station, stationIndex) => {
           const transportType = stationTransportTypes[stationIndex];
@@ -747,13 +1032,83 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
             return time.length === 5 ? `${time}:00` : time;
           };
           
-          // Start- und Endzeit der Station
-          const stationStart = formatTime(station.startTime);
-          const stationEnd = station.endTime 
+          // Berechne die Dauer der Station
+          const calculateDuration = (startTime, endTime) => {
+            const start = new Date(`2000-01-01T${startTime}:00`);
+            const end = new Date(`2000-01-01T${endTime}:00`);
+            const diffMs = end - start;
+            return Math.floor(diffMs / (1000 * 60)); // Minuten
+          };
+          
+          // Berechne Start- und Endzeit für diese Station
+          let stationStart = formatTime(station.startTime);
+          let stationEnd = station.endTime 
             ? formatTime(station.endTime) 
             : formatTime(station.startTime);
+
+          // Berechne Dauer der Station
+          const stationDuration = calculateDuration(stationStart, stationEnd);
           
-          const kommentar = `Tour: ${tourData.tourId} | Station ${stationIndex + 1}/${tourData.stations.length} | ${station.legDescription}`;
+          // Finde den nächsten freien Zeitraum für diese Station
+          if (existingAppointments.length > 0) {
+            // Sortiere bestehende Termine nach Startzeit
+            const sortedAppointments = existingAppointments.sort((a, b) => 
+              a.startzeit?.localeCompare(b.startzeit) || 0
+            );
+
+            // Finde Lücke zwischen Terminen oder nach dem letzten Termin
+            let foundGap = false;
+            
+            for (let i = 0; i < sortedAppointments.length; i++) {
+              const currentAppointment = sortedAppointments[i];
+              const nextAppointment = sortedAppointments[i + 1];
+              
+              const currentEnd = currentAppointment.endzeit || currentAppointment.startzeit;
+              const nextStart = nextAppointment?.startzeit;
+              
+              // Prüfe ob zwischen currentEnd und nextStart genug Zeit ist
+              if (nextStart) {
+                const gapStart = new Date(`2000-01-01T${currentEnd}:00`);
+                const gapEnd = new Date(`2000-01-01T${nextStart}:00`);
+                const gapMinutes = (gapEnd - gapStart) / (1000 * 60);
+                
+                if (gapMinutes >= stationDuration) {
+                  stationStart = currentEnd;
+                  const gapStartTime = new Date(gapStart.getTime() + 1 * 60 * 1000); // +1 Minute Puffer
+                  const newEndTime = new Date(gapStartTime.getTime() + stationDuration * 60 * 1000);
+                  stationEnd = newEndTime.toTimeString().slice(0, 8);
+                  foundGap = true;
+                  break;
+                }
+              } else {
+                // Nach dem letzten Termin
+                const lastEnd = new Date(`2000-01-01T${currentEnd}:00`);
+                const newStart = new Date(lastEnd.getTime() + 15 * 60 * 1000); // +15 Minuten Puffer
+                const newEnd = new Date(newStart.getTime() + stationDuration * 60 * 1000);
+                
+                stationStart = newStart.toTimeString().slice(0, 8);
+                stationEnd = newEnd.toTimeString().slice(0, 8);
+                foundGap = true;
+                break;
+              }
+            }
+            
+            if (!foundGap) {
+              // Keine Lücke gefunden, Termin am Ende des Tages
+              const lastAppointment = sortedAppointments[sortedAppointments.length - 1];
+              const lastEnd = lastAppointment.endzeit || lastAppointment.startzeit;
+              const lastEndTime = new Date(`2000-01-01T${lastEnd}:00`);
+              const newStart = new Date(lastEndTime.getTime() + 15 * 60 * 1000); // +15 Minuten Puffer
+              const newEnd = new Date(newStart.getTime() + stationDuration * 60 * 1000);
+              
+              stationStart = newStart.toTimeString().slice(0, 8);
+              stationEnd = newEnd.toTimeString().slice(0, 8);
+            }
+          }
+
+          console.log(`📅 [PRODUKTIV] ${employee.name} - Station ${stationIndex + 1}: ${stationStart} - ${stationEnd} (${stationDuration} Min)`);
+          
+          const kommentar = `Tour: ${tourData.tourId} | Station ${stationIndex + 1}/${tourData.stations.length} | ${station.legDescription} | Dauer: ${stationDuration} Min`;
           
           appointments.push({
             personalid: employee.id,
@@ -1303,6 +1658,16 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
 
             {/* Aktionen */}
             <div className="space-y-3 pt-4 border-t">
+              {/* API-Pfad-Debug Button */}
+              <button
+                onClick={handleTestApiPaths}
+                className="w-full flex items-center justify-center px-4 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-semibold border-2 border-purple-600"
+                title="Teste verschiedene API-Pfadvariationen um den richtigen zu finden"
+              >
+                <Navigation className="mr-2 h-5 w-5" />
+                🔍 API-PFAD-DEBUG: Teste verschiedene Pfade
+              </button>
+              
               {/* Test-Sync Button */}
               <button
                 onClick={handleTestSync}
@@ -1337,80 +1702,117 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
             </div>
 
             {/* Informations-Boxen */}
-            {assignedEmployees.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {/* Test-Info */}
-                <div className="p-3 bg-orange-50 border-2 border-orange-300 rounded-lg">
-                  <p className="text-xs font-semibold text-orange-900 mb-2">🧪 TEST-Modus:</p>
-                  <p className="text-xs text-orange-800 mb-2">
-                    Der orange Button sendet <strong>nur die Termine</strong> an Stressfrei zum Testen.
-                    Die Tour wird <strong>NICHT in Pipedrive gespeichert</strong>.
-                    Alle Termine erscheinen aber im Kalender mit "[TEST]" im Kommentar.
-                  </p>
-                  <details className="text-xs mt-2">
-                    <summary className="cursor-pointer text-orange-700 font-semibold hover:text-orange-900">
-                      📋 So debuggen Sie (Konsole öffnen)
-                    </summary>
-                    <div className="mt-2 pl-3 space-y-1 text-orange-700 border-l-2 border-orange-300">
-                      <div><strong>1. Browser-Konsole öffnen:</strong></div>
-                      <div className="pl-2">• Drücken Sie <kbd className="bg-orange-200 px-1 rounded">F12</kbd></div>
-                      <div className="pl-2">• Oder Rechtsklick → "Untersuchen" → Tab "Console"</div>
-                      
-                      <div className="mt-2"><strong>2. Nach Test-Button Klick suchen Sie:</strong></div>
-                      <div className="pl-2">• <code>📤 TEST-SYNC: Sende X Termine...</code></div>
-                      <div className="pl-2">• <code>📋 VOLLSTÄNDIGER PAYLOAD:</code> (Ihre Daten)</div>
-                      <div className="pl-2">• <code>✅ RESPONSE STATUS: 200</code> (Erfolg!)</div>
-                      <div className="pl-2">• <code>📦 RESPONSE DATA:</code> (Server-Antwort)</div>
-                      
-                      <div className="mt-2"><strong>3. Bei Fehler:</strong></div>
-                      <div className="pl-2">• <code>❌ TEST-SYNC FEHLER</code> zeigt das Problem</div>
-                      <div className="pl-2">• Kopieren Sie alle Logs zwischen den Linien <code>═══</code></div>
-                      
-                      <div className="mt-2 text-orange-600 font-semibold">
-                        💡 Siehe DEBUG_TERMINE.md für vollständige Anleitung!
-                      </div>
+            <div className="mt-4 space-y-2">
+              {/* API-Pfad-Debug Info */}
+              <div className="p-3 bg-purple-50 border-2 border-purple-300 rounded-lg">
+                <p className="text-xs font-semibold text-purple-900 mb-2">🔍 API-PFAD-DEBUG:</p>
+                <p className="text-xs text-purple-800 mb-2">
+                  Der <strong>lila Button</strong> testet verschiedene API-Pfadvariationen automatisch.
+                  Er sendet einen Test-Mitarbeiter an 5 verschiedene URLs und zeigt Ihnen, welche funktionieren.
+                </p>
+                <details className="text-xs mt-2">
+                  <summary className="cursor-pointer text-purple-700 font-semibold hover:text-purple-900">
+                    📋 Was wird getestet?
+                  </summary>
+                  <div className="mt-2 pl-3 space-y-1 text-purple-700 border-l-2 border-purple-300">
+                    <div><strong>Getestete Pfade:</strong></div>
+                    <div className="pl-2">• Aktueller Pfad (aus .env)</div>
+                    <div className="pl-2">• Mit /api/ Präfix</div>
+                    <div className="pl-2">• Ohne /api/ Präfix</div>
+                    <div className="pl-2">• Direkt zu Stressfrei</div>
+                    <div className="pl-2">• Stressfrei ohne /api/</div>
+                    
+                    <div className="mt-2"><strong>Ergebnisse:</strong></div>
+                    <div className="pl-2">• ✅ Erfolgreiche Pfade (JSON-Response)</div>
+                    <div className="pl-2">• 🌐 HTML-Responses (Login-Seiten)</div>
+                    <div className="pl-2">• ❌ Fehlerhafte Pfade</div>
+                    
+                    <div className="mt-2 text-purple-600 font-semibold">
+                      💡 Öffnen Sie die Browser-Konsole (F12) für detaillierte Logs!
                     </div>
-                  </details>
-                </div>
-                
-                {/* Was wird gespeichert */}
-                <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-                  <p className="text-xs font-semibold text-blue-900 mb-2">📦 Was wird gespeichert:</p>
-                  <ul className="text-xs text-blue-800 space-y-1">
-                    {!tourData.isSaved && <li>✅ Tour in Pipedrive ({tourData.tourDeals?.length || 0} Projekte)</li>}
-                    <li>✅ {assignedEmployees.length * (tourData.stations?.length || 0)} separate Kalendertermine</li>
-                    <li>✅ {assignedEmployees.length} Mitarbeiter × {tourData.stations?.length || 0} Stationen</li>
-                    <li>✅ Jede Station mit eigener Terminart (Transport-Art)</li>
-                  </ul>
-                </div>
-
-                {/* Termin-Details */}
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-xs font-semibold text-green-900 mb-2">📅 Pro Station wird gespeichert:</p>
-                  <div className="text-xs text-green-800 space-y-1">
-                    <div>• <strong>Terminart:</strong> Basierend auf Transport-Art</div>
-                    <div>• <strong>Zeiten:</strong> Start & Ende der Station</div>
-                    <div>• <strong>Vorgangsno:</strong> Pipedrive Deal-ID</div>
-                    <div>• <strong>Rollen:</strong> Mitarbeiter-spezifisch</div>
-                    <div>• <strong>Kommentar:</strong> Tour + Station-Details</div>
                   </div>
-                  {Object.keys(stationTransportTypes).length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-green-200 text-xs text-green-700">
-                      <span className="font-semibold">Terminarten-Mapping: </span>
-                      {Object.entries(
-                        Object.values(stationTransportTypes).reduce((acc, type) => {
-                          if (type) acc[type] = (acc[type] || 0) + 1;
-                          return acc;
-                        }, {})
-                      ).map(([type, count]) => {
-                        const typeInfo = transportTypes.find(t => t.id === type);
-                        return `${typeInfo?.icon || ''} ${typeInfo?.name || type} (${count}×)`;
-                      }).join(', ')}
-                    </div>
-                  )}
-                </div>
+                </details>
               </div>
-            )}
+              
+              {assignedEmployees.length > 0 && (
+                <>
+                  {/* Test-Info */}
+                  <div className="p-3 bg-orange-50 border-2 border-orange-300 rounded-lg">
+                    <p className="text-xs font-semibold text-orange-900 mb-2">🧪 TEST-Modus:</p>
+                    <p className="text-xs text-orange-800 mb-2">
+                      Der orange Button sendet <strong>nur die Termine</strong> an Stressfrei zum Testen.
+                      Die Tour wird <strong>NICHT in Pipedrive gespeichert</strong>.
+                      Alle Termine erscheinen aber im Kalender mit "[TEST]" im Kommentar.
+                    </p>
+                    <details className="text-xs mt-2">
+                      <summary className="cursor-pointer text-orange-700 font-semibold hover:text-orange-900">
+                        📋 So debuggen Sie (Konsole öffnen)
+                      </summary>
+                      <div className="mt-2 pl-3 space-y-1 text-orange-700 border-l-2 border-orange-300">
+                        <div><strong>1. Browser-Konsole öffnen:</strong></div>
+                        <div className="pl-2">• Drücken Sie <kbd className="bg-orange-200 px-1 rounded">F12</kbd></div>
+                        <div className="pl-2">• Oder Rechtsklick → "Untersuchen" → Tab "Console"</div>
+                        
+                        <div className="mt-2"><strong>2. Nach Test-Button Klick suchen Sie:</strong></div>
+                        <div className="pl-2">• <code>📤 TEST-SYNC: Sende X Termine...</code></div>
+                        <div className="pl-2">• <code>📋 VOLLSTÄNDIGER PAYLOAD:</code> (Ihre Daten)</div>
+                        <div className="pl-2">• <code>✅ RESPONSE STATUS: 200</code> (Erfolg!)</div>
+                        <div className="pl-2">• <code>📦 RESPONSE DATA:</code> (Server-Antwort)</div>
+                        
+                        <div className="mt-2"><strong>3. Bei Fehler:</strong></div>
+                        <div className="pl-2">• <code>❌ TEST-SYNC FEHLER</code> zeigt das Problem</div>
+                        <div className="pl-2">• Kopieren Sie alle Logs zwischen den Linien <code>═══</code></div>
+                        
+                        <div className="mt-2 text-orange-600 font-semibold">
+                          💡 Siehe DEBUG_TERMINE.md für vollständige Anleitung!
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </>
+              )}
+              
+              {assignedEmployees.length > 0 && (
+                <>
+                  {/* Was wird gespeichert */}
+                  <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs font-semibold text-blue-900 mb-2">📦 Was wird gespeichert:</p>
+                    <ul className="text-xs text-blue-800 space-y-1">
+                      {!tourData.isSaved && <li>✅ Tour in Pipedrive ({tourData.tourDeals?.length || 0} Projekte)</li>}
+                      <li>✅ {assignedEmployees.length * (tourData.stations?.length || 0)} separate Kalendertermine</li>
+                      <li>✅ {assignedEmployees.length} Mitarbeiter × {tourData.stations?.length || 0} Stationen</li>
+                      <li>✅ Jede Station mit eigener Terminart (Transport-Art)</li>
+                    </ul>
+                  </div>
+
+                  {/* Termin-Details */}
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-xs font-semibold text-green-900 mb-2">📅 Pro Station wird gespeichert:</p>
+                    <div className="text-xs text-green-800 space-y-1">
+                      <div>• <strong>Terminart:</strong> Basierend auf Transport-Art</div>
+                      <div>• <strong>Zeiten:</strong> Start & Ende der Station</div>
+                      <div>• <strong>Vorgangsno:</strong> Pipedrive Deal-ID</div>
+                      <div>• <strong>Rollen:</strong> Mitarbeiter-spezifisch</div>
+                      <div>• <strong>Kommentar:</strong> Tour + Station-Details</div>
+                    </div>
+                    {Object.keys(stationTransportTypes).length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-green-200 text-xs text-green-700">
+                        <span className="font-semibold">Terminarten-Mapping: </span>
+                        {Object.entries(
+                          Object.values(stationTransportTypes).reduce((acc, type) => {
+                            if (type) acc[type] = (acc[type] || 0) + 1;
+                            return acc;
+                          }, {})
+                        ).map(([type, count]) => {
+                          const typeInfo = transportTypes.find(t => t.id === type);
+                          return `${typeInfo?.icon || ''} ${typeInfo?.name || type} (${count}×)`;
+                        }).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -27,7 +27,7 @@ REACT_APP_SFS_API_TOKEN=6d56f23ce118508c71e09e0b9ede281e91a2f814
 
 # ✅ API-URLs (Produktionssystem Riedlin)
 REACT_APP_SERVICEPROVIDER_API_URL=https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider
-REACT_APP_SPTIMESCHEDULE_API_URL=https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule
+REACT_APP_SPTIMESCHEDULE_API_URL=https://www.stressfrei-solutions.de/dl2238205/backend/api/sptimeschedule/saveSptimeschedule
 
 # ============================================
 # Tour-Konfiguration

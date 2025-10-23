@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect  } from 'react';
-import { Home, ClipboardList, Settings, Check, Plus, MapPin, LogOut } from 'lucide-react';
+import { Home, ClipboardList, Settings, Check, Plus, MapPin, LogOut, Users } from 'lucide-react';
 import DealViewer from './components/DealViewer';
 import MoveInformationComponent from './components/MoveInformationComponent';
 import RoomSelector from './components/RoomSelector';
@@ -20,6 +20,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import MovingCalculation from './components/MovingCalculation';
 import TourPlanner from './components/TourPlanner';
 import RouteNavigation from './components/RouteNavigation';
+import EmployeeScheduling from './pages/EmployeeScheduling';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -84,7 +85,7 @@ const STEPS = [
   { id: 'admin', label: 'Admin', path: '/admin' }
 ];
 
-const TabletHeader = ({ currentDeal, onAdminClick, onHomeClick, onInspectionsClick, onRouteClick }) => {
+const TabletHeader = ({ currentDeal, onAdminClick, onHomeClick, onInspectionsClick, onRouteClick, onEmployeeClick }) => {
   const { user, logout } = useAuth();
 
   return (
@@ -123,6 +124,15 @@ const TabletHeader = ({ currentDeal, onAdminClick, onHomeClick, onInspectionsCli
           >
             <MapPin className="h-6 w-6" />
             <span className="ml-2 text-base">Routen</span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => onEmployeeClick && onEmployeeClick()}
+            className="h-12 px-4 flex items-center justify-center rounded-lg hover:bg-neutral-100 active:bg-neutral-200"
+          >
+            <Users className="h-6 w-6" />
+            <span className="ml-2">Personal</span>
           </button>
 
           {user?.role === 'admin' && (
@@ -618,12 +628,13 @@ function App() {
       onAdminClick={() => setCurrentStep('admin')}
       onHomeClick={() => setCurrentStep(0)}
       onInspectionsClick={() => setCurrentStep('inspections')}
-      onRouteClick={handleRouteClick}  
+      onRouteClick={handleRouteClick}
+      onEmployeeClick={() => setCurrentStep('employee-scheduling')}  
        />
       <main className="pt-20 px-6 pb-6">
         <div className="max-w-none mx-auto">
           {/* Step Progress - nur anzeigen, wenn weder admin, route noch tour-planner aktiv ist */}
-          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && (
+          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && currentStep !== 'employee-scheduling' && (
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
               <div className="flex justify-between">
                 {STEPS.filter(step => step.id !== 'admin').map((step, index) => {
@@ -672,7 +683,7 @@ function App() {
           )}
 
           {/* Back/Forward Controls - nur anzeigen, wenn weder admin, route noch tour-planner aktiv ist */}
-          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && (
+          {currentStep !== 'admin' && currentStep !== 'route-selection' && currentStep !== 'tour-planner' && currentStep !== 'employee-scheduling' && (
             <div className="bg-white rounded-lg shadow-sm p-4 mb-6 flex justify-between items-center">
               <button
                 onClick={() => handleStepChange(currentStep - 1)} 
@@ -957,6 +968,10 @@ function App() {
 
 {currentStep === 'inspections' && (
   <InspectionOverview />
+)}
+
+{currentStep === 'employee-scheduling' && (
+  <EmployeeScheduling onBack={() => setCurrentStep(0)} />
 )}
             </div>
           </div>

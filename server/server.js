@@ -198,13 +198,11 @@ const startServer = async () => {
     app.use(cors());
     app.use(express.json({ limit: '50mb' }));
     
-    // Logging middleware
+    // Logging middleware - nur wichtige Endpunkte
     app.use((req, res, next) => {
-      console.log('Request received:', {
-        method: req.method,
-        path: req.path,
-        body: req.body
-      });
+      if (req.path.startsWith('/api/') && !req.path.includes('static')) {
+        console.log(`🌐 [${req.method}] ${req.path}`);
+      }
       next();
     });
 
@@ -1425,20 +1423,9 @@ Antworte im folgenden JSON-Format:
     
     // Proxy für ServiceProvider API
     app.post('/api/serviceprovider/getServiceprovider', async (req, res) => {
-      const timestamp = new Date().toISOString();
-      console.log('\n' + '='.repeat(80));
-      console.log(`🔄 [PROXY] ${timestamp}`);
-      console.log('='.repeat(80));
-      console.log('📥 Anfrage von Frontend erhalten!');
-      console.log('   Endpoint: /api/serviceprovider/getServiceprovider');
-      console.log('   Client IP:', req.ip || req.connection.remoteAddress);
-      console.log('   Authorization:', req.headers.authorization ? '✅ Bearer Token vorhanden' : '❌ Kein Token!');
-      console.log('   Body:', JSON.stringify(req.body, null, 2));
+      console.log(`📥 [PROXY] ServiceProvider API - Mitarbeiter abfragen`);
       
       try {
-        console.log('\n📤 Leite Anfrage weiter an StressFrei Solutions API...');
-        console.log('   URL: https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider');
-        
         const response = await axios.post(
           'https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider',
           req.body,
@@ -1451,23 +1438,10 @@ Antworte im folgenden JSON-Format:
           }
         );
 
-        console.log('\n✅ Antwort von StressFrei Solutions erhalten!');
-        console.log('   Status:', response.status);
-        console.log('   Mitarbeiter gefunden:', Array.isArray(response.data) ? response.data.length : 'keine Array-Antwort');
-        if (Array.isArray(response.data) && response.data.length > 0) {
-          console.log('   Beispiel:', response.data[0].name || 'Name nicht verfügbar');
-        }
-        console.log('\n📤 Sende Antwort zurück an Frontend...');
-        console.log('='.repeat(80) + '\n');
-
+        console.log(`✅ [PROXY] ServiceProvider API - ${Array.isArray(response.data) ? response.data.length : 0} Mitarbeiter gefunden`);
         res.json(response.data);
       } catch (error) {
-        console.log('\n❌ FEHLER beim Proxy-Request!');
-        console.log('   Error Message:', error.message);
-        console.log('   Error Code:', error.code);
-        console.log('   Response Status:', error.response?.status);
-        console.log('   Response Data:', JSON.stringify(error.response?.data, null, 2));
-        console.log('='.repeat(80) + '\n');
+        console.log(`❌ [PROXY] ServiceProvider API - Fehler: ${error.response?.status || 500}`);
         
         res.status(error.response?.status || 500).json({
           success: false,
@@ -1479,29 +1453,11 @@ Antworte im folgenden JSON-Format:
 
     // Proxy für SPTimeSchedule API
     app.post('/api/sptimeschedule/saveSptimeschedule', async (req, res) => {
-      const timestamp = new Date().toISOString();
-      console.log('\n' + '='.repeat(80));
-      console.log(`📅 [PROXY-SCHEDULE] ${timestamp}`);
-      console.log('='.repeat(80));
-      console.log('📥 Termin-Buchung von Frontend erhalten!');
-      console.log('   Endpoint: /api/sptimeschedule/saveSptimeschedule');
-      console.log('   Client IP:', req.ip || req.connection.remoteAddress);
-      console.log('   Authorization:', req.headers.authorization ? '✅ Token vorhanden' : '❌ Kein Token!');
-      console.log('   Termine:', Array.isArray(req.body) ? req.body.length : 'keine Array');
-      if (Array.isArray(req.body) && req.body.length > 0) {
-        console.log('   Beispiel:', {
-          personalid: req.body[0].personalid,
-          datum: req.body[0].datum,
-          startzeit: req.body[0].startzeit
-        });
-      }
+      console.log(`📥 [PROXY] SPTimeSchedule API - ${Array.isArray(req.body) ? req.body.length : 0} Termine buchen`);
       
       try {
-        console.log('\n📤 Leite Anfrage weiter an StressFrei Solutions API...');
-        console.log('   URL: https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule');
-        
         const response = await axios.post(
-          'https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule',
+          'https://www.stressfrei-solutions.de/dl2238205/backend/api/sptimeschedule/saveSptimeschedule',
           req.body,
           {
             headers: {
@@ -1512,21 +1468,10 @@ Antworte im folgenden JSON-Format:
           }
         );
 
-        console.log('\n✅ Antwort von StressFrei Solutions erhalten!');
-        console.log('   Status:', response.status);
-        console.log('   Response Typ:', typeof response.data);
-        console.log('   Response:', response.data === '' ? '(LEER)' : JSON.stringify(response.data));
-        console.log('\n📤 Sende Antwort zurück an Frontend...');
-        console.log('='.repeat(80) + '\n');
-
+        console.log(`✅ [PROXY] SPTimeSchedule API - Termine erfolgreich gebucht (Status: ${response.status})`);
         res.json(response.data);
       } catch (error) {
-        console.log('\n❌ FEHLER beim Proxy-Request!');
-        console.log('   Error Message:', error.message);
-        console.log('   Error Code:', error.code);
-        console.log('   Response Status:', error.response?.status);
-        console.log('   Response Data:', JSON.stringify(error.response?.data, null, 2));
-        console.log('='.repeat(80) + '\n');
+        console.log(`❌ [PROXY] SPTimeSchedule API - Fehler: ${error.response?.status || 500}`);
         
         res.status(error.response?.status || 500).json({
           success: false,
@@ -1547,7 +1492,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('   POST /api/serviceprovider/getServiceprovider');
   console.log('      → https://www.stressfrei-solutions.de/dl2238205/backend/api/serviceprovider/getServiceprovider');
   console.log('   POST /api/sptimeschedule/saveSptimeschedule');
-  console.log('      → https://www.stressfrei-solutions.de/dl2238205/backend/sptimeschedule/saveSptimeschedule');
+  console.log('      → https://www.stressfrei-solutions.de/dl2238205/backend/api/sptimeschedule/saveSptimeschedule');
   console.log('\n💡 Tipp: Logs mit "pm2 logs moving-assistant-api" anzeigen');
   console.log('='.repeat(80) + '\n');
 });

@@ -29,6 +29,10 @@ const EmployeeScheduling = ({ onBack }) => {
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [appointmentStartTime, setAppointmentStartTime] = useState('08:00');
   const [appointmentEndTime, setAppointmentEndTime] = useState('16:00');
+  
+  // Fahrzeuge aus Deal-Mehrfachauswahl
+  const [dealVehicles, setDealVehicles] = useState([]);
+  const [selectedVehicles, setSelectedVehicles] = useState([]);
 
   // Hilfsfunktionen
   const formatCurrency = (value, currency) => {
@@ -93,22 +97,179 @@ const EmployeeScheduling = ({ onBack }) => {
 
   // Pipedrive benutzerdefinierte Feld-Keys (essentielle Planung)
   const PD_FIELD_DRIVER_12T = 'a1ee000b4ac48779cfb43f1319bd37250705ddaf';
-  const PD_FIELD_DRIVER_7T5 = 'ebb714ecc0028be711b635733a871504b2268b58e';
-  const PD_FIELD_DRIVER_3T5 = 'e6141bc66082c18bad305abbcd47e87f1e6451d8f';
+  const PD_FIELD_DRIVER_7T5 = 'ebb714ecc0028be711b63573a871504b2268b58e';
+  const PD_FIELD_DRIVER_3T5 = 'e6141bc6608c18bad305abbc4d7e871fe6451d8f';
   const PD_FIELD_MONTEURE = '20b3d99d25f0a4f3377e94f4731cd6089c421831';
   const PD_FIELD_HELPERS = '34b7e1187558cb432b19593871c7f8599de16b22';
   const PD_FIELD_PIANO = '92fe9d2c1d616504b461a2dfdc2e17f5bd73d754';
+  const PD_FIELD_VEHICLES = '7ef0bad215357130769f5d26e0b47c5c55da239d';
   // Pipedrive Leistungsdatum (Projekt-/Servicedatum) Feld-Key – Format: Date
   const PD_FIELD_SERVICE_DATE = '949696aa9d99044db90383a758a74675587ed893';
+  
+  // Fahrzeug-Typen (echte IDs und Kennzeichen)
+  const vehicleTypes = [
+    { id: '907', name: '12 Tonner', icon: '🚛', kennzeichen: 'KA AR 577', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '908', name: '7,5 Tonner', icon: '🚚', kennzeichen: 'KA AR 583', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '909', name: '7,5 Tonner', icon: '🚚', kennzeichen: 'KA AR 578', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '910', name: '3,5 Tonner', icon: '🚐', kennzeichen: 'KA AR 581', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '911', name: '3,5 Tonner', icon: '🚐', kennzeichen: 'KA AR 579', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '912', name: '3,5 Tonner', icon: '🚐', kennzeichen: 'KA AR 586', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '913', name: 'Caddy', icon: '🚐', kennzeichen: 'KA AR 580', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '914', name: 'Amarok', icon: '🚐', kennzeichen: 'KA AR 576', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' }
+  ];
+  
 
-  const getDealCounts = (item) => ({
-    driver12t: Number(item?.[PD_FIELD_DRIVER_12T] || 0),
-    driver7t5: Number(item?.[PD_FIELD_DRIVER_7T5] || 0),
-    driver3t5: Number(item?.[PD_FIELD_DRIVER_3T5] || 0),
-    monteure: Number(item?.[PD_FIELD_MONTEURE] || 0),
-    helpers: Number(item?.[PD_FIELD_HELPERS] || 0),
-    piano: Number(item?.[PD_FIELD_PIANO] || 0)
-  });
+  const getDealCounts = (item) => {
+    // Erweiterte Debug-Ausgabe
+    console.log('🔍 Vollständiges Deal-Objekt:', item);
+    console.log('🔍 Alle verfügbaren Felder:', Object.keys(item || {}));
+    
+    const rawValues = {
+      [PD_FIELD_DRIVER_12T]: item?.[PD_FIELD_DRIVER_12T],
+      [PD_FIELD_DRIVER_7T5]: item?.[PD_FIELD_DRIVER_7T5],
+      [PD_FIELD_DRIVER_3T5]: item?.[PD_FIELD_DRIVER_3T5],
+      [PD_FIELD_MONTEURE]: item?.[PD_FIELD_MONTEURE],
+      [PD_FIELD_HELPERS]: item?.[PD_FIELD_HELPERS],
+      [PD_FIELD_PIANO]: item?.[PD_FIELD_PIANO]
+    };
+    
+    console.log('🔍 Deal-Rohdaten (Fahrer-Felder):', rawValues);
+    console.log('🔍 Feld-Typen:', {
+      driver12t: typeof rawValues[PD_FIELD_DRIVER_12T],
+      driver7t5: typeof rawValues[PD_FIELD_DRIVER_7T5],
+      driver3t5: typeof rawValues[PD_FIELD_DRIVER_3T5],
+      monteure: typeof rawValues[PD_FIELD_MONTEURE],
+      helpers: typeof rawValues[PD_FIELD_HELPERS],
+      piano: typeof rawValues[PD_FIELD_PIANO]
+    });
+    
+    // Robustere Konvertierung für verschiedene Datentypen
+    const parseCount = (value) => {
+      if (value === null || value === undefined || value === '') return 0;
+      if (typeof value === 'number') return value;
+      if (typeof value === 'string') {
+        const parsed = parseInt(value, 10);
+        return isNaN(parsed) ? 0 : parsed;
+      }
+      return 0;
+    };
+    
+    const counts = {
+      driver12t: parseCount(rawValues[PD_FIELD_DRIVER_12T]),
+      driver7t5: parseCount(rawValues[PD_FIELD_DRIVER_7T5]),
+      driver3t5: parseCount(rawValues[PD_FIELD_DRIVER_3T5]),
+      monteure: parseCount(rawValues[PD_FIELD_MONTEURE]),
+      helpers: parseCount(rawValues[PD_FIELD_HELPERS]),
+      piano: parseCount(rawValues[PD_FIELD_PIANO])
+    };
+    
+    console.log('📊 Berechnete Anforderungen:', counts);
+    console.log('📊 Summe aller Fahrer:', counts.driver12t + counts.driver7t5 + counts.driver3t5);
+    
+    // Verarbeite Fahrzeug-Mehrfachauswahl aus Deal
+    const vehicles = item?.[PD_FIELD_VEHICLES];
+    if (vehicles) {
+      console.log('🚗 Fahrzeug-Mehrfachauswahl aus Deal:', vehicles);
+      let vehicleIds = [];
+      
+      if (Array.isArray(vehicles)) {
+        vehicleIds = vehicles;
+      } else if (typeof vehicles === 'string') {
+        // Komma-getrennte String zu Array konvertieren
+        vehicleIds = vehicles.split(',').map(v => v.trim()).filter(v => v);
+      }
+      
+      console.log('🚗 Fahrzeug-IDs:', vehicleIds);
+      
+      // Finde entsprechende Fahrzeug-Typen
+      const selectedVehicleTypes = vehicleIds.map(id => 
+        vehicleTypes.find(vt => vt.id === id)
+      ).filter(vt => vt); // Entferne undefined
+      
+      console.log('🚗 Gefundene Fahrzeug-Typen:', selectedVehicleTypes);
+      return { ...counts, vehicles: selectedVehicleTypes };
+    }
+    
+    return counts;
+  };
+
+  // State für Fahrzeuge
+  const [availableVehicles, setAvailableVehicles] = useState([]);
+  const [loadingVehicles, setLoadingVehicles] = useState(false);
+
+  // Lade Fahrzeuge mit Status und Verfügbarkeit
+  const fetchVehicles = useCallback(async () => {
+    if (!SFS_API_TOKEN) {
+      console.error('❌ Kein API-Token konfiguriert! Bitte REACT_APP_SFS_API_TOKEN in .env setzen.');
+      return;
+    }
+
+    setLoadingVehicles(true);
+
+    try {
+      const dateFrom = format(startDate, 'yyyy-MM-dd');
+      const dateTo = format(endDate, 'yyyy-MM-dd');
+
+      const requestBody = {
+        date_from: dateFrom,
+        date_to: dateTo,
+        joins: [
+          "Vertraege",
+          "Eigenschaften",
+          "Termine"
+        ]
+      };
+
+      console.log(`📥 [API] ServiceProvider - Fahrzeuge laden (${dateFrom} bis ${dateTo})`);
+
+      const response = await axios.post(SERVICEPROVIDER_API_URL, requestBody, {
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': SFS_API_TOKEN
+        }
+      });
+
+      if (response.data && Array.isArray(response.data)) {
+        const vehicles = response.data
+          .filter(item => {
+            // Nur Fahrzeuge laden (staff_status_Fuhrpark_Maschinen: null)
+            const eigenschaften = item.Eigenschaften || {};
+            return eigenschaften['staff_status_Fuhrpark_Maschinen '] === null;
+          })
+          .map(item => {
+            const emp = item.Teammitglied || item;
+            
+            return {
+              id: emp.Id || emp.id || emp.personalid || emp.uuid,
+              name: emp.name || `${emp.Vorname || emp.vorname || ''} ${emp.Nachname || emp.nachname || ''}`.trim() || 'Unbekannt',
+              eigenschaften: item.Eigenschaften || emp.Eigenschaften || {},
+              vertraege: item.Vertraege || emp.Vertraege || [],
+              termine: item.Termine || emp.Termine || [],
+              // Berechne Verfügbarkeit für den Zeitraum (wie bei Mitarbeitern)
+              availabilityStatus: calculateAvailability(item.Termine || emp.Termine || [], startDate, endDate),
+              // Zusätzliche Fahrzeug-spezifische Eigenschaften
+              isVehicle: true,
+              vehicleType: item.Eigenschaften?.vehicle_type || 'Unbekannt',
+              status: item.Eigenschaften?.status || 'Verfügbar'
+            };
+          });
+
+        setAvailableVehicles(vehicles);
+        console.log(`✅ [API] ServiceProvider - ${vehicles.length} Fahrzeuge geladen`);
+        return vehicles;
+      } else {
+        setAvailableVehicles([]);
+        return [];
+      }
+    } catch (error) {
+      console.error('❌ [API] ServiceProvider - Fehler beim Laden der Fahrzeuge:', error);
+      setAvailableVehicles([]);
+      return [];
+    } finally {
+      setLoadingVehicles(false);
+    }
+  }, [startDate, endDate, SERVICEPROVIDER_API_URL, SFS_API_TOKEN]);
 
   // Lizenzen pro Fahrer-Rolle, genutzt um Filter zu setzen und Auswahl zu zählen
   const getRequiredLicensesForRole = (roleKey) => {
@@ -235,19 +396,29 @@ const EmployeeScheduling = ({ onBack }) => {
       });
 
       if (response.data && Array.isArray(response.data)) {
-        const processedEmployees = response.data.map(item => {
-          const emp = item.Teammitglied || item;
-          
-          return {
-            id: emp.Id || emp.id || emp.personalid || emp.uuid,
-            name: emp.name || `${emp.Vorname || emp.vorname || ''} ${emp.Nachname || emp.nachname || ''}`.trim() || 'Unbekannt',
-            eigenschaften: item.Eigenschaften || emp.Eigenschaften || {},
-            vertraege: item.Vertraege || emp.Vertraege || [],
-            termine: item.Termine || emp.Termine || [],
-            // Berechne Verfügbarkeit für den Zeitraum
-            availabilityStatus: calculateAvailability(item.Termine || emp.Termine || [], startDate, endDate)
-          };
-        });
+        const processedEmployees = response.data
+          .filter(item => {
+            // Nur aktive Mitarbeiter laden (sp_teammember: null) UND keine Fahrzeuge
+            const eigenschaften = item.Eigenschaften || {};
+            const isActiveEmployee = eigenschaften.sp_teammember === null;
+            const isVehicle = eigenschaften['staff_status_Fuhrpark_Maschinen '] === null;
+            
+            // Nur aktive Mitarbeiter, die KEINE Fahrzeuge sind
+            return isActiveEmployee && !isVehicle;
+          })
+          .map(item => {
+            const emp = item.Teammitglied || item;
+            
+            return {
+              id: emp.Id || emp.id || emp.personalid || emp.uuid,
+              name: emp.name || `${emp.Vorname || emp.vorname || ''} ${emp.Nachname || emp.nachname || ''}`.trim() || 'Unbekannt',
+              eigenschaften: item.Eigenschaften || emp.Eigenschaften || {},
+              vertraege: item.Vertraege || emp.Vertraege || [],
+              termine: item.Termine || emp.Termine || [],
+              // Berechne Verfügbarkeit für den Zeitraum
+              availabilityStatus: calculateAvailability(item.Termine || emp.Termine || [], startDate, endDate)
+            };
+          });
 
         const available = processedEmployees.filter(e => e.availabilityStatus.status === 'available').length;
         console.log(`✅ [API] ServiceProvider - ${processedEmployees.length} Mitarbeiter geladen (${available} verfügbar)`);
@@ -270,6 +441,13 @@ const EmployeeScheduling = ({ onBack }) => {
   useEffect(() => {
     fetchEmployees();
   }, [fetchEmployees]);
+
+  // Lade Fahrzeuge beim Start und bei Datumsänderungen
+  useEffect(() => {
+    fetchVehicles();
+  }, [fetchVehicles]);
+
+  // Fahrzeug-Loading entfernt
 
   // Dealsuche (Pipedrive)
   const fetchDeals = async (term = '') => {
@@ -613,8 +791,14 @@ const EmployeeScheduling = ({ onBack }) => {
       return;
     }
 
+    if (selectedVehicles.length === 0) {
+      alert('⚠️ Bitte wählen Sie mindestens ein Fahrzeug aus.');
+      return;
+    }
+
     console.log(`📥 [TRANSFER] Mitarbeiter-Zuordnung für Deal ${selectedDeal.item.id} vorbereiten`);
     console.log(`✅ [TRANSFER] ${selectedEmployees.length} Mitarbeiter ausgewählt`);
+    console.log(`🚗 [TRANSFER] ${selectedVehicles.length} Fahrzeuge ausgewählt`);
 
     try {
       // Berechne die Dauer basierend auf Start- und Endzeit
@@ -637,87 +821,101 @@ const EmployeeScheduling = ({ onBack }) => {
       
       console.log(`📅 [TRANSFER] Verwende Start-Datum: ${dealDateString}`);
 
-      // Erstelle Termine für alle ausgewählten Mitarbeiter
-      const appointments = selectedEmployees.map(employee => {
-        // Prüfe ob Mitarbeiter bereits Termine an diesem Tag hat
-        const existingAppointments = employee.termine?.filter(termin => 
-          termin.datum === dealDateString
-        ) || [];
+        // Erstelle Termine für alle ausgewählten Mitarbeiter und Fahrzeuge
+        const appointments = [];
+        
+        // Für jedes Fahrzeug
+        selectedVehicles.forEach((vehicle, vehicleIndex) => {
+          // Für jeden Mitarbeiter
+          selectedEmployees.forEach(employee => {
+          // Prüfe ob Mitarbeiter bereits Termine an diesem Tag hat
+          const existingAppointments = employee.termine?.filter(termin => 
+            termin.datum === dealDateString
+          ) || [];
 
-        // Finde den nächsten freien Zeitraum
-        let appointmentStart = appointmentStartTime;
-        let appointmentEnd = appointmentEndTime;
+          // Finde den nächsten freien Zeitraum
+          let appointmentStart = appointmentStartTime;
+          let appointmentEnd = appointmentEndTime;
 
-        if (existingAppointments.length > 0) {
-          // Sortiere bestehende Termine nach Startzeit
-          const sortedAppointments = existingAppointments.sort((a, b) => 
-            a.startzeit?.localeCompare(b.startzeit) || 0
-          );
+          if (existingAppointments.length > 0) {
+            // Sortiere bestehende Termine nach Startzeit
+            const sortedAppointments = existingAppointments.sort((a, b) => 
+              a.startzeit?.localeCompare(b.startzeit) || 0
+            );
 
-          // Finde Lücke zwischen Terminen oder nach dem letzten Termin
-          let foundGap = false;
-          
-          for (let i = 0; i < sortedAppointments.length; i++) {
-            const currentAppointment = sortedAppointments[i];
-            const nextAppointment = sortedAppointments[i + 1];
+            // Finde Lücke zwischen Terminen oder nach dem letzten Termin
+            let foundGap = false;
             
-            const currentEnd = currentAppointment.endzeit || currentAppointment.startzeit;
-            const nextStart = nextAppointment?.startzeit;
-            
-            // Prüfe ob zwischen currentEnd und nextStart genug Zeit ist
-            if (nextStart) {
-              const gapStart = new Date(`2000-01-01T${currentEnd}:00`);
-              const gapEnd = new Date(`2000-01-01T${nextStart}:00`);
-              const gapMinutes = (gapEnd - gapStart) / (1000 * 60);
+            for (let i = 0; i < sortedAppointments.length; i++) {
+              const currentAppointment = sortedAppointments[i];
+              const nextAppointment = sortedAppointments[i + 1];
               
-              if (gapMinutes >= duration.totalMinutes) {
-                appointmentStart = currentEnd;
-                const gapStartTime = new Date(gapStart.getTime() + 1 * 60 * 1000); // +1 Minute Puffer
-                appointmentEnd = gapStartTime.toTimeString().slice(0, 5);
+              const currentEnd = currentAppointment.endzeit || currentAppointment.startzeit;
+              const nextStart = nextAppointment?.startzeit;
+              
+              // Prüfe ob zwischen currentEnd und nextStart genug Zeit ist
+              if (nextStart) {
+                const gapStart = new Date(`2000-01-01T${currentEnd}:00`);
+                const gapEnd = new Date(`2000-01-01T${nextStart}:00`);
+                const gapMinutes = (gapEnd - gapStart) / (1000 * 60);
+                
+                if (gapMinutes >= duration.totalMinutes) {
+                  appointmentStart = currentEnd;
+                  const gapStartTime = new Date(gapStart.getTime() + 1 * 60 * 1000); // +1 Minute Puffer
+                  appointmentEnd = gapStartTime.toTimeString().slice(0, 5);
+                  foundGap = true;
+                  break;
+                }
+              } else {
+                // Nach dem letzten Termin
+                const lastEnd = new Date(`2000-01-01T${currentEnd}:00`);
+                const newStart = new Date(lastEnd.getTime() + 15 * 60 * 1000); // +15 Minuten Puffer
+                const newEnd = new Date(newStart.getTime() + duration.totalMinutes * 60 * 1000);
+                
+                appointmentStart = newStart.toTimeString().slice(0, 5);
+                appointmentEnd = newEnd.toTimeString().slice(0, 5);
                 foundGap = true;
                 break;
               }
-            } else {
-              // Nach dem letzten Termin
-              const lastEnd = new Date(`2000-01-01T${currentEnd}:00`);
-              const newStart = new Date(lastEnd.getTime() + 15 * 60 * 1000); // +15 Minuten Puffer
+            }
+            
+            if (!foundGap) {
+              // Keine Lücke gefunden, Termin am Ende des Tages
+              const lastAppointment = sortedAppointments[sortedAppointments.length - 1];
+              const lastEnd = lastAppointment.endzeit || lastAppointment.startzeit;
+              const lastEndTime = new Date(`2000-01-01T${lastEnd}:00`);
+              const newStart = new Date(lastEndTime.getTime() + 15 * 60 * 1000); // +15 Minuten Puffer
               const newEnd = new Date(newStart.getTime() + duration.totalMinutes * 60 * 1000);
               
               appointmentStart = newStart.toTimeString().slice(0, 5);
               appointmentEnd = newEnd.toTimeString().slice(0, 5);
-              foundGap = true;
-              break;
             }
           }
+
+          console.log(`📅 [TRANSFER] ${employee.name} (${vehicle.name}): ${appointmentStart} - ${appointmentEnd} (${duration.totalMinutes} Min) am ${dealDateString}`);
+
+          // Finde das entsprechende Fahrzeug aus der verfügbaren Liste für Status-Info
+          const vehicleFromList = availableVehicles.find(v => v.id === vehicle.id);
+          const vehicleStatus = vehicleFromList ? vehicleFromList.availabilityStatus : null;
           
-          if (!foundGap) {
-            // Keine Lücke gefunden, Termin am Ende des Tages
-            const lastAppointment = sortedAppointments[sortedAppointments.length - 1];
-            const lastEnd = lastAppointment.endzeit || lastAppointment.startzeit;
-            const lastEndTime = new Date(`2000-01-01T${lastEnd}:00`);
-            const newStart = new Date(lastEndTime.getTime() + 15 * 60 * 1000); // +15 Minuten Puffer
-            const newEnd = new Date(newStart.getTime() + duration.totalMinutes * 60 * 1000);
-            
-            appointmentStart = newStart.toTimeString().slice(0, 5);
-            appointmentEnd = newEnd.toTimeString().slice(0, 5);
-          }
-        }
-
-        console.log(`📅 [TRANSFER] ${employee.name}: ${appointmentStart} - ${appointmentEnd} (${duration.totalMinutes} Min) am ${dealDateString}`);
-
-        return {
-          personalid: employee.id,
-          terminart: '3a4df8a1-2387-11e8-839c-00113241b9d5', // Standard Umzugsausführung
-          vorgangsno: selectedDeal.item.id?.toString() || '',
-          angebotsno: selectedDeal.item.id?.toString() || '',
-          datum: dealDateString, // Verwende das Deal-Datum
-          startzeit: appointmentStart + ':00',
-          endzeit: appointmentEnd + ':00',
-          kommentar: `Deal: ${selectedDeal.item.title} | Mitarbeiter: ${employee.name} | Dauer: ${duration.totalMinutes} Min`,
-          rolle: employee.roles || ['Monteur'],
-          kennzeichen: process.env.REACT_APP_DEFAULT_KENNZEICHEN || 'KA-RD 1234'
-        };
-      });
+          appointments.push({
+            personalid: employee.id,
+            terminart: vehicle.terminartId || '3a4df8a1-2387-11e8-839c-00113241b9d5',
+            vorgangsno: selectedDeal.item.id?.toString() || '',
+            angebotsno: selectedDeal.item.id?.toString() || '',
+            datum: dealDateString,
+            startzeit: appointmentStart + ':00',
+            endzeit: appointmentEnd + ':00',
+            kommentar: `Deal: ${selectedDeal.item.title} | Fahrzeug: ${vehicle.name} (${vehicle.kennzeichen}) | Mitarbeiter: ${employee.name} | Dauer: ${duration.totalMinutes} Min`,
+            rolle: employee.roles || ['Monteur'],
+            kennzeichen: vehicle.kennzeichen,
+            // Fahrzeug-Status für Planung hinzufügen
+            fahrzeug_status: vehicleStatus?.status || 'unbekannt',
+            fahrzeug_termine_anzahl: vehicleStatus?.appointments || 0,
+            fahrzeug_verfuegbar: vehicleStatus?.status === 'available'
+          });
+          });
+        });
 
       console.log('📤 [TRANSFER] Sende Termine an SPTimeSchedule...');
       console.log('═══════════════════════════════════════════');
@@ -756,13 +954,26 @@ const EmployeeScheduling = ({ onBack }) => {
         successMessage += `Deal: ${selectedDeal.item.title}\n`;
         successMessage += `Datum: ${format(startDate, 'dd.MM.yyyy', { locale: de })}\n`;
         successMessage += `Zeit: ${appointmentStartTime} - ${appointmentEndTime}\n`;
-        successMessage += `Mitarbeiter: ${selectedEmployees.length}\n\n`;
-        successMessage += `Response: ${JSON.stringify(response.data)}`;
+        successMessage += `Mitarbeiter: ${selectedEmployees.length}\n`;
+        successMessage += `Fahrzeuge: ${selectedVehicles.length}\n`;
+        successMessage += `Termine: ${appointments.length} (${selectedEmployees.length} Mitarbeiter × ${selectedVehicles.length} Fahrzeuge)\n\n`;
+        
+        // Fahrzeug-Status-Übersicht hinzufügen
+        successMessage += `🚗 Fahrzeug-Status:\n`;
+        selectedVehicles.forEach(vehicle => {
+          const vehicleFromList = availableVehicles.find(v => v.id === vehicle.id);
+          const status = vehicleFromList?.availabilityStatus?.status || 'unbekannt';
+          const appointments = vehicleFromList?.availabilityStatus?.appointments || 0;
+          successMessage += `• ${vehicle.name} (${vehicle.kennzeichen}): ${status === 'available' ? 'Verfügbar' : `${appointments} Termine`}\n`;
+        });
+        
+        successMessage += `\nResponse: ${JSON.stringify(response.data)}`;
         
         alert(successMessage);
         
         // Reset nach erfolgreichem Transfer
         setSelectedEmployees([]);
+        setSelectedVehicles([]);
         setSelectedDeal(null);
       } else {
         throw new Error(`Unerwarteter Status: ${response.status}`);
@@ -785,7 +996,7 @@ const EmployeeScheduling = ({ onBack }) => {
       
       alert(errorMessage);
     }
-  }, [selectedDeal, selectedEmployees, selectedDate, appointmentStartTime, appointmentEndTime]);
+  }, [selectedDeal, selectedEmployees, selectedVehicles, selectedDate, appointmentStartTime, appointmentEndTime]);
 
   // Verfügbarkeit berechnen (robust gegen verschiedene Feldschreibweisen)
   const calculateAvailability = (termine, start, end) => {
@@ -1129,45 +1340,89 @@ const EmployeeScheduling = ({ onBack }) => {
                       <>
                         {c.driver12t > 0 && (
                           <button onClick={() => applyRoleFilter('driver12t')} className="px-2 py-1 rounded bg-blue-100 text-blue-800 hover:bg-blue-200">
-                            12t Fahrer: {c.driver12t}
+                            🚛 12t Fahrer: {c.driver12t}
                             <span className="ml-2 text-[10px] bg-white/60 px-1 py-0.5 rounded">{countSelectedForRole('driver12t')} gewählt</span>
                           </button>
                         )}
                         {c.driver7t5 > 0 && (
                           <button onClick={() => applyRoleFilter('driver7t5')} className="px-2 py-1 rounded bg-indigo-100 text-indigo-800 hover:bg-indigo-200">
-                            7.5t Fahrer: {c.driver7t5}
+                            🚚 7.5t Fahrer: {c.driver7t5}
                             <span className="ml-2 text-[10px] bg-white/60 px-1 py-0.5 rounded">{countSelectedForRole('driver7t5')} gewählt</span>
                           </button>
                         )}
                         {c.driver3t5 > 0 && (
                           <button onClick={() => applyRoleFilter('driver3t5')} className="px-2 py-1 rounded bg-cyan-100 text-cyan-800 hover:bg-cyan-200">
-                            3.5t Fahrer: {c.driver3t5}
+                            🚐 3.5t Fahrer: {c.driver3t5}
                             <span className="ml-2 text-[10px] bg-white/60 px-1 py-0.5 rounded">{countSelectedForRole('driver3t5')} gewählt</span>
                           </button>
                         )}
                         {c.monteure > 0 && (
                           <button onClick={() => applyRoleFilter('monteure')} className="px-2 py-1 rounded bg-amber-100 text-amber-800 hover:bg-amber-200">
-                            Monteure: {c.monteure}
+                            🔧 Monteure: {c.monteure}
                             <span className="ml-2 text-[10px] bg-white/60 px-1 py-0.5 rounded">{countSelectedForRole('monteure')} gewählt</span>
                           </button>
                         )}
                         {c.helpers > 0 && (
                           <button onClick={() => applyRoleFilter('helpers')} className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 hover:bg-emerald-200">
-                            Umzugshelfer: {c.helpers}
+                            👷 Umzugshelfer: {c.helpers}
                             <span className="ml-2 text-[10px] bg-white/60 px-1 py-0.5 rounded">{countSelectedForRole('helpers')} gewählt</span>
                           </button>
                         )}
                         {c.piano > 0 && (
                           <button onClick={() => applyRoleFilter('piano')} className="px-2 py-1 rounded bg-purple-100 text-purple-800 hover:bg-purple-200">
-                            Klavierträger: {c.piano}
+                            🎹 Klavierträger: {c.piano}
                             <span className="ml-2 text-[10px] bg-white/60 px-1 py-0.5 rounded">{countSelectedForRole('piano')} gewählt</span>
                           </button>
                         )}
                       </>
                     ); })()}
                   </div>
+                  
                 </div>
               </div>
+
+              {/* Fahrzeugauswahl aus Deal */}
+              {(() => {
+                const dealCounts = getDealCounts(selectedDeal.item || {});
+                if (dealCounts.vehicles && dealCounts.vehicles.length > 0) {
+                  return (
+                    <div className="mb-6">
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        🚗 Fahrzeuge aus Deal-Auswahl:
+                      </label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {dealCounts.vehicles.map((vehicle, index) => (
+                          <label key={index} className="flex items-center p-3 border-2 border-blue-200 bg-blue-50 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={selectedVehicles.some(v => v.id === vehicle.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedVehicles(prev => [...prev, vehicle]);
+                                } else {
+                                  setSelectedVehicles(prev => prev.filter(v => v.id !== vehicle.id));
+                                }
+                              }}
+                              className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded mr-3"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{vehicle.icon}</span>
+                                <span className="font-medium text-gray-900">{vehicle.name}</span>
+                              </div>
+                              <div className="text-sm text-gray-600">Kennzeichen: {vehicle.kennzeichen}</div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        💡 Wählen Sie die Fahrzeuge aus, die für diesen Deal verwendet werden sollen.
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -1198,7 +1453,7 @@ const EmployeeScheduling = ({ onBack }) => {
                   </button>
                   <button
                     onClick={handleTransferToStressfrei}
-                    disabled={selectedEmployees.length === 0}
+                    disabled={selectedEmployees.length === 0 || selectedVehicles.length === 0}
                     className="w-full md:w-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                   >
                     An Stressfrei übertragen
@@ -1396,11 +1651,106 @@ const EmployeeScheduling = ({ onBack }) => {
           )}
         </div>
 
+        {/* Fahrzeug-Status */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              🚗 Fahrzeug-Status ({availableVehicles.length})
+            </h2>
+            {loadingVehicles && (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Lade Fahrzeuge...
+              </div>
+            )}
+          </div>
+
+          {loadingVehicles ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+              <p className="text-gray-500 mt-2">Fahrzeuge werden geladen...</p>
+            </div>
+          ) : availableVehicles.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-gray-400 text-4xl mb-2">🚗</div>
+              <p className="text-gray-500">Keine Fahrzeuge verfügbar</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {availableVehicles.map(vehicle => (
+                <div
+                  key={vehicle.id}
+                  className={`border-2 rounded-lg p-4 transition-all hover:shadow-md ${
+                    vehicle.availabilityStatus.status === 'available'
+                      ? 'border-green-200 bg-green-50'
+                      : 'border-yellow-200 bg-yellow-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg text-gray-900 flex items-center gap-2">
+                        {vehicle.name}
+                        {vehicle.availabilityStatus.status === 'available' ? (
+                          <CheckCircle className="h-5 w-5 text-green-600" title="Verfügbar" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-yellow-600" title="Verplant" />
+                        )}
+                      </h3>
+                      <p className="text-sm text-gray-500">ID: {vehicle.id}</p>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      vehicle.availabilityStatus.status === 'available'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {vehicle.availabilityStatus.status === 'available' ? 'Verfügbar' : `${vehicle.availabilityStatus.appointments} Termin(e)`}
+                    </div>
+                  </div>
+
+                  {/* Fahrzeug-Eigenschaften */}
+                  <div className="mb-3">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                        🚗 {vehicle.vehicleType}
+                      </span>
+                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                        📊 {vehicle.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Termine */}
+                  {vehicle.availabilityStatus.status === 'busy' && vehicle.availabilityStatus.details.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-yellow-200">
+                      <details className="cursor-pointer">
+                        <summary className="text-sm font-medium text-gray-700 hover:text-gray-900 flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          Termine im Zeitraum ({vehicle.availabilityStatus.appointments})
+                        </summary>
+                        <div className="mt-2 space-y-2 pl-6">
+                          {vehicle.availabilityStatus.details.map((appointment, idx) => (
+                            <div key={idx} className="text-sm text-gray-600">
+                              <div className="font-medium">{format(new Date(appointment.date), 'dd.MM.yyyy', { locale: de })}</div>
+                              <div className="text-xs text-gray-500">
+                                {appointment.start} - {appointment.end} • {appointment.type}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Ergebnisse */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-gray-900">
-              Mitarbeiter ({filteredEmployees.length})
+              👥 Mitarbeiter ({filteredEmployees.length})
             </h2>
             {loadingEmployees && (
               <div className="flex items-center gap-2 text-sm text-gray-500">

@@ -194,6 +194,12 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
   // Rollen pro Mitarbeiter (Index -> Rollen-Array)
   const [employeeRoles, setEmployeeRoles] = useState({});
   
+  // Mehrere Fahrzeuge pro Tour
+  const [tourVehicles, setTourVehicles] = useState([]);
+  const [selectedTourVehicles, setSelectedTourVehicles] = useState([]);
+  const [availableVehicles, setAvailableVehicles] = useState([]);
+  const [loadingVehicles, setLoadingVehicles] = useState(false);
+  
   // Transport-Arten Liste mit korrekten Terminart-IDs aus Stressfrei
   const transportTypes = [
     { 
@@ -274,6 +280,18 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
   const SERVICEPROVIDER_API_URL = process.env.REACT_APP_SERVICEPROVIDER_API_URL || 'https://lolworlds.online/api/serviceprovider/getServiceprovider';
   const SFS_API_TOKEN = process.env.REACT_APP_SFS_API_TOKEN;
   const DEFAULT_KENNZEICHEN = process.env.REACT_APP_DEFAULT_KENNZEICHEN || 'KA-RD 1234';
+  
+  // Fahrzeug-Typen für Touren (echte IDs und Kennzeichen)
+  const vehicleTypes = [
+    { id: '907', name: '12 Tonner', icon: '🚛', kennzeichen: 'KA AR 577', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '908', name: '7,5 Tonner', icon: '🚚', kennzeichen: 'KA AR 583', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '909', name: '7,5 Tonner', icon: '🚚', kennzeichen: 'KA AR 578', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '910', name: '3,5 Tonner', icon: '🚐', kennzeichen: 'KA AR 581', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '911', name: '3,5 Tonner', icon: '🚐', kennzeichen: 'KA AR 579', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '912', name: '3,5 Tonner', icon: '🚐', kennzeichen: 'KA AR 586', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '913', name: 'Caddy', icon: '🚐', kennzeichen: 'KA AR 580', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' },
+    { id: '914', name: 'Amarok', icon: '🚐', kennzeichen: 'KA AR 576', terminartId: '3a4df8a1-2387-11e8-839c-00113241b9d5' }
+  ];
   
   // Verfügbare Führerscheinklassen
   const licenseClasses = ['B', 'C1', 'C', 'CE', 'C1E', 'BE'];
@@ -367,19 +385,25 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
       });
 
       if (response.data && Array.isArray(response.data)) {
-        let employees = response.data.map(item => {
-          const emp = item.Teammitglied || item;
-          
-          return {
-            id: emp.Id || emp.id || emp.personalid || emp.uuid,
-            name: emp.name || `${emp.Vorname || emp.vorname || ''} ${emp.Nachname || emp.nachname || ''}`.trim() || 'Unbekannt',
-            eigenschaften: item.Eigenschaften || emp.Eigenschaften || {},
-            vertraege: item.Vertraege || emp.Vertraege || [],
-            termine: item.Termine || emp.Termine || [],
-            isAvailable: !item.Termine || item.Termine.length === 0 || 
-                         !item.Termine.some(termin => termin.datum === dateStr)
-          };
-        });
+        let employees = response.data
+          .filter(item => {
+            // Nur aktive Mitarbeiter laden (sp_teammember: null)
+            const eigenschaften = item.Eigenschaften || {};
+            return eigenschaften.sp_teammember === null;
+          })
+          .map(item => {
+            const emp = item.Teammitglied || item;
+            
+            return {
+              id: emp.Id || emp.id || emp.personalid || emp.uuid,
+              name: emp.name || `${emp.Vorname || emp.vorname || ''} ${emp.Nachname || emp.nachname || ''}`.trim() || 'Unbekannt',
+              eigenschaften: item.Eigenschaften || emp.Eigenschaften || {},
+              vertraege: item.Vertraege || emp.Vertraege || [],
+              termine: item.Termine || emp.Termine || [],
+              isAvailable: !item.Termine || item.Termine.length === 0 || 
+                           !item.Termine.some(termin => termin.datum === dateStr)
+            };
+          });
 
         // Filtere nach Verfügbarkeit
         if (filters.onlyAvailable) {
@@ -401,6 +425,81 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
   useEffect(() => {
     fetchAvailableEmployees();
   }, [fetchAvailableEmployees]);
+
+  // Lade verfügbare Fahrzeuge
+  const fetchAvailableVehicles = useCallback(async () => {
+    if (!SFS_API_TOKEN) {
+      console.error('❌ Kein API-Token konfiguriert! Bitte REACT_APP_SFS_API_TOKEN in .env setzen.');
+      return;
+    }
+
+    setLoadingVehicles(true);
+    
+    try {
+      const dateStr = format(tourData.selectedDate, 'yyyy-MM-dd');
+      
+      const requestBody = {
+        date_from: dateStr,
+        date_to: dateStr,
+        joins: [
+          "Vertraege",
+          "Eigenschaften",
+          "Termine"
+        ]
+      };
+
+      const response = await axios.post(SERVICEPROVIDER_API_URL, requestBody, {
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': SFS_API_TOKEN
+        }
+      });
+
+      if (response.data && Array.isArray(response.data)) {
+        const vehicles = response.data
+          .filter(item => {
+            // Nur Fahrzeuge laden (staff_status_Fuhrpark_Maschinen: null)
+            const eigenschaften = item.Eigenschaften || {};
+            return eigenschaften['staff_status_Fuhrpark_Maschinen '] === null;
+          })
+          .map(item => {
+            const emp = item.Teammitglied || item;
+            
+            return {
+              id: emp.Id || emp.id || emp.personalid || emp.uuid,
+              name: emp.name || `${emp.Vorname || emp.vorname || ''} ${emp.Nachname || emp.nachname || ''}`.trim() || 'Unbekannt',
+              eigenschaften: item.Eigenschaften || emp.Eigenschaften || {},
+              vertraege: item.Vertraege || emp.Vertraege || [],
+              termine: item.Termine || emp.Termine || [],
+              isAvailable: !item.Termine || item.Termine.length === 0 || 
+                           !item.Termine.some(termin => termin.datum === dateStr)
+            };
+          });
+
+        setAvailableVehicles(vehicles);
+        console.log(`✅ [API] ServiceProvider - ${vehicles.length} Fahrzeuge geladen`);
+      } else {
+        setAvailableVehicles([]);
+      }
+    } catch (error) {
+      console.error('❌ Fehler beim Laden der Fahrzeuge:', error);
+      setAvailableVehicles([]);
+    } finally {
+      setLoadingVehicles(false);
+    }
+  }, [tourData?.selectedDate, SERVICEPROVIDER_API_URL, SFS_API_TOKEN]);
+
+  // Initialisiere Fahrzeuge basierend auf Tour-Daten
+  useEffect(() => {
+    if (tourData) {
+      fetchAvailableVehicles();
+      // Standard: Ein 3.5t LKW pro Tour
+      const defaultVehicles = [{ ...vehicleTypes.find(v => v.id === '910'), index: 1 }];
+      setTourVehicles(defaultVehicles);
+      setSelectedTourVehicles(defaultVehicles);
+    }
+  }, [tourData, fetchAvailableVehicles]);
 
   // Mitarbeiter hinzufügen
   const handleEmployeeAdd = useCallback((employee) => {
@@ -679,6 +778,11 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
       return;
     }
 
+    if (selectedTourVehicles.length === 0) {
+      alert('⚠️ Bitte wählen Sie mindestens ein Fahrzeug aus.');
+      return;
+    }
+
     setIsTestSyncing(true);
 
     try {
@@ -686,62 +790,64 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
       
       const appointments = [];
       
-      // Für jeden Mitarbeiter
-      assignedEmployees.forEach((employee, employeeIndex) => {
-        const employeeRolle = employeeRoles[employeeIndex] || ['Monteur'];
-        
-        // Prüfe ob Mitarbeiter bereits Termine an diesem Tag hat
-        const existingAppointments = employee.termine?.filter(termin => 
-          termin.datum === format(tourData.selectedDate, 'yyyy-MM-dd')
-        ) || [];
+      // Für jedes Fahrzeug
+      selectedTourVehicles.forEach((vehicle, vehicleIndex) => {
+        // Für jeden Mitarbeiter
+        assignedEmployees.forEach((employee, employeeIndex) => {
+          const employeeRolle = employeeRoles[employeeIndex] || ['Monteur'];
+          
+          // Prüfe ob Mitarbeiter bereits Termine an diesem Tag hat
+          const existingAppointments = employee.termine?.filter(termin => 
+            termin.datum === format(tourData.selectedDate, 'yyyy-MM-dd')
+          ) || [];
 
-        // Erstelle einen Termin pro Station
-        tourData.stations?.forEach((station, stationIndex) => {
-          const transportType = stationTransportTypes[stationIndex];
+          // Erstelle einen Termin pro Station
+          tourData.stations?.forEach((station, stationIndex) => {
+            const transportType = stationTransportTypes[stationIndex];
+            
+            // Bestimme Terminart basierend auf Transport-Art
+            let terminartId = vehicle.terminartId || tourData.selectedTerminartId || '3a4df8a1-2387-11e8-839c-00113241b9d5'; // Standard: Umzugsausführung
           
-          // Bestimme Terminart basierend auf Transport-Art
-          let terminartId = tourData.selectedTerminartId || '3a4df8a1-2387-11e8-839c-00113241b9d5'; // Standard: Umzugsausführung
-          
-          if (transportType) {
-            // Finde die Transport-Art und nutze ihre terminartId
-            const selectedTransportType = transportTypes.find(t => t.id === transportType);
-            if (selectedTransportType && selectedTransportType.terminartId) {
-              terminartId = selectedTransportType.terminartId;
-              console.log(`🎯 Station ${stationIndex + 1}: Transport-Art "${selectedTransportType.name}" → Terminart: ${terminartId}`);
+            if (transportType) {
+              // Finde die Transport-Art und nutze ihre terminartId
+              const selectedTransportType = transportTypes.find(t => t.id === transportType);
+              if (selectedTransportType && selectedTransportType.terminartId) {
+                terminartId = selectedTransportType.terminartId;
+                console.log(`🎯 Station ${stationIndex + 1}: Transport-Art "${selectedTransportType.name}" → Terminart: ${terminartId}`);
+              }
             }
-          }
-          
-          const stationDeal = tourData.tourDeals?.find(deal => 
-            station.legDescription.includes(deal.title?.split(' ')[0]) ||
-            station.legDescription.includes(deal.originAddress?.split(',')[0]) ||
-            station.legDescription.includes(deal.destinationAddress?.split(',')[0])
-          ) || tourData.tourDeals?.[0];
-          
-          // Formatiere Zeiten korrekt (HH:MM:SS)
-          const formatTime = (time) => {
-            if (!time) return '08:00:00';
-            return time.length === 5 ? `${time}:00` : time;
-          };
-          
-          // Berechne die Dauer der Station
-          const calculateDuration = (startTime, endTime) => {
-            const start = new Date(`2000-01-01T${startTime}:00`);
-            const end = new Date(`2000-01-01T${endTime}:00`);
-            const diffMs = end - start;
-            return Math.floor(diffMs / (1000 * 60)); // Minuten
-          };
-          
-          // Berechne Start- und Endzeit für diese Station
-          let stationStart = formatTime(station.startTime);
-          let stationEnd = station.endTime 
-            ? formatTime(station.endTime) 
-            : formatTime(station.startTime); // Falls keine Endzeit, nutze Startzeit
+            
+            const stationDeal = tourData.tourDeals?.find(deal => 
+              station.legDescription.includes(deal.title?.split(' ')[0]) ||
+              station.legDescription.includes(deal.originAddress?.split(',')[0]) ||
+              station.legDescription.includes(deal.destinationAddress?.split(',')[0])
+            ) || tourData.tourDeals?.[0];
+            
+            // Formatiere Zeiten korrekt (HH:MM:SS)
+            const formatTime = (time) => {
+              if (!time) return '08:00:00';
+              return time.length === 5 ? `${time}:00` : time;
+            };
+            
+            // Berechne die Dauer der Station
+            const calculateDuration = (startTime, endTime) => {
+              const start = new Date(`2000-01-01T${startTime}:00`);
+              const end = new Date(`2000-01-01T${endTime}:00`);
+              const diffMs = end - start;
+              return Math.floor(diffMs / (1000 * 60)); // Minuten
+            };
+            
+            // Berechne Start- und Endzeit für diese Station
+            let stationStart = formatTime(station.startTime);
+            let stationEnd = station.endTime 
+              ? formatTime(station.endTime) 
+              : formatTime(station.startTime); // Falls keine Endzeit, nutze Startzeit
 
-          // Berechne Dauer der Station
-          const stationDuration = calculateDuration(stationStart, stationEnd);
-          
-          // Finde den nächsten freien Zeitraum für diese Station
-          if (existingAppointments.length > 0) {
+            // Berechne Dauer der Station
+            const stationDuration = calculateDuration(stationStart, stationEnd);
+            
+            // Finde den nächsten freien Zeitraum für diese Station
+            if (existingAppointments.length > 0) {
             // Sortiere bestehende Termine nach Startzeit
             const sortedAppointments = existingAppointments.sort((a, b) => 
               a.startzeit?.localeCompare(b.startzeit) || 0
@@ -797,21 +903,22 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
             }
           }
 
-          console.log(`📅 [TEST] ${employee.name} - Station ${stationIndex + 1}: ${stationStart} - ${stationEnd} (${stationDuration} Min)`);
-          
-          const kommentar = `[TEST] Tour: ${tourData.tourId} | Station ${stationIndex + 1}/${tourData.stations.length} | ${station.legDescription} | Dauer: ${stationDuration} Min`;
-          
-          appointments.push({
-            personalid: employee.id,
-            terminart: terminartId,
-            vorgangsno: stationDeal?.dealId?.toString() || 'TEST',
-            angebotsno: stationDeal?.id?.toString() || 'TEST',
-            datum: format(tourData.selectedDate, 'yyyy-MM-dd'),
-            startzeit: stationStart,
-            endzeit: stationEnd,
-            kommentar: kommentar.substring(0, 500),
-            rolle: employeeRolle,
-            kennzeichen: DEFAULT_KENNZEICHEN
+            console.log(`📅 [TEST] ${employee.name} (${vehicle.name}) - Station ${stationIndex + 1}: ${stationStart} - ${stationEnd} (${stationDuration} Min)`);
+            
+            const kommentar = `[TEST] Tour: ${tourData.tourId} | Fahrzeug: ${vehicle.name} (${vehicle.kennzeichen}) | Station ${stationIndex + 1}/${tourData.stations.length} | ${station.legDescription} | Dauer: ${stationDuration} Min`;
+            
+            appointments.push({
+              personalid: employee.id,
+              terminart: terminartId,
+              vorgangsno: stationDeal?.dealId?.toString() || 'TEST',
+              angebotsno: stationDeal?.id?.toString() || 'TEST',
+              datum: format(tourData.selectedDate, 'yyyy-MM-dd'),
+              startzeit: stationStart,
+              endzeit: stationEnd,
+              kommentar: kommentar.substring(0, 500),
+              rolle: employeeRolle,
+              kennzeichen: vehicle.kennzeichen
+            });
           });
         });
       });
@@ -968,6 +1075,11 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
       return;
     }
 
+    if (selectedTourVehicles.length === 0) {
+      alert('⚠️ Bitte wählen Sie mindestens ein Fahrzeug aus.');
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -994,63 +1106,65 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
       
       const appointments = [];
       
-      // Für jeden Mitarbeiter
-      assignedEmployees.forEach((employee, employeeIndex) => {
-        const employeeRolle = employeeRoles[employeeIndex] || ['Monteur'];
-        
-        // Prüfe ob Mitarbeiter bereits Termine an diesem Tag hat
-        const existingAppointments = employee.termine?.filter(termin => 
-          termin.datum === format(tourData.selectedDate, 'yyyy-MM-dd')
-        ) || [];
+      // Für jedes Fahrzeug
+      selectedTourVehicles.forEach((vehicle, vehicleIndex) => {
+        // Für jeden Mitarbeiter
+        assignedEmployees.forEach((employee, employeeIndex) => {
+          const employeeRolle = employeeRoles[employeeIndex] || ['Monteur'];
+          
+          // Prüfe ob Mitarbeiter bereits Termine an diesem Tag hat
+          const existingAppointments = employee.termine?.filter(termin => 
+            termin.datum === format(tourData.selectedDate, 'yyyy-MM-dd')
+          ) || [];
 
-        // Erstelle einen Termin pro Station
-        tourData.stations?.forEach((station, stationIndex) => {
-          const transportType = stationTransportTypes[stationIndex];
+          // Erstelle einen Termin pro Station
+          tourData.stations?.forEach((station, stationIndex) => {
+            const transportType = stationTransportTypes[stationIndex];
+            
+            // Bestimme Terminart basierend auf Transport-Art
+            let terminartId = vehicle.terminartId || tourData.selectedTerminartId || '3a4df8a1-2387-11e8-839c-00113241b9d5'; // Standard: Umzugsausführung
           
-          // Bestimme Terminart basierend auf Transport-Art
-          let terminartId = tourData.selectedTerminartId || '3a4df8a1-2387-11e8-839c-00113241b9d5'; // Standard: Umzugsausführung
-          
-          if (transportType) {
-            // Finde die Transport-Art und nutze ihre terminartId
-            const selectedTransportType = transportTypes.find(t => t.id === transportType);
-            if (selectedTransportType && selectedTransportType.terminartId) {
-              terminartId = selectedTransportType.terminartId;
-              console.log(`🎯 PRODUKTIV - Station ${stationIndex + 1}: "${selectedTransportType.name}" → ${terminartId}`);
+            if (transportType) {
+              // Finde die Transport-Art und nutze ihre terminartId
+              const selectedTransportType = transportTypes.find(t => t.id === transportType);
+              if (selectedTransportType && selectedTransportType.terminartId) {
+                terminartId = selectedTransportType.terminartId;
+                console.log(`🎯 PRODUKTIV - Station ${stationIndex + 1}: "${selectedTransportType.name}" → ${terminartId}`);
+              }
             }
-          }
           
-          // Finde zugehörigen Deal für diese Station
-          const stationDeal = tourData.tourDeals?.find(deal => 
-            station.legDescription.includes(deal.title?.split(' ')[0]) ||
-            station.legDescription.includes(deal.originAddress?.split(',')[0]) ||
-            station.legDescription.includes(deal.destinationAddress?.split(',')[0])
-          ) || tourData.tourDeals?.[0]; // Fallback auf ersten Deal
+            // Finde zugehörigen Deal für diese Station
+            const stationDeal = tourData.tourDeals?.find(deal => 
+              station.legDescription.includes(deal.title?.split(' ')[0]) ||
+              station.legDescription.includes(deal.originAddress?.split(',')[0]) ||
+              station.legDescription.includes(deal.destinationAddress?.split(',')[0])
+            ) || tourData.tourDeals?.[0]; // Fallback auf ersten Deal
           
-          // Formatiere Zeiten korrekt (HH:MM:SS)
-          const formatTime = (time) => {
-            if (!time) return '08:00:00';
-            return time.length === 5 ? `${time}:00` : time;
-          };
-          
-          // Berechne die Dauer der Station
-          const calculateDuration = (startTime, endTime) => {
-            const start = new Date(`2000-01-01T${startTime}:00`);
-            const end = new Date(`2000-01-01T${endTime}:00`);
-            const diffMs = end - start;
-            return Math.floor(diffMs / (1000 * 60)); // Minuten
-          };
-          
-          // Berechne Start- und Endzeit für diese Station
-          let stationStart = formatTime(station.startTime);
-          let stationEnd = station.endTime 
-            ? formatTime(station.endTime) 
-            : formatTime(station.startTime);
+            // Formatiere Zeiten korrekt (HH:MM:SS)
+            const formatTime = (time) => {
+              if (!time) return '08:00:00';
+              return time.length === 5 ? `${time}:00` : time;
+            };
+            
+            // Berechne die Dauer der Station
+            const calculateDuration = (startTime, endTime) => {
+              const start = new Date(`2000-01-01T${startTime}:00`);
+              const end = new Date(`2000-01-01T${endTime}:00`);
+              const diffMs = end - start;
+              return Math.floor(diffMs / (1000 * 60)); // Minuten
+            };
+            
+            // Berechne Start- und Endzeit für diese Station
+            let stationStart = formatTime(station.startTime);
+            let stationEnd = station.endTime 
+              ? formatTime(station.endTime) 
+              : formatTime(station.startTime);
 
-          // Berechne Dauer der Station
-          const stationDuration = calculateDuration(stationStart, stationEnd);
-          
-          // Finde den nächsten freien Zeitraum für diese Station
-          if (existingAppointments.length > 0) {
+            // Berechne Dauer der Station
+            const stationDuration = calculateDuration(stationStart, stationEnd);
+            
+            // Finde den nächsten freien Zeitraum für diese Station
+            if (existingAppointments.length > 0) {
             // Sortiere bestehende Termine nach Startzeit
             const sortedAppointments = existingAppointments.sort((a, b) => 
               a.startzeit?.localeCompare(b.startzeit) || 0
@@ -1106,9 +1220,9 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
             }
           }
 
-          console.log(`📅 [PRODUKTIV] ${employee.name} - Station ${stationIndex + 1}: ${stationStart} - ${stationEnd} (${stationDuration} Min)`);
+          console.log(`📅 [PRODUKTIV] ${employee.name} (${vehicle.name}) - Station ${stationIndex + 1}: ${stationStart} - ${stationEnd} (${stationDuration} Min)`);
           
-          const kommentar = `Tour: ${tourData.tourId} | Station ${stationIndex + 1}/${tourData.stations.length} | ${station.legDescription} | Dauer: ${stationDuration} Min`;
+          const kommentar = `Tour: ${tourData.tourId} | Fahrzeug: ${vehicle.name} (${vehicle.kennzeichen}) | Station ${stationIndex + 1}/${tourData.stations.length} | ${station.legDescription} | Dauer: ${stationDuration} Min`;
           
           appointments.push({
             personalid: employee.id,
@@ -1120,7 +1234,8 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
             endzeit: stationEnd,
             kommentar: kommentar.substring(0, 500),
             rolle: employeeRolle,
-            kennzeichen: DEFAULT_KENNZEICHEN
+            kennzeichen: vehicle.kennzeichen
+          });
           });
         });
       });
@@ -1166,10 +1281,19 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
       }
       
       if (results.appointmentsSaved) {
-        const totalAppointments = assignedEmployees.length * (tourData.stations?.length || 0);
+        const totalAppointments = assignedEmployees.length * selectedTourVehicles.length * (tourData.stations?.length || 0);
         successMessage += `✅ ${totalAppointments} Kalendertermine gebucht\n`;
-        successMessage += `   → ${assignedEmployees.length} Mitarbeiter × ${tourData.stations?.length || 0} Stationen\n`;
+        successMessage += `   → ${assignedEmployees.length} Mitarbeiter × ${selectedTourVehicles.length} Fahrzeuge × ${tourData.stations?.length || 0} Stationen\n`;
         successMessage += `   → Jede Station als separater Termin mit eigener Transport-Art\n`;
+        
+        // Zeige Fahrzeuge an
+        if (selectedTourVehicles.length > 0) {
+          successMessage += '   → Fahrzeuge: ';
+          successMessage += selectedTourVehicles.map(vehicle => 
+            `${vehicle.icon} ${vehicle.name} (${vehicle.kennzeichen})`
+          ).join(', ');
+          successMessage += '\n';
+        }
         
         // Zeige Transport-Arten an
         const transportCounts = {};
@@ -1556,6 +1680,69 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
               Zugewiesene Mitarbeiter
             </h3>
             
+            {/* Fahrzeugauswahl für Tour */}
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center">
+                <Truck className="mr-2 h-4 w-4" />
+                Fahrzeuge für diese Tour
+              </h4>
+              
+              {loadingVehicles ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-sm text-blue-600 mt-2">Lade Fahrzeuge...</p>
+                </div>
+              ) : availableVehicles.length === 0 ? (
+                <div className="text-center py-4 text-blue-600">
+                  <p className="text-sm">Keine Fahrzeuge verfügbar</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {availableVehicles.map((vehicle, index) => (
+                    <label key={index} className={`flex items-center p-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                      vehicle.isAvailable 
+                        ? 'border-green-200 bg-green-50 hover:bg-green-100' 
+                        : 'border-yellow-200 bg-yellow-50'
+                    }`}>
+                      <input
+                        type="checkbox"
+                        checked={selectedTourVehicles.some(v => v.id === vehicle.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTourVehicles(prev => [...prev, { ...vehicle, index: 1 }]);
+                          } else {
+                            setSelectedTourVehicles(prev => prev.filter(v => v.id !== vehicle.id));
+                          }
+                        }}
+                        className="w-4 h-4 text-primary focus:ring-primary border-gray-300 rounded mr-3"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🚛</span>
+                          <span className="font-medium text-gray-900">{vehicle.name}</span>
+                          {vehicle.isAvailable ? (
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Verfügbar</span>
+                          ) : (
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Verplant</span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-600">ID: {vehicle.id}</div>
+                        {vehicle.termine && vehicle.termine.length > 0 && (
+                          <div className="text-xs text-yellow-600 mt-1">
+                            {vehicle.termine.length} Termin{vehicle.termine.length > 1 ? 'e' : ''} an diesem Tag
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+              
+              <p className="text-xs text-blue-700 mt-2">
+                💡 Wählen Sie die Fahrzeuge aus, die für diese Tour verwendet werden sollen.
+              </p>
+            </div>
+            
             {assignedEmployees.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <Users className="h-16 w-16 mx-auto mb-3 text-gray-300" />
@@ -1779,9 +1966,10 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
                     <p className="text-xs font-semibold text-blue-900 mb-2">📦 Was wird gespeichert:</p>
                     <ul className="text-xs text-blue-800 space-y-1">
                       {!tourData.isSaved && <li>✅ Tour in Pipedrive ({tourData.tourDeals?.length || 0} Projekte)</li>}
-                      <li>✅ {assignedEmployees.length * (tourData.stations?.length || 0)} separate Kalendertermine</li>
-                      <li>✅ {assignedEmployees.length} Mitarbeiter × {tourData.stations?.length || 0} Stationen</li>
+                      <li>✅ {assignedEmployees.length * selectedTourVehicles.length * (tourData.stations?.length || 0)} separate Kalendertermine</li>
+                      <li>✅ {assignedEmployees.length} Mitarbeiter × {selectedTourVehicles.length} Fahrzeuge × {tourData.stations?.length || 0} Stationen</li>
                       <li>✅ Jede Station mit eigener Terminart (Transport-Art)</li>
+                      <li>✅ Jedes Fahrzeug mit eigenem Kennzeichen</li>
                     </ul>
                   </div>
 

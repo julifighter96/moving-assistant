@@ -1,66 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Package, Truck, Home, Clock, MapPin } from 'lucide-react';
 
-const INITIAL_ADDITIONAL_INFO = [
-  {
-    category: 'Umzugstechnische Details',
-    fields: [
-      { name: 'Möbellift', apiKey: '705d07fa2683d46703fdaa8a8dea0b82dcc48e47', options: ['B', 'E', 'Z'], value: [], multiple: true },
-    ]
-  },
-  {
-    category: 'Packmaterialien',
-    fields: [
-      { name: 'Matratzenhüllen', apiKey: '1e9d250dbc5cfea31a5129feb1b777dcb7937a9d', options: [
-        '1 x 90 * 200', '2 x 90 * 200', '3 x 90 * 200', '4 x 90 * 200',
-        '1 x 140 * 200', '2 x 140 * 200', '3 x 140 * 200', '4 x 140 * 200',
-        '1 x 160 * 200', '2 x 160 * 200', '3 x 160 * 200', '4 x 160 * 200',
-        '1 x 180 * 200', '2 x 180 * 200', '3 x 180 * 200', '4 x 180 * 200',
-        '1 x 200 * 200', '2 x 200 * 200', '3 x 200 * 200', '4 x 200 * 200'
-      ], value: [], multiple: true },
-    ]
-  },
-  {
-    category: 'Umgebungsbedingungen',
-    fields: [
-      { name: 'Gegebenheiten Entladestelle', apiKey: 'b0f5f0e08c73cbea321ec0e96aea9ebb0a95af8c', options: ['Aufzug', 'Maisonette', 'Garage', 'Keller'], value: [], multiple: true },
-      { name: 'Gegebenheiten Beladestelle', apiKey: '0d48a438be3fd78057e0b900b2e476d7d47f5a86', options: ['Aufzug', 'Maisonette', 'Garage', 'Keller'], value: [], multiple: true },
-    ]
-  },
-  {
-    category: 'Zusätzliche Dienstleistungen',
-    fields: [
-      { 
-        name: 'Einpackservice', 
-        apiKey: '05ab4ce4f91858459aad9bf20644e99b5d0619b1', 
-        type: 'select',
-        options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
-        value: 'Nein'
-      },
-      { 
-        name: 'Auspackservice', 
-        apiKey: '0085f40bb50ba7748922f9723a9ac4cf1e1149cf', 
-        type: 'select',
-        options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
-        value: 'Nein'
-      },
-      {
-        name: 'Anzahl Umzugskartons',
-        apiKey: 'umzugskartons_anzahl',
-        type: 'number',
-        value: 0,
-        min: 0
-      },
-      {
-        name: 'Anzahl Porzellankartons',
-        apiKey: 'porzellankartons_anzahl',
-        type: 'number',
-        value: 0,
-        min: 0
-      }
-    ]
-  }
-];
 
 const CategoryIcons = {
   'Umzugstechnische Details': Truck,
@@ -69,17 +9,137 @@ const CategoryIcons = {
   'Zusätzliche Dienstleistungen': Clock
 };
 
-const AdditionalInfoComponent = ({ onComplete }) => {
-  const [additionalInfo, setAdditionalInfo] = useState(INITIAL_ADDITIONAL_INFO);
+const AdditionalInfoComponent = ({ onComplete, roomsData = {} }) => {
+  // Track if user has manually changed carton values
+  const [manualOverrides, setManualOverrides] = useState({
+    umzugskartons: false,
+    porzellankartons: false
+  });
+
+  // Calculate total cartons from all rooms
+  const calculateTotalCartons = useCallback(() => {
+    let totalUmzugskartons = 0;
+    let totalPorzellankartons = 0;
+
+    Object.values(roomsData).forEach(roomData => {
+      if (roomData.packMaterials) {
+        roomData.packMaterials.forEach(material => {
+          if (material.name === 'Umzugskartons (Standard)' && material.quantity) {
+            totalUmzugskartons += material.quantity;
+          } else if (material.name === 'Bücherkartons (Bücher&Geschirr)' && material.quantity) {
+            totalPorzellankartons += material.quantity;
+          }
+        });
+      }
+    });
+
+    return { totalUmzugskartons, totalPorzellankartons };
+  }, [roomsData]);
+
+  const { totalUmzugskartons, totalPorzellankartons } = calculateTotalCartons();
+
+  // Initialize with calculated values
+  const getInitialAdditionalInfo = useCallback(() => {
+    return [
+      {
+        category: 'Umzugstechnische Details',
+        fields: [
+          { name: 'Möbellift', apiKey: '705d07fa2683d46703fdaa8a8dea0b82dcc48e47', options: ['B', 'E', 'Z'], value: [], multiple: true },
+        ]
+      },
+      {
+        category: 'Packmaterialien',
+        fields: [
+          { name: 'Matratzenhüllen', apiKey: '1e9d250dbc5cfea31a5129feb1b777dcb7937a9d', options: [
+            '1 x 90 * 200', '2 x 90 * 200', '3 x 90 * 200', '4 x 90 * 200',
+            '1 x 140 * 200', '2 x 140 * 200', '3 x 140 * 200', '4 x 140 * 200',
+            '1 x 160 * 200', '2 x 160 * 200', '3 x 160 * 200', '4 x 160 * 200',
+            '1 x 180 * 200', '2 x 180 * 200', '3 x 180 * 200', '4 x 180 * 200',
+            '1 x 200 * 200', '2 x 200 * 200', '3 x 200 * 200', '4 x 200 * 200'
+          ], value: [], multiple: true },
+        ]
+      },
+      {
+        category: 'Umgebungsbedingungen',
+        fields: [
+          { name: 'Gegebenheiten Entladestelle', apiKey: 'b0f5f0e08c73cbea321ec0e96aea9ebb0a95af8c', options: ['Aufzug', 'Maisonette', 'Garage', 'Keller'], value: [], multiple: true },
+          { name: 'Gegebenheiten Beladestelle', apiKey: '0d48a438be3fd78057e0b900b2e476d7d47f5a86', options: ['Aufzug', 'Maisonette', 'Garage', 'Keller'], value: [], multiple: true },
+        ]
+      },
+      {
+        category: 'Zusätzliche Dienstleistungen',
+        fields: [
+          { 
+            name: 'Einpackservice', 
+            apiKey: '05ab4ce4f91858459aad9bf20644e99b5d0619b1', 
+            type: 'select',
+            options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
+            value: 'Nein'
+          },
+          { 
+            name: 'Auspackservice', 
+            apiKey: '0085f40bb50ba7748922f9723a9ac4cf1e1149cf', 
+            type: 'select',
+            options: ['Ja (Gesamt)', 'Ja (Glas + Porzellan)', 'Nein'],
+            value: 'Nein'
+          },
+          {
+            name: 'Anzahl Umzugskartons',
+            apiKey: 'umzugskartons_anzahl',
+            type: 'number',
+            value: totalUmzugskartons,
+            min: 0
+          },
+          {
+            name: 'Anzahl Porzellankartons',
+            apiKey: 'porzellankartons_anzahl',
+            type: 'number',
+            value: totalPorzellankartons,
+            min: 0
+          }
+        ]
+      }
+    ];
+  }, [totalUmzugskartons, totalPorzellankartons]);
+
+  const [additionalInfo, setAdditionalInfo] = useState(getInitialAdditionalInfo());
+
+  // Update carton values when roomsData changes (only if not manually overridden)
+  useEffect(() => {
+    setAdditionalInfo(prevInfo => 
+      prevInfo.map(category => 
+        category.category === 'Zusätzliche Dienstleistungen' ? {
+          ...category,
+          fields: category.fields.map(field => {
+            if (field.apiKey === 'umzugskartons_anzahl' && !manualOverrides.umzugskartons) {
+              return { ...field, value: totalUmzugskartons };
+            } else if (field.apiKey === 'porzellankartons_anzahl' && !manualOverrides.porzellankartons) {
+              return { ...field, value: totalPorzellankartons };
+            }
+            return field;
+          })
+        } : category
+      )
+    );
+  }, [totalUmzugskartons, totalPorzellankartons, manualOverrides]);
 
   const handleInfoChange = useCallback((categoryIndex, fieldIndex, newValue) => {
     setAdditionalInfo(prevInfo => 
       prevInfo.map((category, cIndex) => 
         cIndex === categoryIndex ? {
           ...category,
-          fields: category.fields.map((field, fIndex) => 
-            fIndex === fieldIndex ? { ...field, value: newValue } : field
-          )
+          fields: category.fields.map((field, fIndex) => {
+            if (fIndex === fieldIndex) {
+              // Track manual overrides for carton fields
+              if (field.apiKey === 'umzugskartons_anzahl') {
+                setManualOverrides(prev => ({ ...prev, umzugskartons: true }));
+              } else if (field.apiKey === 'porzellankartons_anzahl') {
+                setManualOverrides(prev => ({ ...prev, porzellankartons: true }));
+              }
+              return { ...field, value: newValue };
+            }
+            return field;
+          })
         } : category
       )
     );
@@ -153,18 +213,54 @@ const AdditionalInfoComponent = ({ onComplete }) => {
     }
 
     if (field.type === 'number') {
+      const isCartonField = field.apiKey === 'umzugskartons_anzahl' || field.apiKey === 'porzellankartons_anzahl';
+      const isManuallyOverridden = isCartonField && (
+        (field.apiKey === 'umzugskartons_anzahl' && manualOverrides.umzugskartons) ||
+        (field.apiKey === 'porzellankartons_anzahl' && manualOverrides.porzellankartons)
+      );
+      
       return (
         <div className="mb-4">
           <label className="block mb-2 font-medium text-gray-700">
             {field.name}
+            {isCartonField && (
+              <span className={`ml-2 text-xs px-2 py-1 rounded ${
+                isManuallyOverridden 
+                  ? 'text-orange-600 bg-orange-50' 
+                  : 'text-blue-600 bg-blue-50'
+              }`}>
+                {isManuallyOverridden ? 'Manuell geändert' : 'Automatisch aus Räumen berechnet'}
+              </span>
+            )}
           </label>
-          <input
-            type="number"
-            value={field.value}
-            min={field.min || 0}
-            onChange={(e) => handleInfoChange(categoryIndex, fieldIndex, parseInt(e.target.value) || 0)}
-            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
-          />
+          <div className="flex gap-2">
+            <input
+              type="number"
+              value={field.value}
+              min={field.min || 0}
+              onChange={(e) => handleInfoChange(categoryIndex, fieldIndex, parseInt(e.target.value) || 0)}
+              className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-primary focus:border-primary transition-colors ${
+                isCartonField ? 'bg-blue-50' : 'bg-white'
+              }`}
+            />
+            {isCartonField && isManuallyOverridden && (
+              <button
+                type="button"
+                onClick={() => {
+                  const newValue = field.apiKey === 'umzugskartons_anzahl' ? totalUmzugskartons : totalPorzellankartons;
+                  handleInfoChange(categoryIndex, fieldIndex, newValue);
+                  setManualOverrides(prev => ({
+                    ...prev,
+                    [field.apiKey === 'umzugskartons_anzahl' ? 'umzugskartons' : 'porzellankartons']: false
+                  }));
+                }}
+                className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
+                title="Zur automatischen Berechnung zurücksetzen"
+              >
+                Auto
+              </button>
+            )}
+          </div>
         </div>
       );
     }

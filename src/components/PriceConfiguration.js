@@ -439,6 +439,25 @@ const PriceConfiguration = () => {
                         />
                       </div>
 
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Pipedrive-Feld
+                        </label>
+                        <input
+                          type="text"
+                          value={editingHourlyRate.pipedrive_field || ''}
+                          onChange={(e) => setEditingHourlyRate({
+                            ...editingHourlyRate,
+                            pipedrive_field: e.target.value
+                          })}
+                          placeholder="z.B. field_1234567890abcdef"
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary"
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Das zugehörige Pipedrive-Feld für diesen Stundensatz
+                        </p>
+                      </div>
+
                       <div className="flex justify-end gap-3">
                         <button
                           onClick={() => setEditingHourlyRate(null)}
@@ -470,6 +489,11 @@ const PriceConfiguration = () => {
                           <p className="font-medium text-primary">
                             {rate.price.toFixed(2)} €/h
                           </p>
+                          {rate.pipedrive_field && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              Pipedrive: {rate.pipedrive_field}
+                            </p>
+                          )}
                         </div>
                       </div>
                       

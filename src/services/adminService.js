@@ -136,7 +136,12 @@ export const adminService = {
   // Add a new price (for hourly rates or loading times)
   async addPrice(priceData) {
     try {
-      const response = await axios.post(`${API_URL}/admin/prices`, priceData, getAuthHeaders());
+      // Ensure pipedrive_field is included in the request
+      const requestData = {
+        ...priceData,
+        pipedrive_field: priceData.pipedrive_field || null
+      };
+      const response = await axios.post(`${API_URL}/admin/prices`, requestData, getAuthHeaders());
       return response.data;
     } catch (error) {
       console.error('Error adding price:', error);

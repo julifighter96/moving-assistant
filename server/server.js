@@ -133,6 +133,7 @@ const initializeDatabase = () => {
           length REAL DEFAULT 0,
           height REAL DEFAULT 0,
           type TEXT DEFAULT 'material',
+          pipedrive_field TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`,
 
@@ -827,7 +828,8 @@ Antworte im folgenden JSON-Format:
         type,
         width,
         length,
-        height
+        height,
+        pipedrive_field
       } = req.body;
 
       // Basic validation
@@ -843,7 +845,8 @@ Antworte im folgenden JSON-Format:
         type: type,
         width: parseFloat(width) || 0,
         length: parseFloat(length) || 0,
-        height: parseFloat(height) || 0
+        height: parseFloat(height) || 0,
+        pipedrive_field: pipedrive_field || null
       };
 
       console.log(`[Backend] Attempting to update price ${id} with:`, updateData);
@@ -856,7 +859,8 @@ Antworte im folgenden JSON-Format:
              type = ?,
              width = ?,
              length = ?,
-             height = ?
+             height = ?,
+             pipedrive_field = ?
          WHERE id = ?`,
         [
           updateData.name,
@@ -865,6 +869,7 @@ Antworte im folgenden JSON-Format:
           updateData.width,
           updateData.length,
           updateData.height,
+          updateData.pipedrive_field,
           id
         ],
         function(err) {
@@ -1215,6 +1220,14 @@ Antworte im folgenden JSON-Format:
       console.log('Added type column to admin_prices table or it already exists');
     });
 
+    // Add pipedrive_field column to admin_prices table
+    db.run(`
+      ALTER TABLE admin_prices ADD COLUMN pipedrive_field TEXT
+    `, (err) => {
+      // If the column already exists, this will error but we can ignore it
+      console.log('Added pipedrive_field column to admin_prices table or it already exists');
+    });
+
     // Add a new price entry
     app.post('/api/admin/prices', (req, res) => {
       console.log(`[Backend] POST /api/admin/prices received body:`, req.body);
@@ -1225,7 +1238,8 @@ Antworte im folgenden JSON-Format:
         type,
         width,
         length,
-        height
+        height,
+        pipedrive_field
       } = req.body;
 
       // Basic validation
@@ -1241,21 +1255,23 @@ Antworte im folgenden JSON-Format:
         type: type,
         width: parseFloat(width) || 0,
         length: parseFloat(length) || 0,
-        height: parseFloat(height) || 0
+        height: parseFloat(height) || 0,
+        pipedrive_field: pipedrive_field || null
       };
 
       console.log(`[Backend] Attempting to insert new price with:`, insertData);
 
       db.run(
-        `INSERT INTO admin_prices (name, price, type, width, length, height)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO admin_prices (name, price, type, width, length, height, pipedrive_field)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           insertData.name,
           insertData.price,
           insertData.type,
           insertData.width,
           insertData.length,
-          insertData.height
+          insertData.height,
+          insertData.pipedrive_field
         ],
         function(err) {
           if (err) {

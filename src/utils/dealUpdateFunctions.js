@@ -13,8 +13,8 @@ const API_MAPPING = {
   'Auspackservice': '0085f40bb50ba7748922f9723a9ac4e91e1149cf',
   'Einpackservice': '05ab4ce4f91858459aad9bf20644e99b5d0619b1',
   'Anmerkungen für Personal': 'e587fe207006060c97d76f97a01351b08e850a95',
-  'Umzugskartons': 'umzugskartons_anzahl',
-  'Porzellankartons': 'porzellankartons_anzahl'
+  'Umzugskartons': '4d802b9bcb9808a1e61da5aca6fb5bcb8a41e436',
+  'Porzellankartons': 'REPLACE_WITH_ACTUAL_PORZELLANKARTONS_FIELD_KEY'
 };
 
 const OPTION_IDS = {
@@ -197,6 +197,12 @@ const updateDealForOffer = async (dealId, dealData) => {
 
 const formatDealData = (inspectionData) => {
   const formattedData = {};
+
+  // Füge pipedriveUpdateData hinzu (Mitarbeiter und Fahrzeuge aus MovingCalculation)
+  if (inspectionData.pipedriveUpdateData) {
+    console.log('📤 Füge pipedriveUpdateData hinzu:', inspectionData.pipedriveUpdateData);
+    Object.assign(formattedData, inspectionData.pipedriveUpdateData);
+  }
 
   if (inspectionData.combinedData) {
     let detailsText = '';

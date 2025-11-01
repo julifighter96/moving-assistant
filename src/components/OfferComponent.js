@@ -80,7 +80,7 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
     });
   });
 
-  // Füge nur noch die Umzugskartons aus additionalInfo hinzu (falls nicht bereits in rooms enthalten)
+  // Ersetze automatisch berechnete Karton-Mengen durch manuell eingegebene Werte
   if (inspectionData.additionalInfo) {
     const umzugskartons = inspectionData.additionalInfo.find(
       f => f.name === 'Anzahl Umzugskartons' && f.type === 'number'
@@ -89,6 +89,17 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
     const porzellankartons = inspectionData.additionalInfo.find(
       f => f.name === 'Anzahl Porzellankartons' && f.type === 'number'
     )?.value || 0;
+
+    // Ersetze automatisch berechnete Kartons durch manuell eingegebene Werte
+    if (umzugskartons > 0) {
+      combinedData.packMaterials['Umzugskartons (Standard)'] = umzugskartons;
+      console.log(`Replaced automatic Umzugskartons with manual value: ${umzugskartons}`);
+    }
+    
+    if (porzellankartons > 0) {
+      combinedData.packMaterials['Bücherkartons (Bücher&Geschirr)'] = porzellankartons;
+      console.log(`Replaced automatic Porzellankartons with manual value: ${porzellankartons}`);
+    }
 
     if (umzugskartons > 0 || porzellankartons > 0) {
       // Standard Umzugskarton: 60x40x40 cm = 0.096 m³
@@ -99,7 +110,22 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
       const umzugskartonsVolume = umzugskartons * umzugskartonVolume;
       const porzellankartonsVolume = porzellankartons * porzellankartonVolume;
 
-      // Füge nur die zusätzlichen Kartons hinzu
+      // Entferne automatisch berechnete Karton-Volumina und ersetze sie durch manuelle Werte
+      // Zuerst entfernen wir die automatisch berechneten Karton-Volumina
+      Object.values(inspectionData.rooms || {}).forEach(room => {
+        if (room.packMaterials && Array.isArray(room.packMaterials)) {
+          room.packMaterials.forEach(material => {
+            if (['Umzugskartons (Standard)', 'Bücherkartons (Bücher&Geschirr)', 'Kleiderkisten'].includes(material.name) && material.quantity > 0) {
+              // Entferne automatisch berechnetes Volumen
+              const materialVolume = material.name === 'Umzugskartons (Standard)' ? 0.096 : 
+                                   material.name === 'Bücherkartons (Bücher&Geschirr)' ? 0.045 : 0.072;
+              combinedData.totalVolume -= materialVolume * material.quantity;
+            }
+          });
+        }
+      });
+
+      // Dann füge die manuell eingegebenen Karton-Volumina hinzu
       combinedData.totalVolume += umzugskartonsVolume + porzellankartonsVolume;
       
       // Füge Gewicht hinzu
@@ -107,12 +133,12 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
       combinedData.volumeBasedWeightTotal += kartonsWeight;
       combinedData.itemsWithVolumeWeight += umzugskartons + porzellankartons;
 
-      console.log('Added additional box volumes:', {
+      console.log('Replaced automatic carton volumes with manual values:', {
         umzugskartons,
         porzellankartons,
         umzugskartonsVolume: umzugskartonsVolume.toFixed(3),
         porzellankartonsVolume: porzellankartonsVolume.toFixed(3),
-        totalAddedVolume: (umzugskartonsVolume + porzellankartonsVolume).toFixed(3)
+        totalManualVolume: (umzugskartonsVolume + porzellankartonsVolume).toFixed(3)
       });
     }
   }
@@ -164,12 +190,18 @@ const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, vo
         console.log('inspectionData:', inspectionData);
         console.log('additionalInfo:', inspectionData.additionalInfo);
         console.log('combinedData:', combinedData);
+        console.log('calculationData:', inspectionData.calculationData);
+        console.log('pipedriveUpdateData:', inspectionData.calculationData?.pipedriveUpdateData);
+        console.log('calculationData keys:', Object.keys(inspectionData.calculationData || {}));
+        console.log('calculationData team:', inspectionData.calculationData?.team);
+        console.log('calculationData pipedriveUpdateData keys:', Object.keys(inspectionData.calculationData?.pipedriveUpdateData || {}));
 
         const offerDetails = {
           rooms: inspectionData.rooms,
           additionalInfo: inspectionData.additionalInfo,
           combinedData: combinedData,
-          moveInfo: inspectionData.moveInfo
+          moveInfo: inspectionData.moveInfo,
+          pipedriveUpdateData: inspectionData.calculationData?.pipedriveUpdateData || {}
         };
      
         // Hauptinfo
@@ -249,6 +281,27 @@ ${inspectionData.additionalInfo
   .join('\n')}` : '';
 
         console.log('Generated servicesSection:', servicesSection);
+        
+        // Mitarbeiter-Sektion aus MovingCalculation
+        let employeesSection = '';
+        if (inspectionData.calculationData?.team?.employees) {
+          const selectedEmployees = inspectionData.calculationData.team.employees;
+          const employeeTypes = inspectionData.calculationData.team.employeeTypes || [];
+          
+          const employeeInfo = Object.entries(selectedEmployees)
+            .filter(([_, count]) => count > 0)
+            .map(([typeId, count]) => {
+              const employeeType = employeeTypes.find(type => type.id === parseInt(typeId));
+              return employeeType ? `- ${employeeType.name}: ${count} Personen` : null;
+            })
+            .filter(Boolean);
+          
+          if (employeeInfo.length > 0) {
+            employeesSection = `\nMitarbeiter (aus MovingCalculation):\n${employeeInfo.join('\n')}`;
+          }
+        }
+        
+        console.log('Generated employeesSection:', employeesSection);
      
         // Packmaterial Sektion
         const packMaterialsArray = Object.entries(combinedData.packMaterials)
@@ -307,6 +360,7 @@ ${inspectionData.additionalInfo
         const noteContent = [
           summarySection,
           servicesSection,
+          employeesSection,
           boxSection,
           packingSection ? '\nPackmaterialien:\n' + packingSection : '',
           roomsSection
@@ -315,6 +369,7 @@ ${inspectionData.additionalInfo
         console.log('All sections before joining:', {
           summarySection,
           servicesSection,
+          employeesSection,
           boxSection,
           packingSection,
           roomsSection

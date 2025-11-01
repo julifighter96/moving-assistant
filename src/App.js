@@ -616,6 +616,14 @@ function App() {
     setCurrentStep(prevStep => Math.min(7, prevStep + 1)); // Verhindert Überschreitung der max Schritte
   };
 
+  // Verarbeite MovingCalculation-Daten
+  const handleCalculationComplete = (calculationResult) => {
+    console.log("📊 MovingCalculation-Daten erhalten:", calculationResult);
+    console.log("📊 pipedriveUpdateData:", calculationResult.pipedriveUpdateData);
+    setCalculationData(calculationResult);
+    setCurrentStep(5); // Gehe zu Schritt 5 (Angebot erstellen)
+  };
+
   // Navigation für den vorherigen Schritt
   const goToPreviousStep = () => {
     setCurrentStep(prevStep => Math.max(1, prevStep - 1));
@@ -863,7 +871,10 @@ function App() {
                     <p className="text-gray-500 mt-1">Ergänzende Informationen zum Umzug</p>
                   </div>
                   <div className="p-6">
-                    <AdditionalInfoComponent onComplete={handleAdditionalInfoComplete} />
+                    <AdditionalInfoComponent 
+                      onComplete={handleAdditionalInfoComplete}
+                      roomsData={roomsData}
+                    />
                   </div>
                 </div>
               )}
@@ -878,7 +889,7 @@ function App() {
                     <MovingCalculation 
                       roomsData={roomsData}
                       additionalInfo={additionalInfo}
-                      onComplete={goToNextStep}
+                      onComplete={handleCalculationComplete}
                     />
                   </div>
                 </div>

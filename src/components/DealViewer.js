@@ -215,6 +215,7 @@ const DealViewer = ({ onStartInspection, onAssignDealEmployees }) => {
               onClick={() => {
                 setSelectedDeal(deal);
                 setSelectedEmployees([]);
+                onStartInspection(deal.item);
               }}
               className="w-full text-left bg-gray-50 hover:bg-blue-50 p-4 rounded-lg border border-gray-200 hover:border-primary transition-all duration-200"
             >

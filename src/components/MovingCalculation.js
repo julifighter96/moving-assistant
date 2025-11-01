@@ -4,25 +4,12 @@ import { adminService } from '../services/adminService';
 import { getDeal } from '../services/pipedriveService';
 import { AVAILABLE_TRUCKS } from './MovingTruckSimulator';
 
-// --- Pipedrive Field API Keys (IMPORTANT: Replace placeholders with actual keys!) ---
+// --- Pipedrive Field API Keys ---
 
-// Fahrzeuge und Fahrer
+// Nur noch der Fahrzeug-Key wird statisch verwendet
 const PIPEDRIVE_KEY_FAHRZEUGE = '7ef0bad215357130769f5d26e0b47c5c55da239d'; // Fahrzeuge (Multiple options field key)
-const PIPEDRIVE_KEY_FAHRER_12T = 'a1ee000b4ac48779cfb43f1319bd37250705ddaf'; // Anzahl Fahrer 12 Tonner (C, CE)
-const PIPEDRIVE_KEY_FAHRER_7_5T = 'ebb714ecc0028be711b63573a871504b2268b58e'; // Anzahl Fahrer 7,49 Tonner (C1, C, CE)
-const PIPEDRIVE_KEY_FAHRER_3_5T = 'e6141bc6608c18bad305abbc4d7e871fe6451d8f'; // Anzahl Fahrer 3,49 Tonner (B, BE, C1, C, CE)
 
-
-// Spezifische Mitarbeitertypen
-const PIPEDRIVE_KEY_UMZUGSHELFER = '34b7e1187558cb432b19593871c7f8599de16b22'; // Anzahl Umzugshelfer (Träger)
-const PIPEDRIVE_KEY_MONTEURE = '20b3d99d25f0a4f3377e94f4731cd6089c421831'; // Anzahl Monteure
-const PIPEDRIVE_KEY_KLAVIERTRAEGER = '92fe9d2c1d616504b461a2dfdc2e17f5bd73d754'; // Anzahl Klavierträger
-const PIPEDRIVE_KEY_VORARBEITER = '4f97709adbac21bce64ed5cc902c97737ab00188'; // Anzahl Vorarbeiter
-
-
-// Dynamische Mitarbeiter-Keys (werden automatisch generiert basierend auf employeeTypes)
-// Beispiel: PIPEDRIVE_KEY_MITARBEITER_MEISTER, PIPEDRIVE_KEY_MITARBEITER_MONTEUR, etc.
-// Diese werden in handleContinue() dynamisch erstellt basierend auf den tatsächlichen Mitarbeitertypen
+// Alle anderen Keys werden dynamisch über pipedrive_field aus der Datenbank geladen
 
 const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   const [totalVolume, setTotalVolume] = useState(0);
@@ -104,7 +91,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   // Berechnung und Laden der Preisdaten beim Laden der Komponente
   useEffect(() => {
     calculateMovingMetrics();
-  }, [roomsData, loadingTimePerUnit]);
+  }, [roomsData, loadingTimePerUnit, additionalInfo]);
 
   useEffect(() => {
     loadPrices();
@@ -155,7 +142,16 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       
       // Nur Stundensätze (hourly_rate) als Mitarbeitertypen verwenden
       const hourlyRates = priceData.filter(price => price.type === 'hourly_rate');
-      console.log("Gefilterte Stundensätze (hourly_rate):", hourlyRates);
+      console.log("🔍 Gefilterte Stundensätze (hourly_rate):", hourlyRates);
+      
+      // Detaillierte Logs für jeden Mitarbeitertyp
+      hourlyRates.forEach(rate => {
+        console.log(`👤 Mitarbeitertyp: ${rate.name}`);
+        console.log(`   - ID: ${rate.id}`);
+        console.log(`   - Preis: ${rate.price}€/h`);
+        console.log(`   - pipedrive_field: ${rate.pipedrive_field || 'NICHT GESETZT'}`);
+        console.log(`   - Typ: ${rate.type}`);
+      });
       
       // Ladezeit pro 5m³ finden
       const loadingTimeEntry = priceData.find(
@@ -193,21 +189,37 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
         console.warn("Keine Ladezeit-Konfiguration gefunden");
       }
       
+      console.log("📤 Setze employeeTypes:", hourlyRates);
       setEmployeeTypes(hourlyRates);
       
       // Initialisiere selectedEmployees mit Standardwerten
       const initialSelection = {};
       hourlyRates.forEach(type => {
-        initialSelection[type.id] = 0;
+        // Stelle sicher, dass die ID als String verwendet wird (für Konsistenz)
+        const stringId = String(type.id);
+        initialSelection[stringId] = 0;
+        console.log(`🔧 Initialisiere Mitarbeitertyp: ${type.name} (ID: ${type.id} -> ${stringId})`);
       });
       
       // Basierend auf Volumen einen empfohlenen Anfangswert setzen
       if (totalVolume > 0 && hourlyRates.length > 0) {
-        // Setze den ersten Stundensatz mit einer entsprechenden Anzahl
-        initialSelection[hourlyRates[0].id] = Math.max(2, Math.ceil(totalVolume / 15));
+        const firstTypeId = String(hourlyRates[0].id); // Konvertiere zu String für Konsistenz
+        const recommendedCount = Math.max(2, Math.ceil(totalVolume / 15));
+        initialSelection[firstTypeId] = recommendedCount;
+        console.log(`🎯 Setze empfohlene Anzahl für ${hourlyRates[0].name}: ${recommendedCount} Personen (basierend auf Volumen: ${totalVolume})`);
       }
       
+      console.log("📋 Finale initiale Auswahl:", initialSelection);
       setSelectedEmployees(initialSelection);
+      
+      // Debug: Zeige initiale Mitarbeiterauswahl
+      console.log("🎯 Initiale Mitarbeiterauswahl:", initialSelection);
+      Object.entries(initialSelection).forEach(([typeId, count]) => {
+        if (count > 0) {
+          const employeeType = hourlyRates.find(type => type.id === typeId);
+          console.log(`   - ${employeeType?.name || 'UNBEKANNT'}: ${count} Personen`);
+        }
+      });
     } catch (error) {
       console.error('Fehler beim Laden der Preisdaten:', error);
     }
@@ -223,6 +235,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     let dismantleTime = 0;
     
     console.log("Berechne Umzugsmetriken:", roomsData);
+    console.log("AdditionalInfo für Karton-Berechnung:", additionalInfo);
     
     // Durch alle Räume und deren Gegenstände iterieren
     Object.values(roomsData).forEach(room => {
@@ -275,7 +288,55 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       }
     });
     
-    console.log(`Berechnete Werte (inkl. Packmaterialien): Volumen=${volume.toFixed(2)}m³, Setup=${setupTime}min, Dismantle=${dismantleTime}min`);
+    // Ersetze automatisch berechnete Karton-Volumina durch manuell eingegebene Werte
+    if (additionalInfo && Array.isArray(additionalInfo)) {
+      const umzugskartons = additionalInfo.find(
+        f => f.name === 'Anzahl Umzugskartons' && f.type === 'number'
+      )?.value || 0;
+      
+      const porzellankartons = additionalInfo.find(
+        f => f.name === 'Anzahl Porzellankartons' && f.type === 'number'
+      )?.value || 0;
+
+      if (umzugskartons > 0 || porzellankartons > 0) {
+        // Standard Umzugskarton: 60x40x40 cm = 0.096 m³
+        const umzugskartonVolume = 0.096;
+        // Porzellankarton: 50x30x30 cm = 0.045 m³
+        const porzellankartonVolume = 0.045;
+
+        const umzugskartonsVolume = umzugskartons * umzugskartonVolume;
+        const porzellankartonsVolume = porzellankartons * porzellankartonVolume;
+        
+        // Entferne automatisch berechnete Karton-Volumina und ersetze sie durch manuelle Werte
+        // Zuerst entfernen wir die automatisch berechneten Karton-Volumina
+        Object.values(roomsData).forEach(room => {
+          if (room.packMaterials && Array.isArray(room.packMaterials)) {
+            room.packMaterials.forEach(material => {
+              if (['Umzugskartons (Standard)', 'Bücherkartons (Bücher&Geschirr)', 'Kleiderkisten'].includes(material.name) && material.quantity > 0) {
+                const priceConfig = prices?.find(p => p.name === material.name);
+                if (priceConfig?.length && priceConfig?.width && priceConfig?.height) {
+                  const materialVolume = (priceConfig.length * priceConfig.width * priceConfig.height) / 1000000;
+                  volume -= materialVolume * material.quantity; // Entferne automatisch berechnetes Volumen
+                }
+              }
+            });
+          }
+        });
+        
+        // Dann füge die manuell eingegebenen Karton-Volumina hinzu
+        volume += umzugskartonsVolume + porzellankartonsVolume;
+        
+        console.log('Replaced automatic carton volumes with manual values:', {
+          umzugskartons,
+          porzellankartons,
+          umzugskartonsVolume: umzugskartonsVolume.toFixed(3),
+          porzellankartonsVolume: porzellankartonsVolume.toFixed(3),
+          totalManualVolume: (umzugskartonsVolume + porzellankartonsVolume).toFixed(3)
+        });
+      }
+    }
+    
+    console.log(`Berechnete Werte (inkl. Packmaterialien und Kartons): Volumen=${volume.toFixed(2)}m³, Setup=${setupTime}min, Dismantle=${dismantleTime}min`);
     
     // Werte setzen
     setTotalVolume(volume);
@@ -295,10 +356,22 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   };
 
   const handleEmployeeChange = (typeId, change) => {
-    setSelectedEmployees(prev => ({
-      ...prev,
-      [typeId]: Math.max(0, (prev[typeId] || 0) + change)
-    }));
+    console.log(`🔄 Mitarbeiter-Änderung: typeId=${typeId}, change=${change}`);
+    
+    setSelectedEmployees(prev => {
+      const newValue = Math.max(0, (prev[typeId] || 0) + change);
+      const employeeType = employeeTypes.find(type => type.id === typeId);
+      
+      console.log(`   - Mitarbeitertyp: ${employeeType?.name || 'UNBEKANNT'}`);
+      console.log(`   - Alter Wert: ${prev[typeId] || 0}`);
+      console.log(`   - Neuer Wert: ${newValue}`);
+      console.log(`   - pipedrive_field: ${employeeType?.pipedrive_field || 'NICHT GESETZT'}`);
+      
+      return {
+        ...prev,
+        [typeId]: newValue
+      };
+    });
   };
 
   const getTotalEmployees = () => {
@@ -364,6 +437,9 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   };
 
   useEffect(() => {
+    console.log("🔄 calculateLaborCosts useEffect ausgelöst");
+    console.log("   selectedEmployees:", selectedEmployees);
+    console.log("   employeeTypes:", employeeTypes);
     calculateLaborCosts();
   }, [selectedEmployees, totalDuration, employeeTypes]);
 
@@ -564,7 +640,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     calculateLaborCosts(newTotalDuration);
   };
 
-  // Extrahiere Packmaterialien aus roomsData und berechne Kosten
+  // Extrahiere Packmaterialien aus roomsData und additionalInfo und berechne Kosten
   useEffect(() => {
     if (!roomsData || Object.keys(materialPrices).length === 0) return;
     
@@ -579,6 +655,28 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       }
     });
     
+    // Ersetze automatisch berechnete Karton-Mengen durch manuell eingegebene Werte
+    if (additionalInfo && Array.isArray(additionalInfo)) {
+      const umzugskartons = additionalInfo.find(
+        f => f.name === 'Anzahl Umzugskartons' && f.type === 'number'
+      )?.value || 0;
+      
+      const porzellankartons = additionalInfo.find(
+        f => f.name === 'Anzahl Porzellankartons' && f.type === 'number'
+      )?.value || 0;
+
+      // Ersetze die automatisch berechneten Kartons durch die manuell eingegebenen Werte
+      if (umzugskartons > 0) {
+        materials['Umzugskartons (Standard)'] = umzugskartons;
+        console.log(`Replaced automatic Umzugskartons with manual value: ${umzugskartons}`);
+      }
+      
+      if (porzellankartons > 0) {
+        materials['Bücherkartons (Bücher&Geschirr)'] = porzellankartons;
+        console.log(`Replaced automatic Porzellankartons with manual value: ${porzellankartons}`);
+      }
+    }
+    
     setPackMaterials(materials);
     
     // Berechne die Kosten anhand der Preise aus der Datenbank
@@ -589,10 +687,10 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       return total + price * quantity;
     }, 0);
     
-    console.log(`Gesamte Materialkosten: ${materialCost}€`);
+    console.log(`Gesamte Materialkosten (inkl. manueller Kartons): ${materialCost}€`);
     setMaterialCosts(materialCost);
     
-  }, [roomsData, materialPrices]);
+  }, [roomsData, materialPrices, additionalInfo]);
 
   // Effect to close dropdown when clicking outside
   useEffect(() => {
@@ -668,6 +766,10 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
 
   // Update handleContinue (calculation logic is now separate)
   const handleContinue = () => {
+    console.log("🚀 handleContinue aufgerufen");
+    console.log("   Aktuelle employeeTypes:", employeeTypes);
+    console.log("   Aktuelle selectedEmployees:", selectedEmployees);
+    
     // Use the state values for calculated drivers
     const driverCount12T = calculatedDrivers['12T'];
     const driverCount7_5T = calculatedDrivers['7.5T'];
@@ -679,47 +781,74 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
 
     // --- Prepare Pipedrive Specific Data ---
     const pipedriveData = {
-      // Fahrzeuge
-      [PIPEDRIVE_KEY_FAHRZEUGE]: selectedTrucks,
+      // Fahrzeuge - Übertrage die IDs der ausgewählten Fahrzeuge
+      [PIPEDRIVE_KEY_FAHRZEUGE]: selectedTrucks.map(kennzeichen => {
+        const truck = Object.values(AVAILABLE_TRUCKS).find(t => t.kennzeichen === kennzeichen);
+        console.log(`🚛 Fahrzeug gefunden:`, truck);
+        console.log(`🚛 Fahrzeug-ID:`, truck?.id);
+        return truck ? truck.id : kennzeichen; // Übertrage die ID, nicht den Namen
+      }),
       
-      // Fahrer (berechnet basierend auf Fahrzeugen)
-      [PIPEDRIVE_KEY_FAHRER_12T]: driverCount12T,
-      [PIPEDRIVE_KEY_FAHRER_7_5T]: driverCount7_5T,
-      [PIPEDRIVE_KEY_FAHRER_3_5T]: driverCount3_5T,
+      // Fahrer werden jetzt dynamisch über pipedrive_field aus der Datenbank übertragen
       
       // Manuell ausgewählte Mitarbeiter (nach Typ)
       ...Object.entries(selectedEmployees).reduce((acc, [typeId, count]) => {
+        console.log(`🔍 Verarbeite Mitarbeitertyp: typeId=${typeId}, count=${count}`);
+        
+        console.log(`🔍 Suche nach typeId: ${typeId} (Typ: ${typeof typeId})`);
+        console.log(`🔍 Verfügbare employeeTypes:`, employeeTypes.map(t => ({ id: t.id, type: typeof t.id, name: t.name })));
+        
         const employeeType = employeeTypes.find(type => type.id === typeId);
+        console.log(`📋 Gefundener Mitarbeitertyp:`, employeeType);
+        
+        // Fallback: Versuche String-zu-Number Konvertierung
+        if (!employeeType) {
+          const numericTypeId = parseInt(typeId);
+          console.log(`🔄 Versuche numerische Suche: ${numericTypeId}`);
+          const numericEmployeeType = employeeTypes.find(type => type.id === numericTypeId);
+          console.log(`📋 Numerischer Mitarbeitertyp:`, numericEmployeeType);
+          
+          if (numericEmployeeType) {
+            console.log(`✅ Gefunden mit numerischer Suche!`);
+            // Verwende den gefundenen Typ für die weitere Verarbeitung
+            const foundType = numericEmployeeType;
+            if (foundType && count > 0) {
+              console.log(`✅ Mitarbeitertyp gefunden und count > 0: ${foundType.name}`);
+              
+              // Priorität 1: Verwende pipedrive_field aus der Datenbank
+              if (foundType.pipedrive_field) {
+                console.log(`🎯 Verwende pipedrive_field für ${foundType.name}: ${foundType.pipedrive_field} = ${count}`);
+                acc[foundType.pipedrive_field] = count;
+                console.log(`📤 Hinzugefügt zu Pipedrive-Data:`, { [foundType.pipedrive_field]: count });
+                return acc;
+              }
+              
+              console.log(`⚠️ Kein pipedrive_field für ${foundType.name}, versuche statische Mapping`);
+              
+              // Keine statischen Keys mehr - nur noch pipedrive_field aus der Datenbank
+              console.warn(`❌ Kein pipedrive_field für Mitarbeitertyp: ${foundType.name} - bitte in der Datenbank konfigurieren`);
+            }
+            return acc;
+          }
+        }
+        
         if (employeeType && count > 0) {
-          // Mapping der Mitarbeitertypen zu den spezifischen Pipedrive-Keys
-          let pipedriveKey = null;
+          console.log(`✅ Mitarbeitertyp gefunden und count > 0: ${employeeType.name}`);
           
-          // Mapping basierend auf Mitarbeitertyp-Namen
-          switch (employeeType.name.toLowerCase()) {
-            case 'umzugshelfer':
-            case 'träger':
-              pipedriveKey = PIPEDRIVE_KEY_UMZUGSHELFER;
-              break;
-            case 'monteur':
-            case 'monteure':
-              pipedriveKey = PIPEDRIVE_KEY_MONTEURE;
-              break;
-            case 'klavierträger':
-            case 'klaviertraeger':
-              pipedriveKey = PIPEDRIVE_KEY_KLAVIERTRAEGER;
-              break;
-            case 'vorarbeiter':
-              pipedriveKey = PIPEDRIVE_KEY_VORARBEITER;
-              break;
-            default:
-              // Fallback für unbekannte Typen
-              console.warn(`Unbekannter Mitarbeitertyp: ${employeeType.name}`);
-              break;
+          // Priorität 1: Verwende pipedrive_field aus der Datenbank
+          if (employeeType.pipedrive_field) {
+            console.log(`🎯 Verwende pipedrive_field für ${employeeType.name}: ${employeeType.pipedrive_field} = ${count}`);
+            acc[employeeType.pipedrive_field] = count; // Als Zahl übertragen
+            console.log(`📤 Hinzugefügt zu Pipedrive-Data:`, { [employeeType.pipedrive_field]: count });
+            return acc;
           }
           
-          if (pipedriveKey) {
-            acc[pipedriveKey] = count;
-          }
+          console.log(`⚠️ Kein pipedrive_field für ${employeeType.name} - bitte in der Datenbank konfigurieren`);
+          
+          // Keine statischen Keys mehr - nur noch pipedrive_field aus der Datenbank
+          console.warn(`❌ Kein pipedrive_field für Mitarbeitertyp: ${employeeType.name} - bitte in der Datenbank konfigurieren`);
+        } else {
+          console.log(`⏭️ Überspringe Mitarbeitertyp: employeeType=${!!employeeType}, count=${count}`);
         }
         return acc;
       }, {}),
@@ -727,7 +856,49 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
 
     };
 
-    console.log("Data prepared for Pipedrive:", pipedriveData);
+    console.log("📊 FINALE PIPEDRIVE-DATEN:", pipedriveData);
+    
+    // Debug-Ausgabe für Fahrzeuge
+    console.log("🚛 Fahrzeug-Debug:");
+    console.log(`   - selectedTrucks (Kennzeichen): ${JSON.stringify(selectedTrucks)}`);
+    console.log(`   - Pipedrive-Fahrzeuge (IDs): ${JSON.stringify(pipedriveData[PIPEDRIVE_KEY_FAHRZEUGE])}`);
+    
+    // Debug-Ausgabe für Fahrer (dynamisch über pipedrive_field)
+    console.log("👨‍💼 Fahrer-Debug:");
+    console.log(`   - Fahrer werden jetzt dynamisch über pipedrive_field übertragen`);
+    
+    // Debug-Ausgabe für Mitarbeitertypen
+    console.log("👥 Mitarbeitertypen-Debug:");
+    employeeTypes.forEach(type => {
+      console.log(`   - ${type.name}: pipedrive_field=${type.pipedrive_field || 'NICHT GESETZT'}`);
+    });
+    
+    // Debug-Ausgabe für ausgewählte Mitarbeiter
+    console.log("✅ Ausgewählte Mitarbeiter:");
+    console.log("   selectedEmployees:", selectedEmployees);
+    console.log("   employeeTypes:", employeeTypes);
+    
+    Object.entries(selectedEmployees).forEach(([typeId, count]) => {
+      if (count > 0) {
+        console.log(`   🔍 Suche Mitarbeitertyp für typeId: ${typeId}`);
+        const employeeType = employeeTypes.find(type => type.id === typeId);
+        console.log(`   📋 Gefundener Typ:`, employeeType);
+        
+        if (employeeType) {
+          console.log(`   ✅ ${employeeType.name}: ${count} Personen (pipedrive_field: ${employeeType.pipedrive_field || 'NICHT GESETZT'})`);
+        } else {
+          console.error(`   ❌ FEHLER: Kein Mitarbeitertyp gefunden für typeId: ${typeId}`);
+          console.log(`   🔍 Verfügbare employeeTypes IDs:`, employeeTypes.map(t => t.id));
+        }
+      }
+    });
+    
+    // Finale Pipedrive-Übersicht
+    console.log("🎯 PIPEDRIVE-ÜBERTRAGUNG ZUSAMMENFASSUNG:");
+    console.log("   Alle Keys die übertragen werden:");
+    Object.entries(pipedriveData).forEach(([key, value]) => {
+      console.log(`   - ${key}: ${JSON.stringify(value)}`);
+    });
 
     // --- Prepare the final result object ---
     const result = {
@@ -737,6 +908,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       totalDuration,
       team: {
         employees: selectedEmployees,
+        employeeTypes: employeeTypes,
         totalCount: getTotalEmployees(),
         timePerEmployee: getTimePerEmployee(),
         laborCosts: laborCosts,
@@ -755,6 +927,8 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     };
 
     console.log("Final result object passed to onComplete:", result);
+    console.log("pipedriveUpdateData in result:", result.pipedriveUpdateData);
+    console.log("pipedriveUpdateData keys:", Object.keys(result.pipedriveUpdateData || {}));
     onComplete(result);
   };
 
@@ -1073,19 +1247,32 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                   
                   {Object.entries(packMaterials).length > 0 ? (
                     <div className="bg-gray-50 p-5 rounded-lg">
-                      {Object.entries(packMaterials).map(([name, quantity]) => (
-                        <div key={name} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-0">
-                          <div>
-                            <span className="text-gray-700">{name}</span>
-                            {materialPrices[name] ? (
-                              <p className="text-sm text-gray-500">
-                                à {materialPrices[name].toFixed(2)}€
-                              </p>
-                            ) : null}
+                      {Object.entries(packMaterials).map(([name, quantity]) => {
+                        // Prüfe ob diese Menge aus additionalInfo stammt
+                        const isFromAdditionalInfo = additionalInfo && Array.isArray(additionalInfo) && (
+                          (name === 'Umzugskartons (Standard)' && additionalInfo.find(f => f.name === 'Anzahl Umzugskartons' && f.type === 'number')?.value > 0) ||
+                          (name === 'Bücherkartons (Bücher&Geschirr)' && additionalInfo.find(f => f.name === 'Anzahl Porzellankartons' && f.type === 'number')?.value > 0)
+                        );
+                        
+                        return (
+                          <div key={name} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-0">
+                            <div>
+                              <span className="text-gray-700">{name}</span>
+                              {isFromAdditionalInfo && (
+                                <span className="ml-2 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                                  + manuell
+                                </span>
+                              )}
+                              {materialPrices[name] ? (
+                                <p className="text-sm text-gray-500">
+                                  à {materialPrices[name].toFixed(2)}€
+                                </p>
+                              ) : null}
+                            </div>
+                            <span className="font-semibold">{quantity}x</span>
                           </div>
-                          <span className="font-semibold">{quantity}x</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                       
                       <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-300 bg-white rounded-lg p-3 shadow-sm">
                         <span className="font-semibold text-gray-800">Materialkosten:</span>
@@ -1109,6 +1296,25 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                     Personalaufwand
                   </h3>
 
+                  {/* --- Display Selected Trucks for Pipedrive --- */}
+                  {selectedTrucks.length > 0 && (
+                    <div className="mb-6 bg-purple-50 border border-purple-200 p-4 rounded-lg">
+                        <h4 className="font-medium mb-3 text-purple-800">Ausgewählte Fahrzeuge (für Pipedrive):</h4>
+                        <div className="space-y-2 text-sm">
+                            {selectedTrucks.map(kennzeichen => {
+                              const truck = Object.values(AVAILABLE_TRUCKS).find(t => t.kennzeichen === kennzeichen);
+                              return (
+                                <div key={kennzeichen} className="flex justify-between">
+                                    <span className="text-gray-700">{truck?.name || kennzeichen}:</span>
+                                    <span className="font-mono text-purple-600">{kennzeichen}</span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                        <p className="text-xs text-purple-600 mt-3 italic">Diese Fahrzeuge werden an Pipedrive übertragen.</p>
+                    </div>
+                  )}
+
                   {/* --- Display Calculated Drivers --- */}
                   <div className="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-lg">
                       <h4 className="font-medium mb-3 text-blue-800">Benötigte Fahrer (automatisch):</h4>
@@ -1131,6 +1337,23 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
 
                   {/* --- Manual Employee Selection --- */}
                   <h4 className="font-medium mb-4 text-gray-700">Zusätzliches Personal manuell hinzufügen:</h4>
+                  
+                  {/* Pipedrive-Keys Debug-Info */}
+                  {employeeTypes.some(type => type.pipedrive_field) && (
+                    <div className="mb-4 bg-green-50 border border-green-200 p-3 rounded-lg">
+                      <h5 className="font-medium text-green-800 mb-2">Pipedrive-Integration aktiv:</h5>
+                      <div className="space-y-1 text-sm">
+                        {employeeTypes
+                          .filter(type => type.pipedrive_field)
+                          .map(type => (
+                            <div key={type.id} className="flex justify-between">
+                              <span className="text-green-700">{type.name}:</span>
+                              <span className="font-mono text-green-600">{type.pipedrive_field}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="bg-gray-50 p-5 rounded-lg">
                     {employeeTypes.map(type => (
                       // Filter out driver types if they should ONLY be calculated automatically
@@ -1143,6 +1366,11 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                           <p className="text-sm text-gray-500">
                             Stundensatz: {type.price.toFixed(2)}€/h
                           </p>
+                          {type.pipedrive_field && (
+                            <p className="text-xs text-green-600 font-mono">
+                              Pipedrive: {type.pipedrive_field}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center">
                           <button

@@ -8,6 +8,7 @@ const GRID_SIZE = 0.5;
 
 export const AVAILABLE_TRUCKS = {
   'Ducato': {
+    id: '913', // Caddy ID
     name: 'Ducato',
     kennzeichen: 'KA - AR 575',
     width: 2.25,    // Breite in Metern
@@ -15,6 +16,7 @@ export const AVAILABLE_TRUCKS = {
     height: 3.29    // Höhe in Metern
   },
   'Mercedes 3,5 T': {
+    id: '911', // 3,5 Tonner ID
     name: 'Mercedes 3,5 T',
     kennzeichen: 'KA - AR 579',
     width: 2.16,
@@ -22,6 +24,7 @@ export const AVAILABLE_TRUCKS = {
     height: 3.42
   },
   'Renault': {
+    id: '910', // 3,5 Tonner ID
     name: 'Renault',
     kennzeichen: 'KA - AR 581',
     width: 2.16,
@@ -29,6 +32,7 @@ export const AVAILABLE_TRUCKS = {
     height: 3.2
   },
   'Alter 7,5 Tonner': {
+    id: '909', // 7,5 Tonner ID
     name: 'Alter 7,5 Tonner',
     kennzeichen: 'KA - AR 578',
     width: 2.55,
@@ -36,6 +40,7 @@ export const AVAILABLE_TRUCKS = {
     height: 3.55
   },
   'Neuer 7,5 Tonner': {
+    id: '908', // 7,5 Tonner ID
     name: 'Neuer 7,5 Tonner',
     kennzeichen: 'KA - AR 583',
     width: 2.55,
@@ -43,11 +48,36 @@ export const AVAILABLE_TRUCKS = {
     height: 3.7
   },
   '12 Tonner': {
+    id: '907', // 12 Tonner ID
     name: '12 Tonner',
     kennzeichen: 'KA - AR 577',
     width: 2.55,
     length: 9.6,
     height: 3.7
+  },
+  'Caddy': {
+    id: '913', // Caddy ID
+    name: 'Caddy',
+    kennzeichen: 'KA - AR 580',
+    width: 2.0,
+    length: 5.0,
+    height: 2.5
+  },
+  'Amarok': {
+    id: '914', // Amarok ID
+    name: 'Amarok',
+    kennzeichen: 'KA - AR 576',
+    width: 2.0,
+    length: 5.0,
+    height: 2.5
+  },
+  '3,5 Tonner (586)': {
+    id: '912', // 3,5 Tonner ID
+    name: '3,5 Tonner (586)',
+    kennzeichen: 'KA - AR 586',
+    width: 2.16,
+    length: 7.05,
+    height: 3.2
   }
 };
 

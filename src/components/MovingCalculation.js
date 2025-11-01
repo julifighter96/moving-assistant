@@ -19,7 +19,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   const [loading, setLoading] = useState(false);
   const [prices, setPrices] = useState([]);
   const [employeeTypes, setEmployeeTypes] = useState([]);
-  const [selectedEmployees, setSelectedEmployees] = useState({});
+  const [selectedEmployees, setSelectedEmployees] = useState({}); // Struktur: {typeId: {loading: count, travel: count, unloading: count}}
   const [laborCosts, setLaborCosts] = useState({
     byType: {},
     total: 0
@@ -192,21 +192,25 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       console.log("📤 Setze employeeTypes:", hourlyRates);
       setEmployeeTypes(hourlyRates);
       
-      // Initialisiere selectedEmployees mit Standardwerten
+      // Initialisiere selectedEmployees mit Standardwerten für alle drei Phasen
       const initialSelection = {};
       hourlyRates.forEach(type => {
         // Stelle sicher, dass die ID als String verwendet wird (für Konsistenz)
         const stringId = String(type.id);
-        initialSelection[stringId] = 0;
+        initialSelection[stringId] = {
+          loading: 0,
+          travel: 0,
+          unloading: 0
+        };
         console.log(`🔧 Initialisiere Mitarbeitertyp: ${type.name} (ID: ${type.id} -> ${stringId})`);
       });
       
-      // Basierend auf Volumen einen empfohlenen Anfangswert setzen
+      // Basierend auf Volumen einen empfohlenen Anfangswert für Beladung setzen
       if (totalVolume > 0 && hourlyRates.length > 0) {
         const firstTypeId = String(hourlyRates[0].id); // Konvertiere zu String für Konsistenz
         const recommendedCount = Math.max(2, Math.ceil(totalVolume / 15));
-        initialSelection[firstTypeId] = recommendedCount;
-        console.log(`🎯 Setze empfohlene Anzahl für ${hourlyRates[0].name}: ${recommendedCount} Personen (basierend auf Volumen: ${totalVolume})`);
+        initialSelection[firstTypeId].loading = recommendedCount;
+        console.log(`🎯 Setze empfohlene Anzahl für ${hourlyRates[0].name}: ${recommendedCount} Personen für Beladung (basierend auf Volumen: ${totalVolume})`);
       }
       
       console.log("📋 Finale initiale Auswahl:", initialSelection);
@@ -214,10 +218,11 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       
       // Debug: Zeige initiale Mitarbeiterauswahl
       console.log("🎯 Initiale Mitarbeiterauswahl:", initialSelection);
-      Object.entries(initialSelection).forEach(([typeId, count]) => {
-        if (count > 0) {
-          const employeeType = hourlyRates.find(type => type.id === typeId);
-          console.log(`   - ${employeeType?.name || 'UNBEKANNT'}: ${count} Personen`);
+      Object.entries(initialSelection).forEach(([typeId, phases]) => {
+        const total = phases.loading + phases.travel + phases.unloading;
+        if (total > 0) {
+          const employeeType = hourlyRates.find(type => String(type.id) === typeId);
+          console.log(`   - ${employeeType?.name || 'UNBEKANNT'}: Beladung=${phases.loading}, Fahrt=${phases.travel}, Entladung=${phases.unloading} (Gesamt: ${total})`);
         }
       });
     } catch (error) {
@@ -355,27 +360,49 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     setLoading(false);
   };
 
-  const handleEmployeeChange = (typeId, change) => {
-    console.log(`🔄 Mitarbeiter-Änderung: typeId=${typeId}, change=${change}`);
+  const handleEmployeeChange = (typeId, phase, change) => {
+    console.log(`🔄 Mitarbeiter-Änderung: typeId=${typeId}, phase=${phase}, change=${change}`);
     
     setSelectedEmployees(prev => {
-      const newValue = Math.max(0, (prev[typeId] || 0) + change);
-      const employeeType = employeeTypes.find(type => type.id === typeId);
+      const stringId = String(typeId);
+      const currentPhases = prev[stringId] || { loading: 0, travel: 0, unloading: 0 };
+      const newValue = Math.max(0, (currentPhases[phase] || 0) + change);
+      const employeeType = employeeTypes.find(type => String(type.id) === stringId);
       
       console.log(`   - Mitarbeitertyp: ${employeeType?.name || 'UNBEKANNT'}`);
-      console.log(`   - Alter Wert: ${prev[typeId] || 0}`);
+      console.log(`   - Phase: ${phase}`);
+      console.log(`   - Alter Wert: ${currentPhases[phase] || 0}`);
       console.log(`   - Neuer Wert: ${newValue}`);
       console.log(`   - pipedrive_field: ${employeeType?.pipedrive_field || 'NICHT GESETZT'}`);
       
       return {
         ...prev,
-        [typeId]: newValue
+        [stringId]: {
+          ...currentPhases,
+          [phase]: newValue
+        }
       };
     });
   };
 
   const getTotalEmployees = () => {
-    return Object.values(selectedEmployees).reduce((sum, count) => sum + count, 0);
+    return Object.values(selectedEmployees).reduce((sum, phases) => {
+      if (typeof phases === 'object' && phases !== null) {
+        return sum + (phases.loading || 0) + (phases.travel || 0) + (phases.unloading || 0);
+      }
+      // Fallback für alte Struktur (sollte nicht vorkommen, aber für Sicherheit)
+      return sum + (typeof phases === 'number' ? phases : 0);
+    }, 0);
+  };
+  
+  // Hilfsfunktion zum Erhalten der Mitarbeiteranzahl für eine bestimmte Phase
+  const getEmployeesForPhase = (phase) => {
+    return Object.values(selectedEmployees).reduce((sum, phases) => {
+      if (typeof phases === 'object' && phases !== null) {
+        return sum + (phases[phase] || 0);
+      }
+      return sum;
+    }, 0);
   };
 
   const getTimePerEmployee = () => {
@@ -393,44 +420,78 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   const calculateLaborCosts = (duration = totalDuration) => {
     if (!employeeTypes.length) return;
     
-    // Arbeitszeit ohne Fahrtzeit berechnen
-    const workDurationWithoutTravel = packingTime + unpackingTime + loadingTime;
+    // Zeitaufwand pro Phase in Minuten - IMMER aus der Zeitaufwand-Komponente (editableTimes)
+    // Diese Werte werden direkt aus der UI übernommen und sind die Quelle der Wahrheit
+    const loadingDuration = editableTimes.loading || 0; // Ladezeit (Beladung)
+    const travelDuration = editableTimes.travel || 0; // Fahrtzeit
+    // Entladung = Auf- & Abbauzeit am Entladeort (kombiniert)
+    const unloadingDuration = (editableTimes.setup || 0) + (editableTimes.dismantle || 0); // Auf- & Abbauzeit (Entladung)
     
-    // Fahrtzeit (diese bleibt konstant unabhängig von der Mitarbeiteranzahl)
-    const travelDuration = travelTimeMinutes;
-    
-    const totalEmployees = getTotalEmployees();
-    
-    if (!totalEmployees) {
-      setLaborCosts({ byType: {}, total: 0 });
-      return;
-    }
+    console.log("⏱️ Kostenberechnung mit Zeiten aus Zeitaufwand-Komponente:", {
+      loadingDuration,
+      travelDuration,
+      unloadingDuration,
+      setup: editableTimes.setup,
+      dismantle: editableTimes.dismantle
+    });
     
     // Kosten pro Mitarbeitertyp berechnen
     const byType = {};
     let total = 0;
     
-    // Berechne die durchschnittliche Zeit pro Mitarbeiter (ohne Fahrtzeit)
-    const workTimePerEmployee = workDurationWithoutTravel / Math.max(1, totalEmployees);
-    
-    // Gesamtzeit pro Mitarbeiter = Arbeitszeit/Mitarbeiteranzahl + Fahrzeit
-    const timePerEmployee = workTimePerEmployee + travelDuration;
-    
     employeeTypes.forEach(type => {
-      const count = selectedEmployees[type.id] || 0;
-      if (!count) return;
+      const stringId = String(type.id);
+      const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0 };
       
-      const hours = timePerEmployee / 60; // Umrechnung in Stunden
-      const cost = count * type.price * hours;
+      const loadingCount = phases.loading || 0;
+      const travelCount = phases.travel || 0;
+      const unloadingCount = phases.unloading || 0;
+      const totalCount = loadingCount + travelCount + unloadingCount;
+      
+      if (totalCount === 0) return;
+      
+      // Berechne Kosten pro Phase basierend auf den Zeiten aus der Zeitaufwand-Komponente
+      const loadingCost = loadingCount > 0 && loadingDuration > 0
+        ? (loadingCount * type.price * (loadingDuration / 60))
+        : 0;
+      
+      const travelCost = travelCount > 0 && travelDuration > 0
+        ? (travelCount * type.price * (travelDuration / 60))
+        : 0;
+      
+      const unloadingCost = unloadingCount > 0 && unloadingDuration > 0
+        ? (unloadingCount * type.price * (unloadingDuration / 60))
+        : 0;
+      
+      const typeCost = loadingCost + travelCost + unloadingCost;
+      
+      // Berechne durchschnittliche Stunden pro Person (für Anzeige)
+      let avgHours = 0;
+      if (totalCount > 0) {
+        const totalMinutes = (loadingCount * loadingDuration) + 
+                            (travelCount * travelDuration) + 
+                            (unloadingCount * unloadingDuration);
+        avgHours = totalMinutes / (60 * totalCount);
+      }
       
       byType[type.id] = {
-        count,
+        count: totalCount,
+        loadingCount,
+        travelCount,
+        unloadingCount,
         hourlyRate: type.price,
-        hours,
-        cost
+        hours: avgHours,
+        cost: typeCost,
+        loadingCost,
+        travelCost,
+        unloadingCost,
+        // Speichere auch die verwendeten Zeiten für Debugging
+        loadingDuration,
+        travelDuration,
+        unloadingDuration
       };
       
-      total += cost;
+      total += typeCost;
     });
     
     setLaborCosts({ byType, total });
@@ -440,8 +501,9 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     console.log("🔄 calculateLaborCosts useEffect ausgelöst");
     console.log("   selectedEmployees:", selectedEmployees);
     console.log("   employeeTypes:", employeeTypes);
+    console.log("   editableTimes:", editableTimes);
     calculateLaborCosts();
-  }, [selectedEmployees, totalDuration, employeeTypes]);
+  }, [selectedEmployees, employeeTypes, editableTimes]);
 
   // Callback für die Preisberechnung aus MovingPriceCalculator
   const handlePriceCalculated = (price) => {
@@ -792,13 +854,24 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       // Fahrer werden jetzt dynamisch über pipedrive_field aus der Datenbank übertragen
       
       // Manuell ausgewählte Mitarbeiter (nach Typ)
-      ...Object.entries(selectedEmployees).reduce((acc, [typeId, count]) => {
-        console.log(`🔍 Verarbeite Mitarbeitertyp: typeId=${typeId}, count=${count}`);
+      // WICHTIG: Für Pipedrive werden nur die Mitarbeiter für die BELADUNG übertragen
+      ...Object.entries(selectedEmployees).reduce((acc, [typeId, phases]) => {
+        // Nur Mitarbeiter für Beladung verwenden (nicht Fahrt oder Entladung)
+        const loadingCount = typeof phases === 'object' && phases !== null
+          ? (phases.loading || 0)
+          : (typeof phases === 'number' ? phases : 0);
+        
+        console.log(`🔍 Verarbeite Mitarbeitertyp: typeId=${typeId}, Beladung=${loadingCount}`, phases);
+        
+        if (loadingCount === 0) {
+          console.log(`⏭️ Überspringe Mitarbeitertyp: Beladung=0`);
+          return acc;
+        }
         
         console.log(`🔍 Suche nach typeId: ${typeId} (Typ: ${typeof typeId})`);
         console.log(`🔍 Verfügbare employeeTypes:`, employeeTypes.map(t => ({ id: t.id, type: typeof t.id, name: t.name })));
         
-        const employeeType = employeeTypes.find(type => type.id === typeId);
+        const employeeType = employeeTypes.find(type => String(type.id) === String(typeId));
         console.log(`📋 Gefundener Mitarbeitertyp:`, employeeType);
         
         // Fallback: Versuche String-zu-Number Konvertierung
@@ -810,46 +883,30 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
           
           if (numericEmployeeType) {
             console.log(`✅ Gefunden mit numerischer Suche!`);
-            // Verwende den gefundenen Typ für die weitere Verarbeitung
             const foundType = numericEmployeeType;
-            if (foundType && count > 0) {
-              console.log(`✅ Mitarbeitertyp gefunden und count > 0: ${foundType.name}`);
-              
-              // Priorität 1: Verwende pipedrive_field aus der Datenbank
-              if (foundType.pipedrive_field) {
-                console.log(`🎯 Verwende pipedrive_field für ${foundType.name}: ${foundType.pipedrive_field} = ${count}`);
-                acc[foundType.pipedrive_field] = count;
-                console.log(`📤 Hinzugefügt zu Pipedrive-Data:`, { [foundType.pipedrive_field]: count });
-                return acc;
-              }
-              
-              console.log(`⚠️ Kein pipedrive_field für ${foundType.name}, versuche statische Mapping`);
-              
-              // Keine statischen Keys mehr - nur noch pipedrive_field aus der Datenbank
-              console.warn(`❌ Kein pipedrive_field für Mitarbeitertyp: ${foundType.name} - bitte in der Datenbank konfigurieren`);
+            
+            // Priorität 1: Verwende pipedrive_field aus der Datenbank
+            if (foundType.pipedrive_field) {
+              console.log(`🎯 Verwende pipedrive_field für ${foundType.name}: ${foundType.pipedrive_field} = ${loadingCount} (nur Beladung)`);
+              acc[foundType.pipedrive_field] = loadingCount; // Nur Beladung-Mitarbeiter
+              console.log(`📤 Hinzugefügt zu Pipedrive-Data:`, { [foundType.pipedrive_field]: loadingCount });
+              return acc;
             }
-            return acc;
+            
+            console.warn(`❌ Kein pipedrive_field für Mitarbeitertyp: ${foundType.name} - bitte in der Datenbank konfigurieren`);
           }
+          return acc;
         }
         
-        if (employeeType && count > 0) {
-          console.log(`✅ Mitarbeitertyp gefunden und count > 0: ${employeeType.name}`);
-          
-          // Priorität 1: Verwende pipedrive_field aus der Datenbank
-          if (employeeType.pipedrive_field) {
-            console.log(`🎯 Verwende pipedrive_field für ${employeeType.name}: ${employeeType.pipedrive_field} = ${count}`);
-            acc[employeeType.pipedrive_field] = count; // Als Zahl übertragen
-            console.log(`📤 Hinzugefügt zu Pipedrive-Data:`, { [employeeType.pipedrive_field]: count });
-            return acc;
-          }
-          
-          console.log(`⚠️ Kein pipedrive_field für ${employeeType.name} - bitte in der Datenbank konfigurieren`);
-          
-          // Keine statischen Keys mehr - nur noch pipedrive_field aus der Datenbank
-          console.warn(`❌ Kein pipedrive_field für Mitarbeitertyp: ${employeeType.name} - bitte in der Datenbank konfigurieren`);
-        } else {
-          console.log(`⏭️ Überspringe Mitarbeitertyp: employeeType=${!!employeeType}, count=${count}`);
+        // Priorität 1: Verwende pipedrive_field aus der Datenbank
+        if (employeeType.pipedrive_field) {
+          console.log(`🎯 Verwende pipedrive_field für ${employeeType.name}: ${employeeType.pipedrive_field} = ${loadingCount} (nur Beladung)`);
+          acc[employeeType.pipedrive_field] = loadingCount; // Nur Beladung-Mitarbeiter
+          console.log(`📤 Hinzugefügt zu Pipedrive-Data:`, { [employeeType.pipedrive_field]: loadingCount });
+          return acc;
         }
+        
+        console.warn(`❌ Kein pipedrive_field für Mitarbeitertyp: ${employeeType.name} - bitte in der Datenbank konfigurieren`);
         return acc;
       }, {}),
       
@@ -877,15 +934,28 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     console.log("✅ Ausgewählte Mitarbeiter:");
     console.log("   selectedEmployees:", selectedEmployees);
     console.log("   employeeTypes:", employeeTypes);
+    console.log("   ⚠️ WICHTIG: Für Pipedrive werden nur Beladung-Mitarbeiter übertragen!");
     
-    Object.entries(selectedEmployees).forEach(([typeId, count]) => {
-      if (count > 0) {
+    Object.entries(selectedEmployees).forEach(([typeId, phases]) => {
+      const loadingCount = typeof phases === 'object' && phases !== null
+        ? (phases.loading || 0)
+        : (typeof phases === 'number' ? phases : 0);
+      
+      const totalCount = typeof phases === 'object' && phases !== null
+        ? (phases.loading || 0) + (phases.travel || 0) + (phases.unloading || 0)
+        : (typeof phases === 'number' ? phases : 0);
+      
+      if (totalCount > 0) {
         console.log(`   🔍 Suche Mitarbeitertyp für typeId: ${typeId}`);
-        const employeeType = employeeTypes.find(type => type.id === typeId);
+        const employeeType = employeeTypes.find(type => String(type.id) === String(typeId));
         console.log(`   📋 Gefundener Typ:`, employeeType);
         
         if (employeeType) {
-          console.log(`   ✅ ${employeeType.name}: ${count} Personen (pipedrive_field: ${employeeType.pipedrive_field || 'NICHT GESETZT'})`);
+          const phaseDetails = typeof phases === 'object' && phases !== null
+            ? `Beladung=${phases.loading || 0}, Fahrt=${phases.travel || 0}, Entladung=${phases.unloading || 0}`
+            : '';
+          console.log(`   ✅ ${employeeType.name}: Gesamt ${totalCount} Personen (${phaseDetails})`);
+          console.log(`   📤 Für Pipedrive: ${loadingCount} Personen (nur Beladung) → ${employeeType.pipedrive_field || 'NICHT GESETZT'}`);
         } else {
           console.error(`   ❌ FEHLER: Kein Mitarbeitertyp gefunden für typeId: ${typeId}`);
           console.log(`   🔍 Verfügbare employeeTypes IDs:`, employeeTypes.map(t => t.id));
@@ -1355,41 +1425,97 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                     </div>
                   )}
                   <div className="bg-gray-50 p-5 rounded-lg">
-                    {employeeTypes.map(type => (
-                      // Filter out driver types if they should ONLY be calculated automatically
-                      // Or keep them if manual override/addition is desired
-                      // Example: Filter out based on name
-                      // !type.name.toLowerCase().includes('fahrer') && (
-                      <div key={type.id} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-0">
-                        <div>
-                          <span className="font-medium text-gray-800">{type.name}</span>
-                          <p className="text-sm text-gray-500">
-                            Stundensatz: {type.price.toFixed(2)}€/h
-                          </p>
-                          {type.pipedrive_field && (
-                            <p className="text-xs text-green-600 font-mono">
-                              Pipedrive: {type.pipedrive_field}
+                    {employeeTypes.map(type => {
+                      const stringId = String(type.id);
+                      const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0 };
+                      
+                      return (
+                        <div key={type.id} className="py-4 border-b border-gray-200 last:border-0">
+                          <div className="mb-3">
+                            <span className="font-medium text-gray-800">{type.name}</span>
+                            <p className="text-sm text-gray-500">
+                              Stundensatz: {type.price.toFixed(2)}€/h
                             </p>
-                          )}
+                            {type.pipedrive_field && (
+                              <p className="text-xs text-green-600 font-mono">
+                                Pipedrive: {type.pipedrive_field}
+                              </p>
+                            )}
+                          </div>
+                          
+                          {/* Drei separate Eingabefelder für die Phasen */}
+                          <div className="space-y-2 ml-4">
+                            {/* Beladung */}
+                            <div className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
+                              <span className="text-sm text-gray-700">Beladung:</span>
+                              <div className="flex items-center">
+                                <button
+                                  onClick={() => handleEmployeeChange(type.id, 'loading', -1)}
+                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                >
+                                  <Minus size={14} />
+                                </button>
+                                <span className="mx-3 w-8 text-center font-semibold text-sm">{phases.loading || 0}</span>
+                                <button
+                                  onClick={() => handleEmployeeChange(type.id, 'loading', 1)}
+                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* Fahrt */}
+                            <div className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
+                              <span className="text-sm text-gray-700">Fahrt:</span>
+                              <div className="flex items-center">
+                                <button
+                                  onClick={() => handleEmployeeChange(type.id, 'travel', -1)}
+                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                >
+                                  <Minus size={14} />
+                                </button>
+                                <span className="mx-3 w-8 text-center font-semibold text-sm">{phases.travel || 0}</span>
+                                <button
+                                  onClick={() => handleEmployeeChange(type.id, 'travel', 1)}
+                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* Entladung */}
+                            <div className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
+                              <span className="text-sm text-gray-700">Entladung:</span>
+                              <div className="flex items-center">
+                                <button
+                                  onClick={() => handleEmployeeChange(type.id, 'unloading', -1)}
+                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                >
+                                  <Minus size={14} />
+                                </button>
+                                <span className="mx-3 w-8 text-center font-semibold text-sm">{phases.unloading || 0}</span>
+                                <button
+                                  onClick={() => handleEmployeeChange(type.id, 'unloading', 1)}
+                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* Gesamtsumme für diesen Typ */}
+                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-300">
+                              <span className="text-sm font-medium text-gray-800">Gesamt:</span>
+                              <span className="text-sm font-bold text-primary">
+                                {(phases.loading || 0) + (phases.travel || 0) + (phases.unloading || 0)} Personen
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center">
-                          <button
-                            onClick={() => handleEmployeeChange(type.id, -1)}
-                            className="p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-                          >
-                            <Minus size={16} />
-                          </button>
-                          <span className="mx-3 w-8 text-center font-semibold">{selectedEmployees[type.id] || 0}</span>
-                          <button
-                            onClick={() => handleEmployeeChange(type.id, 1)}
-                            className="p-1.5 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-                          >
-                            <Plus size={16} />
-                          </button>
-                        </div>
-                      </div>
-                      // )
-                    ))}
+                      );
+                    })}
 
                     <div className="flex justify-between items-center mt-5 pt-3 border-t border-gray-300 bg-white p-4 rounded-lg shadow-sm">
                       <div className="flex items-center text-gray-800">
@@ -1399,8 +1525,9 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                       <div className="text-right">
                         <span className="font-bold text-primary">{getTotalEmployees()} Personen</span>
                         <div className="text-sm text-gray-600 mt-1">
-                          <div>Arbeitszeit: ~{Math.round((packingTime + unpackingTime + loadingTime) / Math.max(1, getTotalEmployees()))} Min./Person</div>
-                          <div>Fahrtzeit: {Math.round(travelTimeMinutes)} Min. (konstant)</div>
+                          <div>Beladung: {getEmployeesForPhase('loading')} Personen</div>
+                          <div>Fahrt: {getEmployeesForPhase('travel')} Personen</div>
+                          <div>Entladung: {getEmployeesForPhase('unloading')} Personen</div>
                         </div>
                       </div>
                     </div>
@@ -1417,19 +1544,56 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                   </h3>
                   <div className="bg-gray-50 p-5 rounded-lg">
                     {employeeTypes.map(type => {
-                      const typeData = laborCosts.byType[type.id] || { count: 0, hourlyRate: 0, hours: 0, cost: 0 };
+                      const typeData = laborCosts.byType[type.id] || { 
+                        count: 0, 
+                        loadingCount: 0,
+                        travelCount: 0,
+                        unloadingCount: 0,
+                        hourlyRate: 0, 
+                        hours: 0, 
+                        cost: 0,
+                        loadingCost: 0,
+                        travelCost: 0,
+                        unloadingCost: 0,
+                        loadingDuration: 0,
+                        travelDuration: 0,
+                        unloadingDuration: 0
+                      };
                       if (typeData.count === 0) return null;
                       
                       return (
-                        <div key={`cost-${type.id}`} className="flex justify-between items-center py-3 border-b border-gray-200 last:border-0">
-                          <div>
-                            <span className="font-medium text-gray-800">{type.name}</span>
-                            <p className="text-sm text-gray-500">
-                              {typeData.count} × {typeData.hourlyRate.toFixed(2)}€/h × {typeData.hours.toFixed(1)}h
-                            </p>
+                        <div key={`cost-${type.id}`} className="py-3 border-b border-gray-200 last:border-0">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <span className="font-medium text-gray-800">{type.name}</span>
+                              <p className="text-sm text-gray-500">
+                                {typeData.count} × {typeData.hourlyRate.toFixed(2)}€/h × {typeData.hours.toFixed(1)}h
+                              </p>
+                            </div>
+                            <div className="font-bold text-right text-gray-800">
+                              {typeData.cost.toFixed(2)}€
+                            </div>
                           </div>
-                          <div className="font-bold text-right text-gray-800">
-                            {typeData.cost.toFixed(2)}€
+                          {/* Detaillierte Aufschlüsselung nach Phasen mit Zeiten aus Zeitaufwand-Komponente */}
+                          <div className="ml-4 space-y-1 text-xs text-gray-600">
+                            {typeData.loadingCount > 0 && typeData.loadingDuration > 0 && (
+                              <div className="flex justify-between">
+                                <span>Beladung ({typeData.loadingCount} Pers., {typeData.loadingDuration} Min.):</span>
+                                <span>{typeData.loadingCost.toFixed(2)}€</span>
+                              </div>
+                            )}
+                            {typeData.travelCount > 0 && typeData.travelDuration > 0 && (
+                              <div className="flex justify-between">
+                                <span>Fahrt ({typeData.travelCount} Pers., {typeData.travelDuration} Min.):</span>
+                                <span>{typeData.travelCost.toFixed(2)}€</span>
+                              </div>
+                            )}
+                            {typeData.unloadingCount > 0 && typeData.unloadingDuration > 0 && (
+                              <div className="flex justify-between">
+                                <span>Entladung ({typeData.unloadingCount} Pers., {typeData.unloadingDuration} Min. = Auf- & Abbauzeit):</span>
+                                <span>{typeData.unloadingCost.toFixed(2)}€</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );

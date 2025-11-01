@@ -282,22 +282,58 @@ ${inspectionData.additionalInfo
 
         console.log('Generated servicesSection:', servicesSection);
         
-        // Mitarbeiter-Sektion aus MovingCalculation
+        // Mitarbeiter-Sektion aus MovingCalculation mit Phasen-Aufteilung
         let employeesSection = '';
         if (inspectionData.calculationData?.team?.employees) {
           const selectedEmployees = inspectionData.calculationData.team.employees;
           const employeeTypes = inspectionData.calculationData.team.employeeTypes || [];
           
-          const employeeInfo = Object.entries(selectedEmployees)
-            .filter(([_, count]) => count > 0)
-            .map(([typeId, count]) => {
-              const employeeType = employeeTypes.find(type => type.id === parseInt(typeId));
-              return employeeType ? `- ${employeeType.name}: ${count} Personen` : null;
-            })
-            .filter(Boolean);
+          const employeeInfoLines = [];
           
-          if (employeeInfo.length > 0) {
-            employeesSection = `\nMitarbeiter (aus MovingCalculation):\n${employeeInfo.join('\n')}`;
+          Object.entries(selectedEmployees).forEach(([typeId, phases]) => {
+            // Unterstütze sowohl alte Struktur (nur count) als auch neue Struktur (Phasen)
+            let loadingCount = 0;
+            let travelCount = 0;
+            let unloadingCount = 0;
+            
+            if (typeof phases === 'object' && phases !== null && !Array.isArray(phases)) {
+              // Neue Struktur mit Phasen
+              loadingCount = phases.loading || 0;
+              travelCount = phases.travel || 0;
+              unloadingCount = phases.unloading || 0;
+            } else if (typeof phases === 'number') {
+              // Alte Struktur - nur count (für Rückwärtskompatibilität)
+              loadingCount = phases;
+            }
+            
+            // Verwende die maximale Anzahl über alle Phasen (nicht die Summe),
+            // da es wahrscheinlich die gleichen Personen sind, die in verschiedenen Phasen arbeiten
+            const maxCount = Math.max(loadingCount, travelCount, unloadingCount);
+            
+            if (maxCount > 0) {
+              const employeeType = employeeTypes.find(type => String(type.id) === String(typeId));
+              if (employeeType) {
+                // Detaillierte Aufteilung nach Phasen
+                const phaseDetails = [];
+                if (loadingCount > 0) phaseDetails.push(`Beladung: ${loadingCount}`);
+                if (travelCount > 0) phaseDetails.push(`Fahrt: ${travelCount}`);
+                if (unloadingCount > 0) phaseDetails.push(`Entladung: ${unloadingCount}`);
+                
+                if (phaseDetails.length > 0) {
+                  employeeInfoLines.push(
+                    `- ${employeeType.name}: ${maxCount} Personen (${phaseDetails.join(', ')})`
+                  );
+                } else {
+                  employeeInfoLines.push(
+                    `- ${employeeType.name}: ${maxCount} Personen`
+                  );
+                }
+              }
+            }
+          });
+          
+          if (employeeInfoLines.length > 0) {
+            employeesSection = `\nMitarbeiter (aus Kalkulation):\n${employeeInfoLines.join('\n')}`;
           }
         }
         

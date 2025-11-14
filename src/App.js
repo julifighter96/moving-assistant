@@ -21,6 +21,10 @@ import MovingCalculation from './components/MovingCalculation';
 import TourPlanner from './components/TourPlanner';
 import RouteNavigation from './components/RouteNavigation';
 import EmployeeScheduling from './pages/EmployeeScheduling';
+import OfflineIndicator from './components/OfflineIndicator';
+import { offlineStorage } from './services/offlineStorage';
+import { syncService } from './services/syncService';
+import { apiWrapper } from './services/apiWrapper';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -334,6 +338,75 @@ function App() {
   const [additionalInfo, setAdditionalInfo] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
   const [popupMessage, setPopupMessage] = useState('');
+
+  // Offline-Support: Initialisiere Sync-Service und lade gespeicherten Zustand
+  useEffect(() => {
+    // Starte Auto-Sync
+    syncService.startAutoSync(30000); // Alle 30 Sekunden
+
+    // Lade gespeicherten Zustand wenn Deal ausgewählt
+    const loadSavedState = async () => {
+      if (selectedDealId) {
+        try {
+          const savedState = await offlineStorage.loadInspectionState(selectedDealId);
+          if (savedState) {
+            console.log('✅ Gespeicherter Zustand geladen für Deal:', selectedDealId);
+            // Stelle gespeicherten Zustand wieder her
+            if (savedState.roomsData) {
+              setRoomsData(savedState.roomsData);
+            }
+            if (savedState.moveInfo) {
+              setMoveInfo(savedState.moveInfo);
+            }
+            if (savedState.additionalInfo) {
+              setAdditionalInfo(savedState.additionalInfo);
+            }
+            if (savedState.calculationData) {
+              setCalculationData(savedState.calculationData);
+            }
+            if (savedState.currentStep !== undefined) {
+              setCurrentStep(savedState.currentStep);
+            }
+          }
+        } catch (error) {
+          console.error('Fehler beim Laden des gespeicherten Zustands:', error);
+        }
+      }
+    };
+
+    loadSavedState();
+
+    return () => {
+      syncService.stopAutoSync();
+    };
+  }, [selectedDealId]);
+
+  // Auto-Save: Speichere Zustand automatisch bei Änderungen
+  useEffect(() => {
+    if (!selectedDealId) return;
+
+    // Debounce: Speichere nur alle 2 Sekunden
+    const timeoutId = setTimeout(async () => {
+      try {
+        const stateToSave = {
+          roomsData,
+          moveInfo,
+          additionalInfo,
+          calculationData,
+          currentStep,
+          selectedDealId,
+          timestamp: new Date().toISOString()
+        };
+        
+        await offlineStorage.saveInspectionState(selectedDealId, stateToSave);
+        console.log('💾 Auto-Save: Zustand gespeichert');
+      } catch (error) {
+        console.error('Fehler beim Auto-Save:', error);
+      }
+    }, 2000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [roomsData, moveInfo, additionalInfo, calculationData, currentStep, selectedDealId]);
 
   const handleRouteClick = () => {
     setCurrentStep('route-selection');
@@ -999,6 +1072,9 @@ function App() {
         <div className="fixed bottom-2 right-2 text-xs text-gray-500">
           {APP_VERSION}
         </div>
+        
+        {/* Offline-Indikator */}
+        <OfflineIndicator />
       </div>
     </LoginWrapper>
   );

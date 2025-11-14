@@ -8,6 +8,7 @@ import { Truck, ExternalLink } from 'lucide-react';
 import MovingPriceCalculator from './MovingPriceCalculator';
 import axios from 'axios';
 import Toast from './Toast';
+import { apiWrapper } from '../services/apiWrapper';
 
 const MOVE_INFO_FIELDS = [
    { name: 'Wunschdatum', apiKey: 'b9d01d5dcd86c878a57cb0febd336e4d390af900', type: 'date' },
@@ -132,14 +133,21 @@ const MoveInformationComponent = ({ dealId, onComplete }) => {
        dataToUpdate.transportCost = transportCost;
      }
 
-     console.log('Sending data to Pipedrive:', dataToUpdate);
-     
-     const response = await updateDealDirectly(dealId, dataToUpdate);
-     console.log('Response from Pipedrive:', response);
+    console.log('Sending data to Pipedrive:', dataToUpdate);
+    
+    // Nutze apiWrapper für Offline-Support
+    const response = await apiWrapper.updateDeal(dealId, dataToUpdate);
+    console.log('Response from Pipedrive:', response);
 
-     if (!response || response.success === false) {
-       throw new Error(response?.message || 'Failed to update deal');
-     }
+    if (!response || response.success === false) {
+      // Wenn offline, ist das OK
+      if (response.offline) {
+        showToast('Daten werden lokal gespeichert und synchronisiert, sobald wieder online', 'success');
+        onComplete(response);
+        return;
+      }
+      throw new Error(response?.message || 'Failed to update deal');
+    }
 
      // Speichere aktuelle Adressen im SessionStorage
      const pickupAddress = moveInfo['07c3da8804f7b96210e45474fba35b8691211ddd'];

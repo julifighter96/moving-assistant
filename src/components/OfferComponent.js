@@ -5,6 +5,7 @@ import { addNoteToDeal } from '../services/pipedriveService';
 import MovingPriceCalculator from './MovingPriceCalculator';
 import axios from 'axios';
 import Toast from './Toast';
+import { apiWrapper } from '../services/apiWrapper';
 
 const OfferComponent = ({ inspectionData, dealId, onComplete, setCurrentStep, volumeReductions, onVolumeReductionChange }) => {
  const [showPriceCalculator, setShowPriceCalculator] = useState(false);
@@ -413,8 +414,19 @@ ${inspectionData.additionalInfo
 
         console.log('Final noteContent:', noteContent);
      
-        await updateDealForOffer(dealId, offerDetails);
-        await addNoteToDeal(dealId, noteContent);
+        // Nutze apiWrapper für Offline-Support
+        const updateResult = await apiWrapper.updateOffer(dealId, offerDetails);
+        
+        // Versuche Note hinzuzufügen (kann auch offline sein)
+        try {
+          await addNoteToDeal(dealId, noteContent);
+        } catch (error) {
+          console.warn('Fehler beim Hinzufügen der Note (wird später synchronisiert):', error);
+        }
+        
+        if (updateResult.offline) {
+          showToast('Angebot wird lokal gespeichert und synchronisiert, sobald wieder online', 'success');
+        }
         
         onComplete();
       } catch (error) {

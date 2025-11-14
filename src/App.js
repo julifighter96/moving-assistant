@@ -25,6 +25,8 @@ import OfflineIndicator from './components/OfflineIndicator';
 import { offlineStorage } from './services/offlineStorage';
 import { syncService } from './services/syncService';
 import { apiWrapper } from './services/apiWrapper';
+import CustomerInventoryEditor from './components/CustomerInventoryEditor';
+import ShareLinkButton from './components/ShareLinkButton';
 
 const APP_VERSION = 'v1.0.1';
 const INITIAL_ROOMS = ['Wohnzimmer', 'Schlafzimmer', 'Küche', 'Badezimmer', 'Arbeitszimmer'];
@@ -221,8 +223,8 @@ const StepNavigation = ({ currentStep, totalSteps, onStepChange }) => {
   );
 };
 
-function App() {
-  
+// Main App Component (without customer view check)
+function AppContent() {
   const [currentStep, setCurrentStep] = useState(0);
   const [moveInfo, setMoveInfo] = useState(null);
   const [selectedDealId, setSelectedDealId] = useState(null);
@@ -862,6 +864,28 @@ function App() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Share Link Button */}
+                      <div className="mt-6 pt-6 border-t border-gray-200">
+                        <ShareLinkButton 
+                          dealId={selectedDealId} 
+                          onImportData={(importedRoomsData) => {
+                            // Merge imported data with existing data
+                            setRoomsData(prevData => {
+                              const merged = { ...prevData };
+                              Object.keys(importedRoomsData).forEach(roomName => {
+                                merged[roomName] = {
+                                  ...prevData[roomName],
+                                  ...importedRoomsData[roomName]
+                                };
+                              });
+                              return merged;
+                            });
+                            setShowPopup(true);
+                            setPopupMessage('Kundendaten erfolgreich importiert!');
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                   
@@ -1078,6 +1102,26 @@ function App() {
       </div>
     </LoginWrapper>
   );
+}
+
+// Wrapper component to check for customer token
+function App() {
+  // Check if this is a customer inventory view
+  const urlParams = new URLSearchParams(window.location.search);
+  let customerToken = urlParams.get('token');
+  
+  if (!customerToken && window.location.pathname.includes('/customer-inventory/')) {
+    const pathParts = window.location.pathname.split('/customer-inventory/');
+    customerToken = pathParts.length > 1 ? pathParts[1] : null;
+  }
+
+  // If customer token exists, show customer view
+  if (customerToken) {
+    return <CustomerInventoryEditor token={customerToken} />;
+  }
+
+  // Otherwise show normal app
+  return <AppContent />;
 }
 
 // Wrap the App component with AuthProvider

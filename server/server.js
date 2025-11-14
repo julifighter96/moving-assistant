@@ -143,6 +143,15 @@ const initializeDatabase = () => {
           hourly_rate REAL NOT NULL DEFAULT 0,
           description TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`,
+        
+        `CREATE TABLE IF NOT EXISTS inspection_shares (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          deal_id TEXT NOT NULL,
+          token TEXT NOT NULL UNIQUE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          expires_at DATETIME,
+          is_active BOOLEAN DEFAULT 1
         )`
       ];
       
@@ -160,6 +169,8 @@ const initializeDatabase = () => {
         db.run('CREATE INDEX IF NOT EXISTS idx_inspection_photos ON inspection_photos(inspection_id)');
         db.run('CREATE INDEX IF NOT EXISTS idx_recognitions_hash ON recognitions(imageHash)');
         db.run('CREATE INDEX IF NOT EXISTS idx_features_hash ON image_features(imageHash)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_inspection_shares_token ON inspection_shares(token)');
+        db.run('CREATE INDEX IF NOT EXISTS idx_inspection_shares_deal ON inspection_shares(deal_id)');
         
         // Füge Standardmitarbeitertypen hinzu, wenn die Tabelle leer ist
         db.get("SELECT COUNT(*) as count FROM employee_types", (err, result) => {
@@ -1134,6 +1145,22 @@ Antworte im folgenden JSON-Format:
             return res.status(500).json({ error: 'Database error' });
           }
 
+          // Prepare data object with roomsData if present
+          let dataToStore = { ...moveData };
+          
+          // If roomsData is in moveData, ensure it's preserved
+          if (moveData.roomsData) {
+            dataToStore.roomsData = moveData.roomsData;
+          }
+
+          // Calculate total volume from roomsData if available
+          let totalVolume = 0;
+          if (moveData.roomsData) {
+            Object.values(moveData.roomsData).forEach(roomData => {
+              totalVolume += roomData.totalVolume || 0;
+            });
+          }
+
           if (!inspection) {
             // Create new inspection
             const stmt = db.prepare(`
@@ -1144,8 +1171,9 @@ Antworte im folgenden JSON-Format:
                 origin_floor, 
                 destination_address, 
                 destination_floor,
+                total_volume,
                 data
-              ) VALUES (?, ?, ?, ?, ?, ?, ?)
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `);
 
             stmt.run(
@@ -1155,11 +1183,33 @@ Antworte im folgenden JSON-Format:
               moveData['72cfdc30fa0621d1d6947cf408409e44c6bb40d6'], // origin_floor
               moveData['9cb4de1018ec8404feeaaaf7ee9b293c78c44281'], // destination_address
               moveData['9e4e07bce884e21671546529b564da98ceb4765a'], // destination_floor
-              JSON.stringify(moveData)
+              totalVolume,
+              JSON.stringify(dataToStore)
             );
 
-            return res.json({ message: 'Move information created successfully', data: moveData });
+            return res.json({ message: 'Move information created successfully', data: dataToStore });
           } else {
+            // Update existing inspection - merge with existing data
+            let existingData = {};
+            try {
+              existingData = inspection.data ? JSON.parse(inspection.data) : {};
+            } catch (e) {
+              console.error('Error parsing existing inspection data:', e);
+            }
+
+            // Merge roomsData if present
+            if (moveData.roomsData) {
+              existingData.roomsData = moveData.roomsData;
+            }
+            
+            // Merge other moveData fields
+            Object.keys(moveData).forEach(key => {
+              if (key !== 'roomsData' && !key.startsWith('07c3da') && !key.startsWith('9cb4de') && 
+                  !key.startsWith('72cfdc') && !key.startsWith('9e4e07') && key !== 'b9d01d5dcd86c878a57cb0febd336e4d390af900') {
+                existingData[key] = moveData[key];
+              }
+            });
+
             // Update existing inspection
             const stmt = db.prepare(`
               UPDATE inspections SET 
@@ -1168,6 +1218,7 @@ Antworte im folgenden JSON-Format:
                 origin_floor = ?,
                 destination_address = ?,
                 destination_floor = ?,
+                total_volume = ?,
                 data = ?
               WHERE deal_id = ?
             `);
@@ -1178,15 +1229,239 @@ Antworte im folgenden JSON-Format:
               moveData['72cfdc30fa0621d1d6947cf408409e44c6bb40d6'],
               moveData['9cb4de1018ec8404feeaaaf7ee9b293c78c44281'],
               moveData['9e4e07bce884e21671546529b564da98ceb4765a'],
-              JSON.stringify(moveData),
+              totalVolume || inspection.total_volume || 0,
+              JSON.stringify(existingData),
               dealId
             );
 
-            return res.json({ message: 'Move information updated successfully', data: moveData });
+            return res.json({ message: 'Move information updated successfully', data: existingData });
           }
         });
       } catch (error) {
         console.error('Error handling move information:', error);
+        res.status(500).json({ error: 'Server error' });
+      }
+    });
+
+    // Generate share link for inspection
+    app.post('/api/inspections/:dealId/share', authenticateToken, async (req, res) => {
+      const { dealId } = req.params;
+      const crypto = require('crypto');
+      
+      try {
+        // Check if inspection exists
+        db.get('SELECT * FROM inspections WHERE deal_id = ?', [dealId], (err, inspection) => {
+          if (err) {
+            console.error('Database error checking inspection:', err);
+            return res.status(500).json({ error: 'Database error', details: err.message });
+          }
+
+          if (!inspection) {
+            return res.status(404).json({ error: 'Inspection not found. Please save the inspection first.' });
+          }
+
+          // Check if share already exists
+          db.get('SELECT * FROM inspection_shares WHERE deal_id = ? AND is_active = 1', [dealId], (err, existingShare) => {
+            if (err) {
+              console.error('Database error checking existing share:', err);
+              // If table doesn't exist, try to create it
+              if (err.message && err.message.includes('no such table')) {
+                db.run(`
+                  CREATE TABLE IF NOT EXISTS inspection_shares (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    deal_id TEXT NOT NULL,
+                    token TEXT NOT NULL UNIQUE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    expires_at DATETIME,
+                    is_active BOOLEAN DEFAULT 1
+                  )
+                `, (createErr) => {
+                  if (createErr) {
+                    console.error('Error creating inspection_shares table:', createErr);
+                    return res.status(500).json({ error: 'Database error', details: createErr.message });
+                  }
+                  // Retry the query after creating the table
+                  return res.status(500).json({ error: 'Table created, please try again' });
+                });
+                return;
+              }
+              return res.status(500).json({ error: 'Database error', details: err.message });
+            }
+
+            if (existingShare) {
+              // Return existing token - always use public domain
+              const shareUrl = `https://lolworlds.online/customer-inventory/${existingShare.token}`;
+              return res.json({ 
+                token: existingShare.token,
+                url: shareUrl,
+                expiresAt: existingShare.expires_at
+              });
+            }
+
+            // Generate new token
+            const token = crypto.randomBytes(32).toString('hex');
+            const expiresAt = new Date();
+            expiresAt.setFullYear(expiresAt.getFullYear() + 1); // Expires in 1 year
+
+            db.run(
+              'INSERT INTO inspection_shares (deal_id, token, expires_at, is_active) VALUES (?, ?, ?, 1)',
+              [dealId, token, expiresAt.toISOString()],
+              function(err) {
+                if (err) {
+                  console.error('Database error inserting share:', err);
+                  return res.status(500).json({ error: 'Database error', details: err.message });
+                }
+
+                // Always use public domain for share links
+                const shareUrl = `https://lolworlds.online/customer-inventory/${token}`;
+                res.json({ 
+                  token,
+                  url: shareUrl,
+                  expiresAt: expiresAt.toISOString()
+                });
+              }
+            );
+          });
+        });
+      } catch (error) {
+        console.error('Error generating share link:', error);
+        res.status(500).json({ error: 'Server error' });
+      }
+    });
+
+    // Get inspection data by token (public, no auth required)
+    app.get('/api/inspections/shared/:token', async (req, res) => {
+      const { token } = req.params;
+      
+      try {
+        db.get(
+          'SELECT * FROM inspection_shares WHERE token = ? AND is_active = 1',
+          [token],
+          (err, share) => {
+            if (err) {
+              console.error('Database error:', err);
+              return res.status(500).json({ error: 'Database error' });
+            }
+
+            if (!share) {
+              return res.status(404).json({ error: 'Share link not found or expired' });
+            }
+
+            // Check if expired
+            if (share.expires_at && new Date(share.expires_at) < new Date()) {
+              return res.status(410).json({ error: 'Share link has expired' });
+            }
+
+            // Get inspection data
+            db.get('SELECT * FROM inspections WHERE deal_id = ?', [share.deal_id], (err, inspection) => {
+              if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ error: 'Database error' });
+              }
+
+              if (!inspection) {
+                return res.status(404).json({ error: 'Inspection not found' });
+              }
+
+              // Parse JSON data
+              let inspectionData = {};
+              try {
+                inspectionData = inspection.data ? JSON.parse(inspection.data) : {};
+              } catch (e) {
+                console.error('Error parsing inspection data:', e);
+              }
+
+              res.json({
+                dealId: inspection.deal_id,
+                roomsData: inspectionData.roomsData || {},
+                moveInfo: inspectionData.moveInfo || null,
+                timestamp: inspection.timestamp
+              });
+            });
+          }
+        );
+      } catch (error) {
+        console.error('Error fetching shared inspection:', error);
+        res.status(500).json({ error: 'Server error' });
+      }
+    });
+
+    // Update inspection data by token (public, no auth required)
+    app.put('/api/inspections/shared/:token', async (req, res) => {
+      const { token } = req.params;
+      const { roomsData } = req.body;
+      
+      try {
+        db.get(
+          'SELECT * FROM inspection_shares WHERE token = ? AND is_active = 1',
+          [token],
+          (err, share) => {
+            if (err) {
+              console.error('Database error:', err);
+              return res.status(500).json({ error: 'Database error' });
+            }
+
+            if (!share) {
+              return res.status(404).json({ error: 'Share link not found or expired' });
+            }
+
+            // Check if expired
+            if (share.expires_at && new Date(share.expires_at) < new Date()) {
+              return res.status(410).json({ error: 'Share link has expired' });
+            }
+
+            // Get existing inspection
+            db.get('SELECT * FROM inspections WHERE deal_id = ?', [share.deal_id], (err, inspection) => {
+              if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ error: 'Database error' });
+              }
+
+              if (!inspection) {
+                return res.status(404).json({ error: 'Inspection not found' });
+              }
+
+              // Parse existing data
+              let inspectionData = {};
+              try {
+                inspectionData = inspection.data ? JSON.parse(inspection.data) : {};
+              } catch (e) {
+                console.error('Error parsing inspection data:', e);
+              }
+
+              // Update roomsData
+              inspectionData.roomsData = roomsData;
+
+              // Recalculate totals
+              let totalVolume = 0;
+              let totalWeight = 0;
+              Object.values(roomsData).forEach(roomData => {
+                totalVolume += roomData.totalVolume || 0;
+                totalWeight += roomData.estimatedWeight || 0;
+              });
+
+              // Update inspection
+              db.run(
+                'UPDATE inspections SET data = ?, total_volume = ? WHERE deal_id = ?',
+                [JSON.stringify(inspectionData), totalVolume, share.deal_id],
+                (err) => {
+                  if (err) {
+                    console.error('Database error:', err);
+                    return res.status(500).json({ error: 'Database error' });
+                  }
+
+                  res.json({ 
+                    message: 'Inventory updated successfully',
+                    totalVolume,
+                    totalWeight
+                  });
+                }
+              );
+            });
+          }
+        );
+      } catch (error) {
+        console.error('Error updating shared inspection:', error);
         res.status(500).json({ error: 'Server error' });
       }
     });
@@ -1226,6 +1501,97 @@ Antworte im folgenden JSON-Format:
     `, (err) => {
       // If the column already exists, this will error but we can ignore it
       console.log('Added pipedrive_field column to admin_prices table or it already exists');
+    });
+
+    // Ensure inspection_shares table exists (migration for existing databases)
+    // First, check if table exists with foreign key constraint
+    db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='inspection_shares'", (err, table) => {
+      if (err) {
+        console.error('Error checking inspection_shares table:', err);
+        return;
+      }
+
+      if (table) {
+        // Table exists, check if it has foreign key constraint
+        db.all("PRAGMA table_info(inspection_shares)", (err, columns) => {
+          if (err) {
+            console.error('Error getting table info:', err);
+            return;
+          }
+
+          // Check if we need to recreate the table (if it has foreign key issues)
+          db.all("SELECT sql FROM sqlite_master WHERE type='table' AND name='inspection_shares'", (err, result) => {
+            if (err) {
+              console.error('Error getting table SQL:', err);
+              return;
+            }
+
+            if (result && result[0] && result[0].sql && result[0].sql.includes('FOREIGN KEY')) {
+              // Table has foreign key, need to recreate it
+              console.log('Recreating inspection_shares table without foreign key constraint...');
+              db.serialize(() => {
+                // Drop the old table
+                db.run('DROP TABLE IF EXISTS inspection_shares', (dropErr) => {
+                  if (dropErr) {
+                    console.error('Error dropping inspection_shares table:', dropErr);
+                    return;
+                  }
+                  
+                  // Create new table without foreign key
+                  db.run(`
+                    CREATE TABLE inspection_shares (
+                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      deal_id TEXT NOT NULL,
+                      token TEXT NOT NULL UNIQUE,
+                      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                      expires_at DATETIME,
+                      is_active BOOLEAN DEFAULT 1
+                    )
+                  `, (createErr) => {
+                    if (createErr) {
+                      console.error('Error creating inspection_shares table:', createErr);
+                    } else {
+                      console.log('inspection_shares table recreated successfully');
+                    }
+                  });
+                });
+              });
+            } else {
+              // Table exists without foreign key, just ensure is_active column exists
+              db.run(`
+                ALTER TABLE inspection_shares ADD COLUMN is_active BOOLEAN DEFAULT 1
+              `, (alterErr) => {
+                if (alterErr && !alterErr.message.includes('duplicate column')) {
+                  // Column might already exist, that's okay
+                  if (!alterErr.message.includes('no such column')) {
+                    console.error('Error adding is_active column:', alterErr);
+                  }
+                } else if (!alterErr) {
+                  console.log('is_active column added to inspection_shares');
+                }
+              });
+            }
+          });
+        });
+      } else {
+        // Table doesn't exist, create it
+        db.run(`
+          CREATE TABLE inspection_shares (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            deal_id TEXT NOT NULL,
+            token TEXT NOT NULL UNIQUE,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME,
+            is_active BOOLEAN DEFAULT 1
+          )
+        `, (createErr) => {
+          if (createErr) {
+            console.error('Error creating inspection_shares table:', createErr);
+          } else {
+            console.log('inspection_shares table created successfully');
+          }
+        });
+      }
     });
 
     // Add a new price entry

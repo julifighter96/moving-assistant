@@ -841,6 +841,66 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     calculateDriverCounts();
   }, [selectedTrucks]); // Dependency array includes selectedTrucks
 
+  // --- Automatische Zuweisung von Fahrern basierend auf Fahrzeugauswahl ---
+  useEffect(() => {
+    if (!employeeTypes.length || Object.keys(calculatedDrivers).length === 0) return;
+    
+    // Finde die Mitarbeitertypen für die verschiedenen Fahrer-Kategorien
+    // Suche nach Typen, die "Fahrer" im Namen haben und die entsprechende Kategorie enthalten
+    const findDriverType = (category) => {
+      // Versuche verschiedene Muster zu finden
+      const patterns = {
+        '12T': ['12', '12t', '12 tonner', 'c', 'ce'],
+        '7.5T': ['7.5', '7,5', '7.49', '7,49', 'c1'],
+        '3.5T': ['3.5', '3,5', '3.49', '3,49', 'b', 'be']
+      };
+      
+      const searchPatterns = patterns[category] || [];
+      const lowerCategory = category.toLowerCase();
+      
+      return employeeTypes.find(type => {
+        const lowerName = type.name.toLowerCase();
+        // Prüfe ob der Name die Kategorie oder eines der Patterns enthält
+        return lowerName.includes(lowerCategory) || 
+               lowerName.includes('fahrer') && searchPatterns.some(pattern => lowerName.includes(pattern));
+      });
+    };
+    
+    setSelectedEmployees(prev => {
+      const updated = { ...prev };
+      let hasChanges = false;
+      
+      // Für jede Fahrer-Kategorie
+      Object.entries(calculatedDrivers).forEach(([category, count]) => {
+        if (count === 0) return;
+        
+        const driverType = findDriverType(category);
+        if (!driverType) {
+          console.warn(`Kein Mitarbeitertyp für Fahrer-Kategorie ${category} gefunden`);
+          return;
+        }
+        
+        const stringId = String(driverType.id);
+        const currentPhases = updated[stringId] || { loading: 0, travel: 0, unloading: 0, setupDismantle: 0 };
+        
+        // Setze Fahrer für Beladung, Fahrt und Entladung (nicht für Montagepreis)
+        if (currentPhases.loading !== count || currentPhases.travel !== count || currentPhases.unloading !== count) {
+          updated[stringId] = {
+            ...currentPhases,
+            loading: count,
+            travel: count,
+            unloading: count,
+            // setupDismantle bleibt unverändert
+          };
+          hasChanges = true;
+          console.log(`🚗 Automatisch ${count} Fahrer (${category}) für Beladung, Fahrt und Entladung zugewiesen: ${driverType.name}`);
+        }
+      });
+      
+      return hasChanges ? updated : prev;
+    });
+  }, [calculatedDrivers, employeeTypes]);
+
   // Update handleContinue (calculation logic is now separate)
   const handleContinue = () => {
     console.log("🚀 handleContinue aufgerufen");
@@ -1018,6 +1078,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   };
 
   // Update useEffect to initialize editable times when calculated times change
+  // Zeiten bleiben intern in Minuten, werden nur für die Initialisierung gesetzt
   useEffect(() => {
     setEditableTimes({
       loading: loadingTime,
@@ -1027,20 +1088,66 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     });
   }, [loadingTime, packingTime, unpackingTime, travelTimeMinutes]);
 
-  // Add handler for time changes
+  // Add handler for time changes - konvertiert Stunden zu Minuten
   const handleTimeChange = (type, value) => {
-    const newValue = Math.max(0, parseInt(value) || 0);
+    // Wert ist in Stunden, konvertiere zu Minuten
+    const hours = parseFloat(value) || 0;
+    const minutes = Math.max(0, Math.round(hours * 60));
+    
     setEditableTimes(prev => {
       const updated = {
-      ...prev,
-      [type]: newValue
+        ...prev,
+        [type]: minutes
       };
       
       // Update total duration when any time changes (inkl. Auf-/Abbau)
       const newTotal = updated.loading + updated.travel + updated.unloading + updated.setupDismantle;
-    setTotalDuration(newTotal);
+      setTotalDuration(newTotal);
       
       return updated;
+    });
+  };
+
+  // Helper function to convert minutes to hours for display
+  const minutesToHours = (minutes) => {
+    return (minutes / 60).toFixed(2);
+  };
+
+  // Helper function to format total duration in hours
+  const formatTotalDuration = (minutes) => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}min`;
+    }
+    return `${mins}min`;
+  };
+
+  // Funktion zum Kopieren der Mitarbeiter von Beladung zu Entladung
+  const copyLoadingToUnloading = () => {
+    setSelectedEmployees(prev => {
+      const updated = { ...prev };
+      let hasChanges = false;
+      
+      Object.keys(updated).forEach(typeId => {
+        const phases = updated[typeId];
+        if (typeof phases === 'object' && phases !== null) {
+          const loadingCount = phases.loading || 0;
+          if (phases.unloading !== loadingCount) {
+            updated[typeId] = {
+              ...phases,
+              unloading: loadingCount
+            };
+            hasChanges = true;
+          }
+        }
+      });
+      
+      if (hasChanges) {
+        console.log('✅ Mitarbeiter von Beladung zu Entladung kopiert');
+      }
+      
+      return hasChanges ? updated : prev;
     });
   };
 
@@ -1264,12 +1371,13 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
-                            value={editableTimes.loading}
+                            step="0.25"
+                            value={minutesToHours(editableTimes.loading)}
                             onChange={(e) => handleTimeChange('loading', e.target.value)}
                             className="w-24 p-2 border border-gray-300 rounded text-right font-semibold"
                             min="0"
                           />
-                          <span className="text-gray-500">Minuten</span>
+                          <span className="text-gray-500">Stunden</span>
                         </div>
                       </div>
                       
@@ -1328,12 +1436,13 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
-                              value={editableTimes.travel}
+                            step="0.25"
+                              value={minutesToHours(editableTimes.travel)}
                               onChange={(e) => handleTimeChange('travel', e.target.value)}
                               className="w-24 p-2 border border-gray-300 rounded text-right font-semibold"
                             min="0"
                           />
-                            <span className="text-gray-500">Minuten</span>
+                            <span className="text-gray-500">Stunden</span>
                         </div>
                       </div>
                       
@@ -1392,18 +1501,28 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
-                            value={editableTimes.unloading}
+                            step="0.25"
+                            value={minutesToHours(editableTimes.unloading)}
                             onChange={(e) => handleTimeChange('unloading', e.target.value)}
                             className="w-24 p-2 border border-gray-300 rounded text-right font-semibold"
                             min="0"
                           />
-                          <span className="text-gray-500">Minuten</span>
+                          <span className="text-gray-500">Stunden</span>
                         </div>
                       </div>
                       
                       {/* Mitarbeiter für Entladung */}
                       <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">Personal für Entladung:</h4>
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="text-sm font-medium text-gray-700">Personal für Entladung:</h4>
+                          <button
+                            onClick={copyLoadingToUnloading}
+                            className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded transition-colors"
+                            title="Mitarbeiter von Beladung kopieren"
+                          >
+                            Von Beladung kopieren
+                          </button>
+                        </div>
                         <div className="space-y-2">
                           {employeeTypes.map(type => {
                             const stringId = String(type.id);
@@ -1455,20 +1574,27 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                           <div className="flex items-center gap-2">
                             <input
                               type="number"
-                            value={editableTimes.setupDismantle}
+                            step="0.25"
+                            value={minutesToHours(editableTimes.setupDismantle)}
                             onChange={(e) => handleTimeChange('setupDismantle', e.target.value)}
                             className="w-24 p-2 border border-gray-300 rounded text-right font-semibold"
                               min="0"
                             />
-                          <span className="text-gray-500">Minuten</span>
+                          <span className="text-gray-500">Stunden</span>
                           </div>
                         </div>
                       
-                      {/* Mitarbeiter für Montagepreis */}
+                      {/* Mitarbeiter für Montagepreis - nur Monteure */}
                       <div>
                         <h4 className="text-sm font-medium text-gray-700 mb-3">Personal für Montagepreis:</h4>
                         <div className="space-y-2">
-                          {employeeTypes.map(type => {
+                          {employeeTypes
+                            .filter(type => {
+                              // Nur Mitarbeitertypen anzeigen, die "Monteur" im Namen haben
+                              const lowerName = type.name.toLowerCase();
+                              return lowerName.includes('monteur');
+                            })
+                            .map(type => {
                             const stringId = String(type.id);
                             const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0, setupDismantle: 0 };
                             const count = phases.setupDismantle || 0;
@@ -1512,7 +1638,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                   <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
                     <div className="flex justify-between items-center bg-primary bg-opacity-10 rounded-lg p-4">
                       <span className="font-bold text-gray-900 text-lg">Gesamtzeit</span>
-                      <span className="font-bold text-2xl text-primary">{totalDuration} Minuten</span>
+                      <span className="font-bold text-2xl text-primary">{formatTotalDuration(totalDuration)}</span>
                     </div>
                   </div>
                 </div>
@@ -1701,25 +1827,25 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                           <div className="ml-4 space-y-1 text-xs text-gray-600">
                             {typeData.loadingCount > 0 && typeData.loadingDuration > 0 && (
                               <div className="flex justify-between">
-                                <span>Beladung ({typeData.loadingCount} Pers., {typeData.loadingDuration} Min.):</span>
+                                <span>Beladung ({typeData.loadingCount} Pers., {minutesToHours(typeData.loadingDuration)}h):</span>
                                 <span>{typeData.loadingCost.toFixed(2)}€</span>
                               </div>
                             )}
                             {typeData.travelCount > 0 && typeData.travelDuration > 0 && (
                               <div className="flex justify-between">
-                                <span>Fahrt ({typeData.travelCount} Pers., {typeData.travelDuration} Min.):</span>
+                                <span>Fahrt ({typeData.travelCount} Pers., {minutesToHours(typeData.travelDuration)}h):</span>
                                 <span>{typeData.travelCost.toFixed(2)}€</span>
                               </div>
                             )}
                             {typeData.unloadingCount > 0 && typeData.unloadingDuration > 0 && (
                               <div className="flex justify-between">
-                                <span>Entladung ({typeData.unloadingCount} Pers., {typeData.unloadingDuration} Min.):</span>
+                                <span>Entladung ({typeData.unloadingCount} Pers., {minutesToHours(typeData.unloadingDuration)}h):</span>
                                 <span>{typeData.unloadingCost.toFixed(2)}€</span>
                               </div>
                             )}
                             {typeData.setupDismantleCount > 0 && typeData.setupDismantleDuration > 0 && (
                               <div className="flex justify-between text-blue-600 font-semibold">
-                                <span>Montagepreis ({typeData.setupDismantleCount} Pers., {typeData.setupDismantleDuration} Min.) - Kontingentpreis:</span>
+                                <span>Montagepreis ({typeData.setupDismantleCount} Pers., {minutesToHours(typeData.setupDismantleDuration)}h) - Kontingentpreis:</span>
                                 <span>{typeData.setupDismantleCost.toFixed(2)}€</span>
                               </div>
                             )}

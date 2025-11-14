@@ -138,7 +138,7 @@ const PipedriveDeal = ({ deal, index, isDraggable, onRemove }) => {
 };
 
 // Sortierbarer Routenpunkt Komponente
-const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationChange, calculatedTime, tourDeals, manualOperationType, onOperationTypeChange, dealPairInfo }) => {
+const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationChange, calculatedTime, tourDeals, manualOperationType, onOperationTypeChange, dealPairInfo, onRemove }) => {
   const ref = React.useRef(null);
   
   const [{ isDragging: isDraggingItem }, drag] = useDrag(() => ({
@@ -337,9 +337,23 @@ const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationCha
             )}
           </div>
         </div>
-        <div className="text-right text-xs whitespace-nowrap ml-2">
-          <div>{leg.distance?.text ?? '-'}</div>
-          <div className="text-gray-500">{leg.duration?.text ?? '-'}</div>
+        <div className="flex items-center gap-2 ml-2">
+          <div className="text-right text-xs whitespace-nowrap">
+            <div>{leg.distance?.text ?? '-'}</div>
+            <div className="text-gray-500">{leg.duration?.text ?? '-'}</div>
+          </div>
+          {onRemove && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(leg, index);
+              }}
+              className="p-2 text-red-600 bg-white rounded-lg hover:bg-red-50 flex-shrink-0 transition-colors border-2 border-red-300 hover:border-red-500 shadow-sm hover:shadow-md"
+              title="Station entfernen"
+            >
+              <X size={18} className="font-bold" />
+            </button>
+          )}
         </div>
       </div>
       
@@ -393,7 +407,7 @@ const SortableRoutePoint = ({ leg, index, onMove, stationDuration, onDurationCha
 };
 
 // Sortierbare Routenliste Komponente
-const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRoute, onRouteReorder, stationDurations, onDurationChange, calculatedTimes, totalDuration, tourDeals, manualOperationTypes, onOperationTypeChange, dealPairInfos }) => {
+const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRoute, onRouteReorder, stationDurations, onDurationChange, calculatedTimes, totalDuration, tourDeals, manualOperationTypes, onOperationTypeChange, dealPairInfos, onRemoveStation }) => {
   return (
     <div className="bg-white p-4 rounded-xl shadow-sm">
       <h3 className="text-lg font-semibold mb-3 flex items-center">
@@ -448,6 +462,7 @@ const SortableRouteList = ({ optimizedRoute, filteredLegsForDisplay, loadingRout
                 manualOperationType={manualOperationTypes[index]}
                 onOperationTypeChange={onOperationTypeChange}
                 dealPairInfo={dealPairInfos[index]}
+                onRemove={onRemoveStation}
               />
             ))}
           </div>
@@ -1228,6 +1243,226 @@ const TourPlannerContent = () => {
       };
     });
   }, [optimizedRoute, SCHLAILE_FIXED_ADDRESS, OFFICE_ADDRESS]);
+
+  // Station aus der Route entfernen
+  const handleRemoveStation = useCallback((legToRemove, filteredIndex) => {
+    if (!optimizedRoute?.legs || !legToRemove) {
+      return;
+    }
+
+    setOptimizedRoute(prev => {
+      if (!prev?.legs) return prev;
+
+      // Finde den Index des Legs in der originalen Route über die Adresse
+      const legIndexInRoute = prev.legs.findIndex(leg => 
+        leg.end_address === legToRemove.end_address && 
+        leg.start_address === legToRemove.start_address
+      );
+      
+      // Falls nicht gefunden, versuche es nur mit end_address
+      const fallbackIndex = legIndexInRoute === -1 
+        ? prev.legs.findIndex(leg => leg.end_address === legToRemove.end_address)
+        : legIndexInRoute;
+      
+      if (fallbackIndex === -1) {
+        console.warn('Konnte Station nicht in Route finden:', legToRemove.end_address);
+        return prev;
+      }
+
+      const actualLegToRemove = prev.legs[fallbackIndex];
+      if (!actualLegToRemove) return prev;
+
+      // Erstelle neue Legs ohne den entfernten Leg
+      const newLegs = prev.legs.filter((_, index) => index !== fallbackIndex);
+
+      // Aktualisiere custom_waypoint_order (entferne die entsprechende Adresse)
+      const removedEndAddress = prev.legs[fallbackIndex].end_address;
+      const newWaypointOrder = prev.custom_waypoint_order 
+        ? prev.custom_waypoint_order.filter((addr, index) => {
+            // Behalte Start- und Endadresse (Office)
+            if (index === 0 || index === prev.custom_waypoint_order.length - 1) {
+              return true;
+            }
+            // Entferne die Adresse, die der entfernten Station entspricht
+            return addr !== removedEndAddress;
+          })
+        : null;
+
+      // Berechne die Klavieranzahl für die aktualisierte Route neu
+      let currentLoadedPianos = 0;
+      
+      const isSchlaileAddr = (addr) => addr?.includes(SCHLAILE_FIXED_ADDRESS.split(',')[0]);
+      const isOfficeAddr = (addr) => addr?.includes(OFFICE_ADDRESS.split(',')[0]);
+      
+      newLegs.forEach((leg, index) => {
+        leg.loadedPianosBefore = currentLoadedPianos;
+        
+        const startAddr = leg.start_address;
+        const endAddr = leg.end_address;
+        
+        let changeCount = 0;
+        
+        // Schlaile - kann mehrere Klaviere auf einmal haben
+        if (isSchlaileAddr(endAddr)) {
+          if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+            const deliveryDeals = leg.consolidatedDeals.filter(d => d.type === 'delivery_from_schlaile');
+            const pickupDeals = leg.consolidatedDeals.filter(d => d.type === 'pickup_to_schlaile');
+            
+            if (deliveryDeals.length > 0) {
+              changeCount = deliveryDeals.length;
+              currentLoadedPianos += changeCount;
+              leg.pianoChange = `+${changeCount}`;
+              leg.operationType = 'beladung';
+            } else if (pickupDeals.length > 0) {
+              changeCount = pickupDeals.length;
+              currentLoadedPianos -= changeCount;
+              leg.pianoChange = `-${changeCount}`;
+              leg.operationType = 'entladung';
+            }
+          } else {
+            if (currentLoadedPianos > 0 || leg.operationType === 'entladung') {
+              changeCount = 1;
+              currentLoadedPianos -= changeCount;
+              leg.pianoChange = `-${changeCount}`;
+              leg.operationType = 'entladung';
+            } else if (leg.operationType === 'beladung') {
+              changeCount = 1;
+              currentLoadedPianos += changeCount;
+              leg.pianoChange = `+${changeCount}`;
+              leg.operationType = 'beladung';
+            }
+          }
+          leg.loadedPianosAfter = currentLoadedPianos;
+          return;
+        }
+        
+        // Von Schlaile weg = Entladung - aber nicht zum Office
+        if (isSchlaileAddr(startAddr) && !isSchlaileAddr(endAddr) && !isOfficeAddr(endAddr)) {
+          changeCount = leg.consolidatedDeals ? leg.consolidatedDeals.length : 1;
+          currentLoadedPianos -= changeCount;
+          leg.pianoChange = `-${changeCount}`;
+          leg.operationType = 'entladung';
+          leg.loadedPianosAfter = currentLoadedPianos;
+          return;
+        }
+        
+        // Zum/Vom Office = Keine Be-/Entladung
+        if (isOfficeAddr(startAddr) || isOfficeAddr(endAddr)) {
+          leg.pianoChange = '0';
+          leg.loadedPianosAfter = currentLoadedPianos;
+          return;
+        }
+        
+        // Normale Adressen - Origin = Beladung, Destination = Entladung
+        if (leg.consolidatedDeals && leg.consolidatedDeals.length > 0) {
+          const loadingDeals = leg.consolidatedDeals.filter(d => 
+            d.type === 'normal_origin' || d.type === 'pickup_to_schlaile'
+          );
+          const unloadingDeals = leg.consolidatedDeals.filter(d => 
+            d.type === 'normal_dest' || d.type === 'delivery_from_schlaile'
+          );
+          
+          if (loadingDeals.length > 0) {
+            changeCount = loadingDeals.length;
+            currentLoadedPianos += changeCount;
+            leg.pianoChange = `+${changeCount}`;
+            leg.operationType = 'beladung';
+          } else if (unloadingDeals.length > 0) {
+            changeCount = unloadingDeals.length;
+            currentLoadedPianos -= changeCount;
+            leg.pianoChange = `-${changeCount}`;
+            leg.operationType = 'entladung';
+          }
+        } else {
+          changeCount = 1;
+          if (leg.operationType === 'beladung') {
+            currentLoadedPianos += changeCount;
+            leg.pianoChange = `+${changeCount}`;
+          } else if (leg.operationType === 'entladung') {
+            currentLoadedPianos -= changeCount;
+            leg.pianoChange = `-${changeCount}`;
+          } else {
+            leg.pianoChange = '0';
+          }
+        }
+        
+        leg.loadedPianosAfter = currentLoadedPianos;
+      });
+
+      // Erstelle neue Route mit aktualisierten Legs
+      const updatedRoute = {
+        ...prev,
+        legs: newLegs,
+        custom_waypoint_order: newWaypointOrder
+      };
+
+      // Aktualisiere die Karte
+      if (directionsRenderer && newLegs.length > 0) {
+        // Erstelle eine neue Route-Anfrage für die aktualisierte Sequenz
+        const waypoints = newWaypointOrder 
+          ? newWaypointOrder.slice(1, -1).map(addr => ({ location: addr, stopover: true }))
+          : [];
+        
+        const routeRequest = {
+          origin: newWaypointOrder ? newWaypointOrder[0] : OFFICE_ADDRESS,
+          destination: newWaypointOrder ? newWaypointOrder[newWaypointOrder.length - 1] : OFFICE_ADDRESS,
+          waypoints: waypoints,
+          optimizeWaypoints: false,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        };
+
+        // Berechne die Route neu
+        if (directionsService) {
+          directionsService.route(routeRequest).then(response => {
+            if (response && response.routes && response.routes.length > 0) {
+              const newRoute = response.routes[0];
+              newRoute.custom_waypoint_order = newWaypointOrder;
+              newRoute.legs = newLegs; // Verwende die bereits aktualisierten Legs
+              
+              directionsRenderer.setDirections({
+                routes: [newRoute],
+                request: routeRequest
+              });
+            }
+          }).catch(error => {
+            console.error('Fehler beim Neuberechnen der Route:', error);
+          });
+        }
+      }
+
+      return updatedRoute;
+    });
+
+    // Entferne auch die zugehörigen stationDurations und manualOperationTypes
+    setStationDurations(prev => {
+      const newDurations = { ...prev };
+      // Verschiebe alle Indizes nach dem entfernten Index nach oben
+      Object.keys(newDurations).forEach(key => {
+        const keyIndex = parseInt(key);
+        if (keyIndex > filteredIndex) {
+          newDurations[keyIndex - 1] = newDurations[keyIndex];
+          delete newDurations[keyIndex];
+        } else if (keyIndex === filteredIndex) {
+          delete newDurations[keyIndex];
+        }
+      });
+      return newDurations;
+    });
+
+    setManualOperationTypes(prev => {
+      const newTypes = { ...prev };
+      Object.keys(newTypes).forEach(key => {
+        const keyIndex = parseInt(key);
+        if (keyIndex > filteredIndex) {
+          newTypes[keyIndex - 1] = newTypes[keyIndex];
+          delete newTypes[keyIndex];
+        } else if (keyIndex === filteredIndex) {
+          delete newTypes[keyIndex];
+        }
+      });
+      return newTypes;
+    });
+  }, [optimizedRoute, directionsRenderer, directionsService, SCHLAILE_FIXED_ADDRESS, OFFICE_ADDRESS]);
 
   // Hilfsfunktion zum Aktualisieren der tourDeals Reihenfolge
   const updateTourDealsOrder = useCallback((newSequence) => {
@@ -3482,6 +3717,7 @@ const TourPlannerContent = () => {
              manualOperationTypes={manualOperationTypes}
              onOperationTypeChange={handleOperationTypeChange}
              dealPairInfos={dealPairInfos}
+             onRemoveStation={handleRemoveStation}
            />
         </div>
       </div>

@@ -22,7 +22,8 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   const [selectedEmployees, setSelectedEmployees] = useState({}); // Struktur: {typeId: {loading: count, travel: count, unloading: count}}
   const [laborCosts, setLaborCosts] = useState({
     byType: {},
-    total: 0
+    total: 0,
+    setupDismantleTotal: 0
   });
   const [loadingTime, setLoadingTime] = useState(0);
   const [loadingTimePerUnit, setLoadingTimePerUnit] = useState(0);
@@ -80,12 +81,12 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     '3.5T': 0,
   });
 
-  // Add new state variables for editable times
+  // Add new state variables for editable times - jetzt nach Phasen strukturiert
   const [editableTimes, setEditableTimes] = useState({
-    setup: 0,
-    dismantle: 0,
-    loading: 0,
-    travel: 0
+    loading: 0,         // Beladung (immer 0)
+    travel: 0,          // Fahrt
+    unloading: 0,       // Entladung (immer 0)
+    setupDismantle: 0   // Montagepreis (separat als Kontingentpreis)
   });
 
   // Berechnung und Laden der Preisdaten beim Laden der Komponente
@@ -192,7 +193,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       console.log("📤 Setze employeeTypes:", hourlyRates);
       setEmployeeTypes(hourlyRates);
       
-      // Initialisiere selectedEmployees mit Standardwerten für alle drei Phasen
+      // Initialisiere selectedEmployees mit Standardwerten für alle vier Phasen
       const initialSelection = {};
       hourlyRates.forEach(type => {
         // Stelle sicher, dass die ID als String verwendet wird (für Konsistenz)
@@ -200,7 +201,8 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
         initialSelection[stringId] = {
           loading: 0,
           travel: 0,
-          unloading: 0
+          unloading: 0,
+          setupDismantle: 0
         };
         console.log(`🔧 Initialisiere Mitarbeitertyp: ${type.name} (ID: ${type.id} -> ${stringId})`);
       });
@@ -219,10 +221,10 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
       // Debug: Zeige initiale Mitarbeiterauswahl
       console.log("🎯 Initiale Mitarbeiterauswahl:", initialSelection);
       Object.entries(initialSelection).forEach(([typeId, phases]) => {
-        const total = phases.loading + phases.travel + phases.unloading;
+        const total = phases.loading + phases.travel + phases.unloading + phases.setupDismantle;
         if (total > 0) {
           const employeeType = hourlyRates.find(type => String(type.id) === typeId);
-          console.log(`   - ${employeeType?.name || 'UNBEKANNT'}: Beladung=${phases.loading}, Fahrt=${phases.travel}, Entladung=${phases.unloading} (Gesamt: ${total})`);
+          console.log(`   - ${employeeType?.name || 'UNBEKANNT'}: Beladung=${phases.loading}, Fahrt=${phases.travel}, Entladung=${phases.unloading}, Montagepreis=${phases.setupDismantle} (Gesamt: ${total})`);
         }
       });
     } catch (error) {
@@ -388,7 +390,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   const getTotalEmployees = () => {
     return Object.values(selectedEmployees).reduce((sum, phases) => {
       if (typeof phases === 'object' && phases !== null) {
-        return sum + (phases.loading || 0) + (phases.travel || 0) + (phases.unloading || 0);
+        return sum + (phases.loading || 0) + (phases.travel || 0) + (phases.unloading || 0) + (phases.setupDismantle || 0);
       }
       // Fallback für alte Struktur (sollte nicht vorkommen, aber für Sicherheit)
       return sum + (typeof phases === 'number' ? phases : 0);
@@ -422,31 +424,32 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     
     // Zeitaufwand pro Phase in Minuten - IMMER aus der Zeitaufwand-Komponente (editableTimes)
     // Diese Werte werden direkt aus der UI übernommen und sind die Quelle der Wahrheit
-    const loadingDuration = editableTimes.loading || 0; // Ladezeit (Beladung)
+    const loadingDuration = editableTimes.loading || 0; // Beladung
     const travelDuration = editableTimes.travel || 0; // Fahrtzeit
-    // Entladung = Auf- & Abbauzeit am Entladeort (kombiniert)
-    const unloadingDuration = (editableTimes.setup || 0) + (editableTimes.dismantle || 0); // Auf- & Abbauzeit (Entladung)
+    const unloadingDuration = editableTimes.unloading || 0; // Entladung
+    const setupDismantleDuration = editableTimes.setupDismantle || 0; // Montagepreis (separat als Kontingentpreis)
     
     console.log("⏱️ Kostenberechnung mit Zeiten aus Zeitaufwand-Komponente:", {
       loadingDuration,
       travelDuration,
       unloadingDuration,
-      setup: editableTimes.setup,
-      dismantle: editableTimes.dismantle
+      setupDismantleDuration
     });
     
     // Kosten pro Mitarbeitertyp berechnen
     const byType = {};
     let total = 0;
+    let setupDismantleTotal = 0; // Separater Kontingentpreis für Montagepreis
     
     employeeTypes.forEach(type => {
       const stringId = String(type.id);
-      const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0 };
+      const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0, setupDismantle: 0 };
       
       const loadingCount = phases.loading || 0;
       const travelCount = phases.travel || 0;
       const unloadingCount = phases.unloading || 0;
-      const totalCount = loadingCount + travelCount + unloadingCount;
+      const setupDismantleCount = phases.setupDismantle || 0;
+      const totalCount = loadingCount + travelCount + unloadingCount + setupDismantleCount;
       
       if (totalCount === 0) return;
       
@@ -463,15 +466,24 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
         ? (unloadingCount * type.price * (unloadingDuration / 60))
         : 0;
       
-      const typeCost = loadingCost + travelCost + unloadingCost;
+      // Montagepreis separat als Kontingentpreis berechnen
+      const setupDismantleCost = setupDismantleCount > 0 && setupDismantleDuration > 0
+        ? (setupDismantleCount * type.price * (setupDismantleDuration / 60))
+        : 0;
       
-      // Berechne durchschnittliche Stunden pro Person (für Anzeige)
+      // Normale Kosten (ohne Montagepreis)
+      const typeCost = loadingCost + travelCost + unloadingCost;
+      // Separater Kontingentpreis für Montagepreis
+      setupDismantleTotal += setupDismantleCost;
+      
+      // Berechne durchschnittliche Stunden pro Person (für Anzeige, ohne Montagepreis)
       let avgHours = 0;
-      if (totalCount > 0) {
+      const workCount = loadingCount + travelCount + unloadingCount;
+      if (workCount > 0) {
         const totalMinutes = (loadingCount * loadingDuration) + 
                             (travelCount * travelDuration) + 
                             (unloadingCount * unloadingDuration);
-        avgHours = totalMinutes / (60 * totalCount);
+        avgHours = totalMinutes / (60 * workCount);
       }
       
       byType[type.id] = {
@@ -479,22 +491,25 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
         loadingCount,
         travelCount,
         unloadingCount,
+        setupDismantleCount,
         hourlyRate: type.price,
         hours: avgHours,
         cost: typeCost,
         loadingCost,
         travelCost,
         unloadingCost,
+        setupDismantleCost, // Separater Kontingentpreis
         // Speichere auch die verwendeten Zeiten für Debugging
         loadingDuration,
         travelDuration,
-        unloadingDuration
+        unloadingDuration,
+        setupDismantleDuration
       };
       
       total += typeCost;
     });
     
-    setLaborCosts({ byType, total });
+    setLaborCosts({ byType, total, setupDismantleTotal });
   };
 
   useEffect(() => {
@@ -691,10 +706,10 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
     // Die gesamte Fahrzeit (bereits mit Hin- und Rückweg berechnet)
     const totalTravelMinutes = minutes;
     
-    // Aktualisiere die Gesamtdauer: Auf- und Abbauzeit + Ladezeit + Fahrzeit
-    const newTotalDuration = packingTime + unpackingTime + loadingTime + totalTravelMinutes;
+    // Aktualisiere die Gesamtdauer: Beladung (0) + Fahrt + Entladung (0) + Montagepreis
+    const newTotalDuration = editableTimes.loading + editableTimes.unloading + editableTimes.setupDismantle + totalTravelMinutes;
     
-    console.log(`Aktualisiere Gesamtdauer: Aufbau (${packingTime}) + Abbau (${unpackingTime}) + Laden (${loadingTime}) + Fahrt (${totalTravelMinutes}) = ${newTotalDuration} Minuten`);
+    console.log(`Aktualisiere Gesamtdauer: Beladung (${editableTimes.loading}) + Entladung (${editableTimes.unloading}) + Montagepreis (${editableTimes.setupDismantle}) + Fahrt (${totalTravelMinutes}) = ${newTotalDuration} Minuten`);
     
     setTotalDuration(newTotalDuration);
     
@@ -1005,28 +1020,28 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
   // Update useEffect to initialize editable times when calculated times change
   useEffect(() => {
     setEditableTimes({
-      setup: packingTime,
-      dismantle: unpackingTime,
       loading: loadingTime,
-      travel: travelTimeMinutes
+      travel: travelTimeMinutes,
+      unloading: 0,
+      setupDismantle: packingTime + unpackingTime
     });
-  }, [packingTime, unpackingTime, loadingTime, travelTimeMinutes]);
+  }, [loadingTime, packingTime, unpackingTime, travelTimeMinutes]);
 
   // Add handler for time changes
   const handleTimeChange = (type, value) => {
     const newValue = Math.max(0, parseInt(value) || 0);
-    setEditableTimes(prev => ({
+    setEditableTimes(prev => {
+      const updated = {
       ...prev,
       [type]: newValue
-    }));
-
-    // Update total duration when any time changes
-    const newTotal = Object.values({
-      ...editableTimes,
-      [type]: newValue
-    }).reduce((sum, time) => sum + time, 0);
-
+      };
+      
+      // Update total duration when any time changes (inkl. Auf-/Abbau)
+      const newTotal = updated.loading + updated.travel + updated.unloading + updated.setupDismantle;
     setTotalDuration(newTotal);
+      
+      return updated;
+    });
   };
 
   return (
@@ -1234,76 +1249,270 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                   </div>
                 </div>
                 
-                {/* 3. Zeitaufwand */}
+                {/* 3. Phasen: Beladung, Fahrt, Entladung mit Zeit und Personal */}
+                <div className="space-y-6">
+                  {/* Phase 1: Beladung */}
                 <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                    <Clock className="h-5 w-5 text-primary mr-3" />
-                    Zeitaufwand
+                      <Package className="h-5 w-5 text-primary mr-3" />
+                      Phase 1: Beladung
                   </h3>
-                  <div className="bg-gray-50 p-5 rounded-lg">
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                        <span className="text-gray-700">Aufbauzeit</span>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            value={editableTimes.setup}
-                            onChange={(e) => handleTimeChange('setup', e.target.value)}
-                            className="w-20 p-1 border border-gray-300 rounded text-right"
-                            min="0"
-                          />
-                          <span className="text-gray-500">Min.</span>
-                        </div>
-                      </div>
-                      
-                      <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                        <span className="text-gray-700">Abbauzeit</span>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            value={editableTimes.dismantle}
-                            onChange={(e) => handleTimeChange('dismantle', e.target.value)}
-                            className="w-20 p-1 border border-gray-300 rounded text-right"
-                            min="0"
-                          />
-                          <span className="text-gray-500">Min.</span>
-                        </div>
-                      </div>
-                      
-                      <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                        <span className="text-gray-700">Ladezeit</span>
+                    <div className="bg-gray-50 p-5 rounded-lg space-y-4">
+                      {/* Zeit für Beladung */}
+                      <div className="flex justify-between items-center py-3 border-b border-gray-200 bg-white p-3 rounded">
+                        <span className="text-gray-700 font-medium">Zeitaufwand:</span>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
                             value={editableTimes.loading}
                             onChange={(e) => handleTimeChange('loading', e.target.value)}
-                            className="w-20 p-1 border border-gray-300 rounded text-right"
+                            className="w-24 p-2 border border-gray-300 rounded text-right font-semibold"
                             min="0"
                           />
-                          <span className="text-gray-500">Min.</span>
+                          <span className="text-gray-500">Minuten</span>
                         </div>
                       </div>
                       
-                      {routeDetails && (
-                        <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                          <span className="text-gray-700">Fahrtzeit (Hin & Rück)</span>
+                      {/* Mitarbeiter für Beladung */}
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">Personal für Beladung:</h4>
+                        <div className="space-y-2">
+                          {employeeTypes.map(type => {
+                            const stringId = String(type.id);
+                            const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0 };
+                            const count = phases.loading || 0;
+                            
+                            return (
+                              <div key={type.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
+                                <div className="flex-1">
+                                  <span className="text-sm text-gray-700">{type.name}</span>
+                                  <span className="text-xs text-gray-500 ml-2">({type.price.toFixed(2)}€/h)</span>
+                                </div>
+                                <div className="flex items-center">
+                                  <button
+                                    onClick={() => handleEmployeeChange(type.id, 'loading', -1)}
+                                    className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                  >
+                                    <Minus size={14} />
+                                  </button>
+                                  <span className="mx-3 w-8 text-center font-semibold text-sm">{count}</span>
+                                  <button
+                                    onClick={() => handleEmployeeChange(type.id, 'loading', 1)}
+                                    className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-gray-300 text-sm text-gray-600">
+                          Gesamt: <span className="font-semibold text-primary">{getEmployeesForPhase('loading')} Personen</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Phase 2: Fahrt */}
+                  {routeDetails && (
+                    <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <Truck className="h-5 w-5 text-primary mr-3" />
+                        Phase 2: Fahrt
+                      </h3>
+                      <div className="bg-gray-50 p-5 rounded-lg space-y-4">
+                        {/* Zeit für Fahrt */}
+                        <div className="flex justify-between items-center py-3 border-b border-gray-200 bg-white p-3 rounded">
+                          <span className="text-gray-700 font-medium">Zeitaufwand:</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                              value={editableTimes.travel}
+                              onChange={(e) => handleTimeChange('travel', e.target.value)}
+                              className="w-24 p-2 border border-gray-300 rounded text-right font-semibold"
+                            min="0"
+                          />
+                            <span className="text-gray-500">Minuten</span>
+                        </div>
+                      </div>
+                      
+                        {/* Mitarbeiter für Fahrt */}
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-3">Personal für Fahrt:</h4>
+                          <div className="space-y-2">
+                            {employeeTypes.map(type => {
+                              const stringId = String(type.id);
+                              const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0 };
+                              const count = phases.travel || 0;
+                              
+                              return (
+                                <div key={type.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
+                                  <div className="flex-1">
+                                    <span className="text-sm text-gray-700">{type.name}</span>
+                                    <span className="text-xs text-gray-500 ml-2">({type.price.toFixed(2)}€/h)</span>
+                                  </div>
+                                  <div className="flex items-center">
+                                    <button
+                                      onClick={() => handleEmployeeChange(type.id, 'travel', -1)}
+                                      className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                    >
+                                      <Minus size={14} />
+                                    </button>
+                                    <span className="mx-3 w-8 text-center font-semibold text-sm">{count}</span>
+                                    <button
+                                      onClick={() => handleEmployeeChange(type.id, 'travel', 1)}
+                                      className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                    >
+                                      <Plus size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="mt-3 pt-3 border-t border-gray-300 text-sm text-gray-600">
+                            Gesamt: <span className="font-semibold text-primary">{getEmployeesForPhase('travel')} Personen</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Phase 3: Entladung */}
+                  <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                      <Package className="h-5 w-5 text-primary mr-3" />
+                      Phase 3: Entladung
+                    </h3>
+                    <div className="bg-gray-50 p-5 rounded-lg space-y-4">
+                      {/* Zeit für Entladung */}
+                      <div className="flex justify-between items-center py-3 border-b border-gray-200 bg-white p-3 rounded">
+                        <span className="text-gray-700 font-medium">Zeitaufwand:</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={editableTimes.unloading}
+                            onChange={(e) => handleTimeChange('unloading', e.target.value)}
+                            className="w-24 p-2 border border-gray-300 rounded text-right font-semibold"
+                            min="0"
+                          />
+                          <span className="text-gray-500">Minuten</span>
+                        </div>
+                      </div>
+                      
+                      {/* Mitarbeiter für Entladung */}
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">Personal für Entladung:</h4>
+                        <div className="space-y-2">
+                          {employeeTypes.map(type => {
+                            const stringId = String(type.id);
+                            const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0 };
+                            const count = phases.unloading || 0;
+                            
+                            return (
+                              <div key={type.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
+                                <div className="flex-1">
+                                  <span className="text-sm text-gray-700">{type.name}</span>
+                                  <span className="text-xs text-gray-500 ml-2">({type.price.toFixed(2)}€/h)</span>
+                                </div>
+                                <div className="flex items-center">
+                                  <button
+                                    onClick={() => handleEmployeeChange(type.id, 'unloading', -1)}
+                                    className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                  >
+                                    <Minus size={14} />
+                                  </button>
+                                  <span className="mx-3 w-8 text-center font-semibold text-sm">{count}</span>
+                                  <button
+                                    onClick={() => handleEmployeeChange(type.id, 'unloading', 1)}
+                                    className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-gray-300 text-sm text-gray-600">
+                          Gesamt: <span className="font-semibold text-primary">{getEmployeesForPhase('unloading')} Personen</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Phase 4: Montagepreis */}
+                  <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                      <Package className="h-5 w-5 text-primary mr-3" />
+                      Phase 4: Montagepreis
+                    </h3>
+                    <div className="bg-gray-50 p-5 rounded-lg space-y-4">
+                      {/* Zeit für Montagepreis */}
+                      <div className="flex justify-between items-center py-3 border-b border-gray-200 bg-white p-3 rounded">
+                        <span className="text-gray-700 font-medium">Zeitaufwand:</span>
                           <div className="flex items-center gap-2">
                             <input
                               type="number"
-                              value={editableTimes.travel}
-                              onChange={(e) => handleTimeChange('travel', e.target.value)}
-                              className="w-20 p-1 border border-gray-300 rounded text-right"
+                            value={editableTimes.setupDismantle}
+                            onChange={(e) => handleTimeChange('setupDismantle', e.target.value)}
+                            className="w-24 p-2 border border-gray-300 rounded text-right font-semibold"
                               min="0"
                             />
-                            <span className="text-gray-500">Min.</span>
+                          <span className="text-gray-500">Minuten</span>
                           </div>
                         </div>
-                      )}
                       
-                      <div className="flex justify-between items-center py-3 mt-1 bg-white rounded-lg p-3 shadow-sm">
-                        <span className="font-semibold text-gray-800">Gesamtzeit</span>
-                        <span className="font-bold text-lg text-primary">{totalDuration} Minuten</span>
+                      {/* Mitarbeiter für Montagepreis */}
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">Personal für Montagepreis:</h4>
+                        <div className="space-y-2">
+                          {employeeTypes.map(type => {
+                            const stringId = String(type.id);
+                            const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0, setupDismantle: 0 };
+                            const count = phases.setupDismantle || 0;
+                            
+                            return (
+                              <div key={type.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
+                                <div className="flex-1">
+                                  <span className="text-sm text-gray-700">{type.name}</span>
+                                  <span className="text-xs text-gray-500 ml-2">({type.price.toFixed(2)}€/h)</span>
                       </div>
+                                <div className="flex items-center">
+                                  <button
+                                    onClick={() => handleEmployeeChange(type.id, 'setupDismantle', -1)}
+                                    className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                  >
+                                    <Minus size={14} />
+                                  </button>
+                                  <span className="mx-3 w-8 text-center font-semibold text-sm">{count}</span>
+                                  <button
+                                    onClick={() => handleEmployeeChange(type.id, 'setupDismantle', 1)}
+                                    className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-gray-300 text-sm text-gray-600">
+                          Gesamt: <span className="font-semibold text-primary">{getEmployeesForPhase('setupDismantle')} Personen</span>
+                        </div>
+                        <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                          ⓘ Diese Phase wird separat als Montagepreis (Kontingentpreis) ausgewiesen.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gesamtzeit */}
+                  <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
+                    <div className="flex justify-between items-center bg-primary bg-opacity-10 rounded-lg p-4">
+                      <span className="font-bold text-gray-900 text-lg">Gesamtzeit</span>
+                      <span className="font-bold text-2xl text-primary">{totalDuration} Minuten</span>
                     </div>
                   </div>
                 </div>
@@ -1357,13 +1566,13 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                 </div>
               </div>
               
-              {/* Rechte Spalte: Personalkosten und Gesamtkosten */}
+              {/* Rechte Spalte: Fahrzeuge und Gesamtkosten */}
               <div className="space-y-8">
-                {/* 4. Personalaufwand */}
+                {/* 4. Fahrzeug-Informationen */}
                 <div className="bg-white shadow-sm hover:shadow-md transition-shadow duration-300 rounded-xl p-6 border border-gray-100">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                    <Users className="h-5 w-5 text-primary mr-3" />
-                    Personalaufwand
+                    <Truck className="h-5 w-5 text-primary mr-3" />
+                    Fahrzeug-Informationen
                   </h3>
 
                   {/* --- Display Selected Trucks for Pipedrive --- */}
@@ -1404,13 +1613,10 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                       </div>
                       <p className="text-xs text-blue-600 mt-3 italic">Basierend auf der Fahrzeugauswahl. Diese werden automatisch in Pipedrive eingetragen.</p>
                   </div>
-
-                  {/* --- Manual Employee Selection --- */}
-                  <h4 className="font-medium mb-4 text-gray-700">Zusätzliches Personal manuell hinzufügen:</h4>
                   
                   {/* Pipedrive-Keys Debug-Info */}
                   {employeeTypes.some(type => type.pipedrive_field) && (
-                    <div className="mb-4 bg-green-50 border border-green-200 p-3 rounded-lg">
+                    <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
                       <h5 className="font-medium text-green-800 mb-2">Pipedrive-Integration aktiv:</h5>
                       <div className="space-y-1 text-sm">
                         {employeeTypes
@@ -1424,110 +1630,21 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                       </div>
                     </div>
                   )}
-                  <div className="bg-gray-50 p-5 rounded-lg">
-                    {employeeTypes.map(type => {
-                      const stringId = String(type.id);
-                      const phases = selectedEmployees[stringId] || { loading: 0, travel: 0, unloading: 0 };
-                      
-                      return (
-                        <div key={type.id} className="py-4 border-b border-gray-200 last:border-0">
-                          <div className="mb-3">
-                            <span className="font-medium text-gray-800">{type.name}</span>
-                            <p className="text-sm text-gray-500">
-                              Stundensatz: {type.price.toFixed(2)}€/h
-                            </p>
-                            {type.pipedrive_field && (
-                              <p className="text-xs text-green-600 font-mono">
-                                Pipedrive: {type.pipedrive_field}
-                              </p>
-                            )}
-                          </div>
-                          
-                          {/* Drei separate Eingabefelder für die Phasen */}
-                          <div className="space-y-2 ml-4">
-                            {/* Beladung */}
-                            <div className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
-                              <span className="text-sm text-gray-700">Beladung:</span>
-                              <div className="flex items-center">
-                                <button
-                                  onClick={() => handleEmployeeChange(type.id, 'loading', -1)}
-                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-                                >
-                                  <Minus size={14} />
-                                </button>
-                                <span className="mx-3 w-8 text-center font-semibold text-sm">{phases.loading || 0}</span>
-                                <button
-                                  onClick={() => handleEmployeeChange(type.id, 'loading', 1)}
-                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-                                >
-                                  <Plus size={14} />
-                                </button>
-                              </div>
-                            </div>
-                            
-                            {/* Fahrt */}
-                            <div className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
-                              <span className="text-sm text-gray-700">Fahrt:</span>
-                              <div className="flex items-center">
-                                <button
-                                  onClick={() => handleEmployeeChange(type.id, 'travel', -1)}
-                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-                                >
-                                  <Minus size={14} />
-                                </button>
-                                <span className="mx-3 w-8 text-center font-semibold text-sm">{phases.travel || 0}</span>
-                                <button
-                                  onClick={() => handleEmployeeChange(type.id, 'travel', 1)}
-                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-                                >
-                                  <Plus size={14} />
-                                </button>
-                              </div>
-                            </div>
-                            
-                            {/* Entladung */}
-                            <div className="flex items-center justify-between bg-white p-2 rounded border border-gray-200">
-                              <span className="text-sm text-gray-700">Entladung:</span>
-                              <div className="flex items-center">
-                                <button
-                                  onClick={() => handleEmployeeChange(type.id, 'unloading', -1)}
-                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-                                >
-                                  <Minus size={14} />
-                                </button>
-                                <span className="mx-3 w-8 text-center font-semibold text-sm">{phases.unloading || 0}</span>
-                                <button
-                                  onClick={() => handleEmployeeChange(type.id, 'unloading', 1)}
-                                  className="p-1 rounded-md bg-gray-200 hover:bg-gray-300 transition-colors"
-                                >
-                                  <Plus size={14} />
-                                </button>
-                              </div>
-                            </div>
-                            
-                            {/* Gesamtsumme für diesen Typ */}
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-300">
-                              <span className="text-sm font-medium text-gray-800">Gesamt:</span>
-                              <span className="text-sm font-bold text-primary">
-                                {(phases.loading || 0) + (phases.travel || 0) + (phases.unloading || 0)} Personen
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
 
-                    <div className="flex justify-between items-center mt-5 pt-3 border-t border-gray-300 bg-white p-4 rounded-lg shadow-sm">
+                  {/* Gesamtteam-Übersicht */}
+                  <div className="mt-6 bg-gray-50 p-5 rounded-lg">
+                    <div className="flex justify-between items-center">
                       <div className="flex items-center text-gray-800">
                         <Users className="mr-2 h-5 w-5 text-primary" />
-                        <span className="font-semibold">Gesamtteam (manuell gewählt)</span>
+                        <span className="font-semibold">Gesamtteam</span>
                       </div>
                       <div className="text-right">
-                        <span className="font-bold text-primary">{getTotalEmployees()} Personen</span>
+                        <span className="font-bold text-primary text-lg">{getTotalEmployees()} Personen</span>
                         <div className="text-sm text-gray-600 mt-1">
                           <div>Beladung: {getEmployeesForPhase('loading')} Personen</div>
                           <div>Fahrt: {getEmployeesForPhase('travel')} Personen</div>
                           <div>Entladung: {getEmployeesForPhase('unloading')} Personen</div>
+                          <div>Montagepreis: {getEmployeesForPhase('setupDismantle')} Personen</div>
                         </div>
                       </div>
                     </div>
@@ -1549,26 +1666,32 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                         loadingCount: 0,
                         travelCount: 0,
                         unloadingCount: 0,
+                        setupDismantleCount: 0,
                         hourlyRate: 0, 
                         hours: 0, 
                         cost: 0,
                         loadingCost: 0,
                         travelCost: 0,
                         unloadingCost: 0,
+                        setupDismantleCost: 0,
                         loadingDuration: 0,
                         travelDuration: 0,
-                        unloadingDuration: 0
+                        unloadingDuration: 0,
+                        setupDismantleDuration: 0
                       };
-                      if (typeData.count === 0) return null;
+                      const hasAnyCost = typeData.cost > 0 || typeData.setupDismantleCost > 0;
+                      if (!hasAnyCost) return null;
                       
                       return (
                         <div key={`cost-${type.id}`} className="py-3 border-b border-gray-200 last:border-0">
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <span className="font-medium text-gray-800">{type.name}</span>
+                              {typeData.cost > 0 && (
                               <p className="text-sm text-gray-500">
-                                {typeData.count} × {typeData.hourlyRate.toFixed(2)}€/h × {typeData.hours.toFixed(1)}h
+                                  {typeData.count - (typeData.setupDismantleCount || 0)} × {typeData.hourlyRate.toFixed(2)}€/h × {typeData.hours.toFixed(1)}h
                               </p>
+                              )}
                             </div>
                             <div className="font-bold text-right text-gray-800">
                               {typeData.cost.toFixed(2)}€
@@ -1590,8 +1713,14 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                             )}
                             {typeData.unloadingCount > 0 && typeData.unloadingDuration > 0 && (
                               <div className="flex justify-between">
-                                <span>Entladung ({typeData.unloadingCount} Pers., {typeData.unloadingDuration} Min. = Auf- & Abbauzeit):</span>
+                                <span>Entladung ({typeData.unloadingCount} Pers., {typeData.unloadingDuration} Min.):</span>
                                 <span>{typeData.unloadingCost.toFixed(2)}€</span>
+                              </div>
+                            )}
+                            {typeData.setupDismantleCount > 0 && typeData.setupDismantleDuration > 0 && (
+                              <div className="flex justify-between text-blue-600 font-semibold">
+                                <span>Montagepreis ({typeData.setupDismantleCount} Pers., {typeData.setupDismantleDuration} Min.) - Kontingentpreis:</span>
+                                <span>{typeData.setupDismantleCost.toFixed(2)}€</span>
                               </div>
                             )}
                           </div>
@@ -1604,6 +1733,13 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
                       <span className="font-semibold">{laborCosts.total.toFixed(2)}€</span>
                     </div>
 
+                    {laborCosts.setupDismantleTotal > 0 && (
+                      <div className="flex justify-between items-center py-3 border-b border-gray-200 bg-blue-50 rounded-lg px-3">
+                        <span className="font-medium text-blue-800">Montagepreis (Kontingentpreis)</span>
+                        <span className="font-semibold text-blue-800">{laborCosts.setupDismantleTotal.toFixed(2)}€</span>
+                      </div>
+                    )}
+
                     {materialCosts > 0 && (
                       <div className="flex justify-between items-center py-3 border-b border-gray-200">
                         <span className="font-medium text-gray-700">Materialkosten</span>
@@ -1613,7 +1749,7 @@ const MovingCalculation = ({ roomsData, additionalInfo, onComplete }) => {
 
                     <div className="flex justify-between items-center py-4 mt-3 bg-primary bg-opacity-10 rounded-lg p-4">
                       <span className="font-bold text-gray-900">Gesamtpreis</span>
-                      <span className="text-xl font-bold text-primary">{(laborCosts.total + materialCosts).toFixed(2)}€</span>
+                      <span className="text-xl font-bold text-primary">{(laborCosts.total + (laborCosts.setupDismantleTotal || 0) + materialCosts).toFixed(2)}€</span>
                     </div>
                   </div>
                 </div>

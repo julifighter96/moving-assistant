@@ -2016,6 +2016,14 @@ const TourPlannerContent = () => {
       };
     });
 
+    // API Keys für Datum, Startzeit und Endzeit
+    const START_TIME_FIELD_KEY = "f1f4075cad46accd63b6b3e396deb452727078e2";
+    const DATE_FIELD_KEY = "c9993f8e353d54015c7a15e8b653cf88e594f5fb";
+    const END_TIME_FIELD_KEY = "32934b3ccd3a0d8c6d88c34a9782790ba0c8d7cf";
+
+    // Formatiere Datum für Pipedrive (YYYY-MM-DD)
+    const tourDateForPipedrive = format(selectedDate, 'yyyy-MM-dd');
+
     const updatePromises = tourDeals.map(async (deal, index) => {
       const projectId = deal.id;
       if (!projectId) {
@@ -2024,13 +2032,59 @@ const TourPlannerContent = () => {
         return;
       }
 
+      // Finde die Station, die zu diesem Deal gehört
+      let dealStartTime = null;
+      let dealEndTime = null;
+      
+      // Suche in den Stationen nach diesem Deal
+      for (const station of stationTimeInfo) {
+        const leg = legsWithUpdatedPianos[station.legIndex];
+        if (leg && leg.consolidatedDeals) {
+          // Prüfe ob dieser Deal in den consolidatedDeals dieser Station ist
+          const hasDeal = leg.consolidatedDeals.some(cd => cd.dealId === deal.id || cd.dealId === deal.dealId);
+          if (hasDeal) {
+            dealStartTime = station.startTime; // z.B. "08:30"
+            dealEndTime = station.endTime; // z.B. "10:45"
+            console.log(`📅 Deal "${deal.title}" gehört zu Station ${station.legIndex + 1}: ${dealStartTime} - ${dealEndTime}`);
+            break;
+          }
+        }
+        
+        // Alternative: Suche über Adressen (falls consolidatedDeals nicht verfügbar)
+        if (!dealStartTime && leg) {
+          const dealOriginMatch = deal.originAddress && leg.start_address?.includes(deal.originAddress.split(',')[0]);
+          const dealDestMatch = deal.destinationAddress && leg.end_address?.includes(deal.destinationAddress.split(',')[0]);
+          
+          if (dealOriginMatch || dealDestMatch) {
+            dealStartTime = station.startTime;
+            dealEndTime = station.endTime;
+            console.log(`📅 Deal "${deal.title}" gefunden über Adressvergleich: ${dealStartTime} - ${dealEndTime}`);
+            break;
+          }
+        }
+      }
+
       const updateData = {
         phase_id: TARGET_PHASE_ID,
         [PROJECT_TOUR_DATE_FIELD_KEY]: tourDateFormatted, // Korrigiertes Datumsformat
         [PROJECT_TOUR_ID_FIELD_KEY]: finalTourId, // Verwendet den eingegebenen Namen oder Fallback
-        // Füge Reihenfolge-Information hinzu (falls ein entsprechendes Feld existiert)
-        // tour_sequence: JSON.stringify(tourSequence), // Optional: Falls ein Feld für die Sequenz existiert
+        // Neue Felder für Datum, Startzeit und Endzeit
+        [DATE_FIELD_KEY]: tourDateForPipedrive,
       };
+
+      // Füge Startzeit hinzu, falls gefunden
+      if (dealStartTime) {
+        // Konvertiere Zeitformat zu HH:MM:SS falls nötig
+        const startTimeFormatted = dealStartTime.length === 5 ? `${dealStartTime}:00` : dealStartTime;
+        updateData[START_TIME_FIELD_KEY] = startTimeFormatted;
+      }
+
+      // Füge Endzeit hinzu, falls gefunden
+      if (dealEndTime) {
+        // Konvertiere Zeitformat zu HH:MM:SS falls nötig
+        const endTimeFormatted = dealEndTime.length === 5 ? `${dealEndTime}:00` : dealEndTime;
+        updateData[END_TIME_FIELD_KEY] = endTimeFormatted;
+      }
 
       try {
         const response = await axios.put(
@@ -2039,7 +2093,10 @@ const TourPlannerContent = () => {
         );
         if (response.data && response.data.success) {
           successCount++;
-          console.log(`Projekt ${projectId} (${deal.title}) erfolgreich aktualisiert - Position ${index + 1} in der Tour`);
+          const timeInfo = dealStartTime && dealEndTime 
+            ? ` - Zeiten: ${dealStartTime} bis ${dealEndTime}` 
+            : ' - Keine Zeiten gefunden';
+          console.log(`✅ Projekt ${projectId} (${deal.title}) erfolgreich aktualisiert${timeInfo}`);
         } else {
           console.error(`Fehler beim Aktualisieren von Projekt ${projectId}. Antwort:`, response.data);
           errorCount++;

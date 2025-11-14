@@ -103,8 +103,10 @@ const EmployeeScheduling = ({ onBack }) => {
   const PD_FIELD_HELPERS = '34b7e1187558cb432b19593871c7f8599de16b22';
   const PD_FIELD_PIANO = '92fe9d2c1d616504b461a2dfdc2e17f5bd73d754';
   const PD_FIELD_VEHICLES = '7ef0bad215357130769f5d26e0b47c5c55da239d';
-  // Pipedrive Leistungsdatum (Projekt-/Servicedatum) Feld-Key – Format: Date
+          // Pipedrive Leistungsdatum (Projekt-/Servicedatum) Feld-Key – Format: Date
   const PD_FIELD_SERVICE_DATE = '949696aa9d99044db90383a758a74675587ed893';
+  // Pipedrive Angebotsnummer (Stressfrei) Feld-Key
+  const PD_FIELD_ANGEBOTSNUMMER = 'b76a77e3550e78343a4b93fc151ff97b4afcc397';
   
   // Fahrzeug-Typen (echte IDs und Kennzeichen)
   const vehicleTypes = [
@@ -898,11 +900,15 @@ const EmployeeScheduling = ({ onBack }) => {
           const vehicleFromList = availableVehicles.find(v => v.id === vehicle.id);
           const vehicleStatus = vehicleFromList ? vehicleFromList.availabilityStatus : null;
           
+          // Hole die Angebotsnummer aus dem Deal-Feld (statt Deal-ID)
+          const angebotsnummer = selectedDeal.item?.[PD_FIELD_ANGEBOTSNUMMER]?.toString() || '';
+          console.log(`📋 [TRANSFER] Angebotsnummer aus Deal: ${angebotsnummer || 'NICHT GEFUNDEN'} (Feld: ${PD_FIELD_ANGEBOTSNUMMER})`);
+          
           appointments.push({
             personalid: employee.id,
             terminart: vehicle.terminartId || '3a4df8a1-2387-11e8-839c-00113241b9d5',
             vorgangsno: selectedDeal.item.id?.toString() || '',
-            angebotsno: selectedDeal.item.id?.toString() || '',
+            angebotsno: angebotsnummer, // Verwende Angebotsnummer aus Pipedrive-Feld statt Deal-ID
             datum: dealDateString,
             startzeit: appointmentStart + ':00',
             endzeit: appointmentEnd + ':00',

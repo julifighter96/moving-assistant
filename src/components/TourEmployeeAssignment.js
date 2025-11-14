@@ -1023,12 +1023,19 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
     const TARGET_PHASE_ID = 25;
     const PROJECT_TOUR_DATE_FIELD_KEY = "3c7b83b905a2d762409414672a4aa1450e966d49";
     const PROJECT_TOUR_ID_FIELD_KEY = "7cfa771db86bba5afa46a05a82ff66734524c981";
+    
+    // API Keys für Datum, Startzeit und Endzeit
+    const START_TIME_FIELD_KEY = "f1f4075cad46accd63b6b3e396deb452727078e2";
+    const DATE_FIELD_KEY = "c9993f8e353d54015c7a15e8b653cf88e594f5fb";
+    const END_TIME_FIELD_KEY = "32934b3ccd3a0d8c6d88c34a9782790ba0c8d7cf";
 
     if (!apiToken) {
       throw new Error('Pipedrive API Token nicht konfiguriert');
     }
 
     const tourDateFormatted = format(tourData.selectedDate, 'dd.MM.yyyy', { locale: de });
+    // Formatiere Datum für Pipedrive (YYYY-MM-DD)
+    const tourDateForPipedrive = format(tourData.selectedDate, 'yyyy-MM-dd');
     
     let successCount = 0;
     let errorCount = 0;
@@ -1041,11 +1048,51 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
         return;
       }
 
+      // Finde die Station, die zu diesem Deal gehört
+      let dealStartTime = null;
+      let dealEndTime = null;
+      
+      if (tourData.stations && Array.isArray(tourData.stations)) {
+        // Suche in den Stationen nach diesem Deal
+        for (const station of tourData.stations) {
+          // Prüfe ob der Deal-Titel oder Adressen in der Station-Description vorkommen
+          const dealTitleMatch = station.legDescription && deal.title && 
+            station.legDescription.includes(deal.title.split(' ')[0]);
+          const dealOriginMatch = deal.originAddress && station.legDescription &&
+            station.legDescription.includes(deal.originAddress.split(',')[0]);
+          const dealDestMatch = deal.destinationAddress && station.legDescription &&
+            station.legDescription.includes(deal.destinationAddress.split(',')[0]);
+          
+          if (dealTitleMatch || dealOriginMatch || dealDestMatch) {
+            dealStartTime = station.startTime; // z.B. "08:30"
+            dealEndTime = station.endTime; // z.B. "10:45"
+            console.log(`📅 [EmployeeAssignment] Deal "${deal.title}" gehört zu Station: ${dealStartTime} - ${dealEndTime}`);
+            break;
+          }
+        }
+      }
+
       const updateData = {
         phase_id: TARGET_PHASE_ID,
         [PROJECT_TOUR_DATE_FIELD_KEY]: tourDateFormatted,
         [PROJECT_TOUR_ID_FIELD_KEY]: tourData.tourId,
+        // Neue Felder für Datum, Startzeit und Endzeit
+        [DATE_FIELD_KEY]: tourDateForPipedrive,
       };
+
+      // Füge Startzeit hinzu, falls gefunden
+      if (dealStartTime) {
+        // Konvertiere Zeitformat zu HH:MM:SS falls nötig
+        const startTimeFormatted = dealStartTime.length === 5 ? `${dealStartTime}:00` : dealStartTime;
+        updateData[START_TIME_FIELD_KEY] = startTimeFormatted;
+      }
+
+      // Füge Endzeit hinzu, falls gefunden
+      if (dealEndTime) {
+        // Konvertiere Zeitformat zu HH:MM:SS falls nötig
+        const endTimeFormatted = dealEndTime.length === 5 ? `${dealEndTime}:00` : dealEndTime;
+        updateData[END_TIME_FIELD_KEY] = endTimeFormatted;
+      }
 
       try {
         const response = await axios.put(
@@ -1054,6 +1101,10 @@ const TourEmployeeAssignment = ({ tourData, onBack, onComplete }) => {
         );
         if (response.data && response.data.success) {
           successCount++;
+          const timeInfo = dealStartTime && dealEndTime 
+            ? ` - Zeiten: ${dealStartTime} bis ${dealEndTime}` 
+            : ' - Keine Zeiten gefunden';
+          console.log(`✅ [EmployeeAssignment] Projekt ${projectId} (${deal.title}) erfolgreich aktualisiert${timeInfo}`);
         } else {
           errorCount++;
         }

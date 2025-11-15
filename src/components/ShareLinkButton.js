@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Share2, Copy, Check, Link as LinkIcon, Loader, Download } from 'lucide-react';
+import { offlineStorage } from '../services/offlineStorage';
 
 const ShareLinkButton = ({ dealId, onImportData }) => {
   const [shareLink, setShareLink] = useState(null);
@@ -38,6 +39,36 @@ const ShareLinkButton = ({ dealId, onImportData }) => {
     setError(null);
 
     try {
+      // First, ensure inspection data is saved to server
+      // Load from IndexedDB and sync to server before generating link
+      try {
+        const savedState = await offlineStorage.loadInspectionState(dealId);
+        if (savedState && savedState.roomsData) {
+          // Save inspection data to server
+          const token = localStorage.getItem('token');
+          const saveUrl = createApiUrl(`api/moves/${dealId}`);
+          const saveResponse = await fetch(saveUrl, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(savedState),
+          });
+          
+          if (saveResponse.ok) {
+            console.log('✅ Inspection data synced to server before generating link');
+          } else {
+            console.warn('⚠️ Could not sync inspection data, but continuing...');
+          }
+        } else {
+          console.warn('⚠️ No roomsData found in saved state');
+        }
+      } catch (syncErr) {
+        console.warn('Could not sync inspection data before generating link:', syncErr);
+        // Continue anyway - maybe data is already on server
+      }
+
       const token = localStorage.getItem('token');
       const url = createApiUrl(`api/inspections/${dealId}/share`);
       const response = await fetch(url, {
@@ -93,11 +124,20 @@ const ShareLinkButton = ({ dealId, onImportData }) => {
       }
 
       const data = await response.json();
+      console.log('Imported customer data:', data);
+      console.log('roomsData:', data.roomsData);
+      console.log('roomsData keys:', data.roomsData ? Object.keys(data.roomsData) : 'none');
       
       if (onImportData && data.roomsData) {
-        onImportData(data.roomsData);
+        // Ensure roomsData is properly formatted
+        const roomsDataToImport = data.roomsData && typeof data.roomsData === 'object' ? data.roomsData : {};
+        console.log('Calling onImportData with:', roomsDataToImport);
+        onImportData(roomsDataToImport);
         setImportSuccess(true);
         setTimeout(() => setImportSuccess(false), 3000);
+      } else {
+        console.warn('No roomsData in imported data or onImportData not provided');
+        setError('Keine Daten zum Importieren gefunden');
       }
     } catch (err) {
       console.error('Error importing customer data:', err);

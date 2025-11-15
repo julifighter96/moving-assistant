@@ -719,11 +719,15 @@ Antworte im folgenden JSON-Format:
         return res.status(400).json({ error: 'Room parameter is required' });
       }
       
+      console.log(`🔍 Fetching items for room: "${room}"`);
+      
       db.all('SELECT * FROM admin_items WHERE room = ? ORDER BY name', [room], (err, rows) => {
         if (err) {
           console.error('Error fetching items:', err);
           return res.status(500).json({ error: err.message });
         }
+        
+        console.log(`✅ Found ${rows.length} items for room "${room}":`, rows.map(r => r.name));
         
         // Convert snake_case column names to camelCase for frontend
         const formattedRows = rows.map(row => ({
@@ -739,6 +743,43 @@ Antworte im folgenden JSON-Format:
         }));
         
         res.json(formattedRows);
+      });
+    });
+
+    // Public endpoint to get all items (for customer inventory editor)
+    app.get('/api/public/items', (req, res) => {
+      db.all('SELECT * FROM admin_items ORDER BY room, name', [], (err, rows) => {
+        if (err) {
+          console.error('Error fetching all items:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        
+        // Convert snake_case column names to camelCase for frontend
+        const formattedRows = rows.map(row => ({
+          id: row.id,
+          name: row.name,
+          width: row.width,
+          length: row.length,
+          height: row.height,
+          volume: row.volume,
+          room: row.room,
+          setupTime: row.setup_time || 0,
+          dismantleTime: row.dismantle_time || 0
+        }));
+        
+        res.json(formattedRows);
+      });
+    });
+
+    // Public endpoint to get all rooms (for customer inventory editor)
+    app.get('/api/public/rooms', (req, res) => {
+      db.all('SELECT * FROM admin_rooms ORDER BY name', [], (err, rows) => {
+        if (err) {
+          console.error('Error fetching rooms:', err);
+          return res.status(500).json({ error: err.message });
+        }
+        
+        res.json(rows);
       });
     });
 
@@ -1370,6 +1411,12 @@ Antworte im folgenden JSON-Format:
               } catch (e) {
                 console.error('Error parsing inspection data:', e);
               }
+
+              // Debug logging
+              console.log('Loading inspection data for token:', token);
+              console.log('Inspection data keys:', Object.keys(inspectionData));
+              console.log('roomsData exists:', !!inspectionData.roomsData);
+              console.log('roomsData keys:', inspectionData.roomsData ? Object.keys(inspectionData.roomsData) : 'none');
 
               res.json({
                 dealId: inspection.deal_id,

@@ -51,6 +51,7 @@ export const adminService = {
 
   async getItems(room) {
     try {
+      console.log(`📡 Requesting items for room: "${room}"`);
       const response = await axios.get(
         `${API_URL}/admin/items`, 
         { 
@@ -59,14 +60,22 @@ export const adminService = {
         }
       );
       
+      console.log(`📦 Received ${response.data?.length || 0} items for room "${room}"`, response.data?.map(i => i.name));
+      
       if (!Array.isArray(response.data)) {
         console.warn('Response is not an array:', response.data);
         return [];
       }
       
+      // Verify that all items belong to the requested room
+      const wrongRoomItems = response.data.filter(item => item.room !== room);
+      if (wrongRoomItems.length > 0) {
+        console.error(`⚠️ WARNING: Found ${wrongRoomItems.length} items with wrong room!`, wrongRoomItems);
+      }
+      
       return response.data;
     } catch (error) {
-      console.error(`Error fetching items for room "${room}":`, error);
+      console.error(`❌ Error fetching items for room "${room}":`, error);
       if (error.response) {
         console.error('Error response:', error.response.data);
         console.error('Status:', error.response.status);

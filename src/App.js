@@ -293,29 +293,58 @@ function AppContent() {
         
         const initialRoomsData = {};
         
+        // Load items for each room sequentially to avoid race conditions
         for (const room of configuredRooms) {
           try {
+            console.log(`🔄 Loading items for room: "${room.name}"`);
             const items = await adminService.getItems(room.name);
+            console.log(`✅ Loaded ${items.length} items for room: ${room.name}`, items.map(i => `${i.name} (room: ${i.room})`));
   
+            // Verify items belong to correct room
+            const itemsForThisRoom = items.filter(item => item.room === room.name);
+            if (itemsForThisRoom.length !== items.length) {
+              console.error(`⚠️ WARNING: Room "${room.name}" has ${items.length} items, but only ${itemsForThisRoom.length} belong to this room!`);
+              console.error('Items with wrong room:', items.filter(item => item.room !== room.name));
+            }
+  
+            // Create a deep copy of items array to avoid reference issues
+            const roomItems = itemsForThisRoom.length > 0 ? itemsForThisRoom.map(item => ({
+              id: item.id,
+              name: item.name,
+              width: item.width,
+              length: item.length,
+              height: item.height,
+              volume: item.volume,
+              room: item.room,
+              weight: item.weight || 0,
+              setupTime: item.setupTime || 0,
+              dismantleTime: item.dismantleTime || 0,
+              quantity: 0,
+              demontiert: false,
+              duebelarbeiten: false,
+              remontiert: false,
+              elektro: false
+            })) : [];
+            
+            // Create a deep copy of pack materials array
+            const roomPackMaterials = DEFAULT_PACK_MATERIALS.map(material => ({ ...material }));
+            
+            console.log(`💾 Storing ${roomItems.length} items for room "${room.name}":`, roomItems.map(i => `${i.name} (id: ${i.id})`));
+            
             initialRoomsData[room.name] = {
-              items: items.length > 0 ? items.map(item => ({
-                ...item,
-                quantity: 0,
-                demontiert: false,
-                duebelarbeiten: false
-              })) : [],
-              packMaterials: DEFAULT_PACK_MATERIALS,
+              items: roomItems,
+              packMaterials: roomPackMaterials,
               photos: [],
               totalVolume: 0,
               estimatedWeight: 0,
               notes: ''
             };
           } catch (error) {
-            console.error(`Failed to load items for room ${room.name}:`, error);
+            console.error(`❌ Failed to load items for room ${room.name}:`, error);
             // Fallback to default items if available
             initialRoomsData[room.name] = {
-              items: DEFAULT_ROOM_INVENTORY[room.name] || [],
-              packMaterials: DEFAULT_PACK_MATERIALS,
+              items: (DEFAULT_ROOM_INVENTORY[room.name] || []).map(item => ({ ...item })),
+              packMaterials: DEFAULT_PACK_MATERIALS.map(material => ({ ...material })),
               photos: [],
               totalVolume: 0,
               estimatedWeight: 0,
@@ -323,8 +352,43 @@ function AppContent() {
             };
           }
         }
+        
+        console.log('📦 Initial roomsData structure:', Object.keys(initialRoomsData).map(room => ({
+          room,
+          itemCount: initialRoomsData[room].items.length,
+          itemNames: initialRoomsData[room].items.map(i => i.name),
+          itemIds: initialRoomsData[room].items.map(i => `${i.name}-${i.id}`)
+        })));
+        
+        // Verify that each room has unique items
+        const allItemNames = {};
+        Object.keys(initialRoomsData).forEach(room => {
+          initialRoomsData[room].items.forEach(item => {
+            const key = `${item.name}-${item.id}`;
+            if (!allItemNames[key]) {
+              allItemNames[key] = [];
+            }
+            allItemNames[key].push(room);
+          });
+        });
+        
+        const duplicateItems = Object.keys(allItemNames).filter(key => allItemNames[key].length > 1);
+        if (duplicateItems.length > 0) {
+          console.error('⚠️ WARNING: Found items that appear in multiple rooms:', duplicateItems);
+          duplicateItems.forEach(key => {
+            console.error(`  - ${key} appears in rooms: ${allItemNames[key].join(', ')}`);
+          });
+        } else {
+          console.log('✅ All rooms have unique items - no duplicates found');
+        }
   
-        setRoomsData(initialRoomsData);
+        // Only set roomsData if we don't have a selectedDealId (to avoid overwriting saved state)
+        if (!selectedDealId) {
+          console.log('💾 Setting initial roomsData (no deal selected)');
+          setRoomsData(initialRoomsData);
+        } else {
+          console.log('⏸️ Skipping setRoomsData - deal selected, will load from saved state');
+        }
   
         if (configuredRooms.length > 0) {
           setCurrentRoom(configuredRooms[0].name);
@@ -335,7 +399,7 @@ function AppContent() {
     };
   
     loadConfiguration();
-  }, []);
+  }, [selectedDealId]);
 
   const [additionalInfo, setAdditionalInfo] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
@@ -353,9 +417,93 @@ function AppContent() {
           const savedState = await offlineStorage.loadInspectionState(selectedDealId);
           if (savedState) {
             console.log('✅ Gespeicherter Zustand geladen für Deal:', selectedDealId);
+            console.log('📦 Saved roomsData:', Object.keys(savedState.roomsData || {}).map(room => ({
+              room,
+              itemCount: savedState.roomsData[room]?.items?.length || 0,
+              itemNames: savedState.roomsData[room]?.items?.map(i => i.name) || []
+            })));
+            
             // Stelle gespeicherten Zustand wieder her
             if (savedState.roomsData) {
-              setRoomsData(savedState.roomsData);
+              // First, load the correct items for each room from the database
+              const configuredRooms = await adminService.getRooms();
+              const correctItemsByRoom = {};
+              
+              for (const room of configuredRooms) {
+                try {
+                  const items = await adminService.getItems(room.name);
+                  correctItemsByRoom[room.name] = items.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    width: item.width,
+                    length: item.length,
+                    height: item.height,
+                    volume: item.volume,
+                    room: item.room,
+                    weight: item.weight || 0,
+                    setupTime: item.setupTime || 0,
+                    dismantleTime: item.dismantleTime || 0
+                  }));
+                  console.log(`🔄 Loaded ${correctItemsByRoom[room.name].length} correct items for room "${room.name}"`);
+                } catch (error) {
+                  console.error(`❌ Failed to load items for room ${room.name}:`, error);
+                  correctItemsByRoom[room.name] = [];
+                }
+              }
+              
+              // Create deep copy and merge with saved quantities
+              const restoredRoomsData = {};
+              Object.keys(savedState.roomsData).forEach(roomName => {
+                const savedRoomData = savedState.roomsData[roomName];
+                const correctItems = correctItemsByRoom[roomName] || [];
+                
+                // Merge saved quantities with correct items
+                const mergedItems = correctItems.map(correctItem => {
+                  // Find matching saved item by name and id
+                  const savedItem = savedRoomData.items?.find(
+                    si => si.name === correctItem.name && si.id === correctItem.id
+                  ) || savedRoomData.items?.find(si => si.name === correctItem.name);
+                  
+                  if (savedItem) {
+                    // Use saved item data but keep correct item properties
+                    return {
+                      ...correctItem,
+                      quantity: savedItem.quantity || 0,
+                      demontiert: savedItem.demontiert || false,
+                      duebelarbeiten: savedItem.duebelarbeiten || false,
+                      remontiert: savedItem.remontiert || false,
+                      elektro: savedItem.elektro || false
+                    };
+                  } else {
+                    // New item, use defaults
+                    return {
+                      ...correctItem,
+                      quantity: 0,
+                      demontiert: false,
+                      duebelarbeiten: false,
+                      remontiert: false,
+                      elektro: false
+                    };
+                  }
+                });
+                
+                restoredRoomsData[roomName] = {
+                  ...savedRoomData,
+                  items: mergedItems,
+                  packMaterials: savedRoomData.packMaterials ? savedRoomData.packMaterials.map(material => ({ ...material })) : [],
+                  photos: savedRoomData.photos ? [...savedRoomData.photos] : []
+                };
+                
+                console.log(`✅ Restored room "${roomName}" with ${mergedItems.length} items:`, mergedItems.map(i => i.name));
+              });
+              
+              console.log('💾 Restored roomsData with correct items:', Object.keys(restoredRoomsData).map(room => ({
+                room,
+                itemCount: restoredRoomsData[room].items.length,
+                itemNames: restoredRoomsData[room].items.map(i => i.name)
+              })));
+              
+              setRoomsData(restoredRoomsData);
             }
             if (savedState.moveInfo) {
               setMoveInfo(savedState.moveInfo);
@@ -390,18 +538,30 @@ function AppContent() {
     // Debounce: Speichere nur alle 2 Sekunden
     const timeoutId = setTimeout(async () => {
       try {
+        // Create deep copy of roomsData to avoid reference issues
+        const roomsDataCopy = {};
+        Object.keys(roomsData).forEach(roomName => {
+          const roomData = roomsData[roomName];
+          roomsDataCopy[roomName] = {
+            ...roomData,
+            items: roomData.items ? roomData.items.map(item => ({ ...item })) : [],
+            packMaterials: roomData.packMaterials ? roomData.packMaterials.map(material => ({ ...material })) : [],
+            photos: roomData.photos ? [...roomData.photos] : []
+          };
+        });
+        
         const stateToSave = {
-          roomsData,
-          moveInfo,
-          additionalInfo,
-          calculationData,
+          roomsData: roomsDataCopy,
+          moveInfo: moveInfo ? { ...moveInfo } : null,
+          additionalInfo: additionalInfo ? { ...additionalInfo } : null,
+          calculationData: calculationData ? { ...calculationData } : null,
           currentStep,
           selectedDealId,
           timestamp: new Date().toISOString()
         };
         
         await offlineStorage.saveInspectionState(selectedDealId, stateToSave);
-        console.log('💾 Auto-Save: Zustand gespeichert');
+        console.log('💾 Auto-Save: Zustand gespeichert (deep copy)');
       } catch (error) {
         console.error('Fehler beim Auto-Save:', error);
       }
@@ -870,17 +1030,49 @@ function AppContent() {
                         <ShareLinkButton 
                           dealId={selectedDealId} 
                           onImportData={(importedRoomsData) => {
-                            // Merge imported data with existing data
+                            console.log('Importing roomsData:', importedRoomsData);
+                            console.log('Current roomsData:', roomsData);
+                            
+                            // Replace existing data with imported data (not merge, to get customer changes)
                             setRoomsData(prevData => {
-                              const merged = { ...prevData };
+                              const updated = { ...prevData };
+                              
+                              // Update or add rooms from imported data
                               Object.keys(importedRoomsData).forEach(roomName => {
-                                merged[roomName] = {
-                                  ...prevData[roomName],
-                                  ...importedRoomsData[roomName]
+                                updated[roomName] = {
+                                  ...importedRoomsData[roomName],
+                                  // Preserve packMaterials if not in imported data
+                                  packMaterials: importedRoomsData[roomName].packMaterials || prevData[roomName]?.packMaterials || [],
                                 };
                               });
-                              return merged;
+                              
+                              console.log('Updated roomsData:', updated);
+                              return updated;
                             });
+                            
+                            // Also save to server
+                            if (selectedDealId) {
+                              const stateToSave = {
+                                roomsData: importedRoomsData,
+                                moveInfo,
+                                additionalInfo,
+                                calculationData,
+                                currentStep,
+                                selectedDealId,
+                                timestamp: new Date().toISOString()
+                              };
+                              
+                              // Save locally
+                              offlineStorage.saveInspectionState(selectedDealId, stateToSave).catch(err => {
+                                console.error('Error saving imported data locally:', err);
+                              });
+                              
+                              // Try to sync to server
+                              apiWrapper.saveInspection(selectedDealId, stateToSave).catch(err => {
+                                console.error('Error syncing imported data to server:', err);
+                              });
+                            }
+                            
                             setShowPopup(true);
                             setPopupMessage('Kundendaten erfolgreich importiert!');
                           }}
@@ -923,7 +1115,7 @@ function AppContent() {
                           key={`${currentRoom}-standard`}
                           roomName={currentRoom}
                           onUpdateRoom={handleUpdateRoomData}
-                          initialData={roomsData[currentRoom]}
+                          initialData={roomsData[currentRoom] || { items: [], packMaterials: [], notes: '', totalVolume: 0, estimatedWeight: 0 }}
                           onAddItem={handleAddItem}
                           allExistingItems={getAllExistingItems()}
                         />

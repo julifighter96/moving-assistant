@@ -84,12 +84,13 @@ const RoomItemsSelector = ({ roomName, onUpdateRoom, initialData, onAddItem, all
     return itemsVolume + packMaterialsVolume;
   }, [items, packMaterials, prices]);
 
-  // Update local state when initialData changes
+  // Update local state when initialData or roomName changes
   useEffect(() => {
+    console.log(`Updating RoomItemsSelector for room: ${roomName}`, initialData);
     setItems(initialData.items || []);
     setPackMaterials(initialData.packMaterials || []);
     setNotes(initialData.notes || '');
-  }, [initialData]);
+  }, [initialData, roomName]);
 
   // Aktualisiere die bestehende Gewichtsberechnung
   const estimatedWeight = useMemo(() => {
